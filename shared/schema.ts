@@ -20,6 +20,7 @@ export type User = typeof users.$inferSelect;
 // Football fixtures types
 export const matchSchema = z.object({
   id: z.string(),
+  matchUrl: z.string().optional(),
   homeTeam: z.string(),
   awayTeam: z.string(),
   homeTeamLogo: z.string().optional(),

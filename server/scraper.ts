@@ -63,6 +63,10 @@ export async function scrapeFixtures(date: Date): Promise<Match[]> {
       const matchLink = $item.find('a[href*="/compare/"]').first();
       if (matchLink.length === 0) return; // Not a match
       
+      // Extract match URL
+      const matchUrl = matchLink.attr('href');
+      const fullMatchUrl = matchUrl ? `https://sportstats365.com${matchUrl}` : undefined;
+      
       try {
         // Extract time/status
         const eventTime = $item.find('.event-time small').text().trim();
@@ -159,6 +163,7 @@ export async function scrapeFixtures(date: Date): Promise<Match[]> {
         
         matches.push({
           id: `match-${matchId++}`,
+          matchUrl: fullMatchUrl,
           homeTeam: homeTeam.replace(/\s+$/, '').replace(/\s{2,}/g, ' '),
           awayTeam: awayTeam.replace(/\s+$/, '').replace(/\s{2,}/g, ' '),
           homeTeamLogo,

@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { scrapeFixtures } from "./scraper";
+import { scrapeFixtures, scrapeMatchDetails } from "./scraper";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get fixtures for a specific date
@@ -22,6 +22,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching fixtures:", error);
       res.status(500).json({ error: "Failed to fetch fixtures" });
+    }
+  });
+
+  // Get match details by URL
+  app.post("/api/match-details", async (req, res) => {
+    try {
+      const { matchUrl } = req.body;
+      
+      if (!matchUrl || typeof matchUrl !== 'string') {
+        return res.status(400).json({ error: "matchUrl is required" });
+      }
+      
+      const matchDetails = await scrapeMatchDetails(matchUrl);
+      
+      res.json(matchDetails);
+    } catch (error) {
+      console.error("Error fetching match details:", error);
+      res.status(500).json({ error: "Failed to fetch match details" });
     }
   });
 
