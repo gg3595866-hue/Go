@@ -59,6 +59,8 @@ export const teamFormSchema = z.object({
 
 export const teamStatsSchema = z.object({
   winPercentage: z.number(),
+  drawPercentage: z.number().optional(),
+  lossPercentage: z.number().optional(),
   goalsScored: z.number(),
   goalsScoredHome: z.number().optional(),
   goalsScoredAway: z.number().optional(),
@@ -66,6 +68,70 @@ export const teamStatsSchema = z.object({
   goalsConcededHome: z.number().optional(),
   goalsConcededAway: z.number().optional(),
   cleanSheetPercentage: z.number(),
+  
+  // Double Chance stats
+  doubleChance1X: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  doubleChanceX2: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  doubleChance12: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  
+  // To Nil stats
+  winToNil: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  loseToNil: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  
+  // Winning Margin
+  winByOneGoal: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  winByTwoPlusGoals: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  
+  // BTTS (Both Teams To Score) stats
+  btts: z.object({
+    overall: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    home: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    away: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  }).optional(),
+  bttsAndOver25: z.object({
+    overall: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    home: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    away: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  }).optional(),
+  bttsAndWin: z.object({
+    overall: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    home: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    away: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  }).optional(),
+  bttsAndLoss: z.object({
+    overall: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    home: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    away: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  }).optional(),
+  
+  // Goals Scored stats
+  scoredPercent: z.object({
+    overall: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    home: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    away: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  }).optional(),
+  scoredAgainstPercent: z.object({
+    overall: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    home: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    away: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  }).optional(),
+  
+  // Goals in Halves
+  goalsInFirstHalf: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  goalsInSecondHalf: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  
+  // Halftime Stats
+  halftimeStats: z.object({
+    wonFirstHalf: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    tiedFirstHalf: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    lostFirstHalf: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    wonSecondHalf: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    tiedSecondHalf: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    lostSecondHalf: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    wonFullTime: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    tiedFullTime: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+    lostFullTime: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
+  }).optional(),
 });
 
 export const headToHeadSchema = z.object({
