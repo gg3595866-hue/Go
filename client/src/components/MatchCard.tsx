@@ -1,17 +1,27 @@
 import { type Match } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
+import { useLocation } from "wouter";
 
 interface MatchCardProps {
   match: Match;
 }
 
 export default function MatchCard({ match }: MatchCardProps) {
+  const [, setLocation] = useLocation();
   const isFinished = match.status === 'FT';
   const isLive = match.status === 'LIVE';
   const isScheduled = match.status === 'SCHEDULED';
 
+  const handleClick = () => {
+    if (match.matchUrl) {
+      const encodedUrl = encodeURIComponent(match.matchUrl);
+      setLocation(`/match/${encodedUrl}`);
+    }
+  };
+
   return (
     <div 
+      onClick={handleClick}
       className="bg-card border border-card-border rounded-md p-3 sm:p-4 hover-elevate active-elevate-2 cursor-pointer"
       data-testid={`card-match-${match.id}`}
     >
