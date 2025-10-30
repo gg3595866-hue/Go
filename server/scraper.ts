@@ -224,6 +224,10 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     });
     const statsUrl = statsButton.attr('hx-get');
     
+    // Extract the form URL from HTMX attributes
+    const formButton = $('button[hx-get*="/form"]').first();
+    const formUrl = formButton.attr('hx-get');
+    
     // Fetch the stats content from HTMX endpoint
     let statsHtml = '';
     if (statsUrl) {
@@ -255,6 +259,32 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
         // Append stats content to main document for parsing
         $('#htmx_content').html(statsHtml);
       }
+    }
+    
+    // Fetch the form content from HTMX endpoint
+    let formHtml = '';
+    if (formUrl) {
+      const fullFormUrl = `https://sportstats365.com${formUrl}`;
+      console.log(`Fetching form from HTMX endpoint: ${fullFormUrl}`);
+      
+      formHtml = await new Promise((resolve, reject) => {
+        cloudscraper.get({
+          uri: fullFormUrl,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'HX-Request': 'true',
+          },
+        }, (error: any, response: any, body: string) => {
+          if (error) {
+            console.warn('Failed to fetch form HTML:', error.message);
+            resolve('');
+          } else {
+            resolve(body);
+          }
+        });
+      });
     }
     
     // Extract match ID from URL
@@ -323,38 +353,43 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     const awayFormSequence = extractFormSequence(awayFormContainer);
     
     // Extract form scores
-    const formScores = $('.text-center').filter(function() {
-      const text = $(this).text();
-      return !!text.match(/^\d+$/);
-    });
-    
     let homeFormHome = 0, homeFormAway = 0, homeFormOverall = 0;
     let awayFormHome = 0, awayFormAway = 0, awayFormOverall = 0;
     
-    // Parse form difference section
-    const formRows = $('tr').filter(function() {
-      return $(this).find('td').length >= 3;
-    });
-    
-    formRows.each((i, row) => {
-      const cells = $(row).find('td');
-      if (cells.length >= 3) {
-        const label = $(cells[0]).text().trim();
-        const homeVal = parseInt($(cells[1]).text().trim()) || 0;
-        const awayVal = parseInt($(cells[2]).text().trim()) || 0;
+    // Parse form data from the form HTML endpoint
+    if (formHtml) {
+      const $form = cheerio.load(formHtml);
+      
+      // Parse form data from list-group-item elements
+      const formRows = $form('.list-group-item');
+      
+      formRows.each((i, row) => {
+        // Look for .col-4 or .col-6 elements which typically hold the values
+        const cols = $form(row).find('.col-4, .col-6, .col-3');
         
-        if (label.includes('Form Home')) {
-          homeFormHome = homeVal;
-          awayFormHome = awayVal;
-        } else if (label.includes('Form Away')) {
-          homeFormAway = homeVal;
-          awayFormAway = awayVal;
-        } else if (label.includes('Form Overall')) {
-          homeFormOverall = homeVal;
-          awayFormOverall = awayVal;
+        if (cols.length >= 3) {
+          // Typically: [home value] [label] [away value]
+          const homeText = $form(cols[0]).text().trim();
+          const labelText = $form(cols[1]).text().trim();
+          const awayText = $form(cols[2]).text().trim();
+          
+          // Extract numeric values
+          const homeVal = parseInt(homeText.match(/\d+/)?.[0] || '0') || 0;
+          const awayVal = parseInt(awayText.match(/\d+/)?.[0] || '0') || 0;
+          
+          if (labelText.includes('Form Home')) {
+            homeFormHome = homeVal;
+            awayFormHome = awayVal;
+          } else if (labelText.includes('Form Away')) {
+            homeFormAway = homeVal;
+            awayFormAway = awayVal;
+          } else if (labelText.includes('Form Overall')) {
+            homeFormOverall = homeVal;
+            awayFormOverall = awayVal;
+          }
         }
-      }
-    });
+      });
+    }
     
     // Extract statistics from comparison text
     const comparisonText = $('.card-body').text();
