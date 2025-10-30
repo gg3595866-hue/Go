@@ -177,98 +177,419 @@ export default function MatchDetailsPage() {
           </Card>
         )}
 
-        {/* Team Statistics Comparison */}
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Home Team Stats */}
+        {/* Form Scores Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Form</CardTitle>
+            <p className="text-sm text-muted-foreground">Last 5 games</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="space-y-1">
+                <div className="text-sm font-medium text-muted-foreground">{homeTeam.substring(0, 3).toUpperCase()}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-sm font-medium text-muted-foreground">Stat</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-sm font-medium text-muted-foreground">{awayTeam.substring(0, 3).toUpperCase()}</div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                <div className="font-semibold">{homeTeamForm.homeForm}</div>
+                <div className="text-muted-foreground">Form Home</div>
+                <div className="font-semibold">{awayTeamForm.homeForm}</div>
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                <div className="font-semibold">{homeTeamForm.awayForm}</div>
+                <div className="text-muted-foreground">Form Away</div>
+                <div className="font-semibold">{awayTeamForm.awayForm}</div>
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                <div className="font-semibold">{homeTeamForm.overallForm}</div>
+                <div className="text-muted-foreground">Form Overall</div>
+                <div className="font-semibold">{awayTeamForm.overallForm}</div>
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-center text-sm border-t pt-2">
+                <div className="font-semibold">{homeTeamForm.overallForm - awayTeamForm.overallForm}</div>
+                <div className="text-muted-foreground">Form Difference (Overall)</div>
+                <div className="font-semibold">{awayTeamForm.overallForm - homeTeamForm.overallForm}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Team Statistics */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Team Statistics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {homeTeamStats.winPercentage > 0 && (
+                <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                  <div className="space-y-1">
+                    <div className="text-lg font-semibold">{homeTeamStats.winPercentage.toFixed(2)}%</div>
+                  </div>
+                  <div className="text-muted-foreground">Wins</div>
+                  <div className="space-y-1">
+                    <div className="text-lg font-semibold">{awayTeamStats.winPercentage.toFixed(2)}%</div>
+                  </div>
+                </div>
+              )}
+              {homeTeamStats.drawPercentage !== undefined && (
+                <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                  <div className="space-y-1">
+                    <div className="text-lg font-semibold">{homeTeamStats.drawPercentage.toFixed(2)}%</div>
+                  </div>
+                  <div className="text-muted-foreground">Draws</div>
+                  <div className="space-y-1">
+                    <div className="text-lg font-semibold">{awayTeamStats.drawPercentage?.toFixed(2)}%</div>
+                  </div>
+                </div>
+              )}
+              {homeTeamStats.lossPercentage !== undefined && (
+                <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                  <div className="space-y-1">
+                    <div className="text-lg font-semibold">{homeTeamStats.lossPercentage.toFixed(2)}%</div>
+                  </div>
+                  <div className="text-muted-foreground">Losses</div>
+                  <div className="space-y-1">
+                    <div className="text-lg font-semibold">{awayTeamStats.lossPercentage?.toFixed(2)}%</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Double Chance */}
+        {(homeTeamStats.doubleChance1X || homeTeamStats.doubleChanceX2 || homeTeamStats.doubleChance12) && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">{homeTeam} Statistics</CardTitle>
+              <CardTitle>Double Chance</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Win Rate</span>
-                  <span className="font-semibold" data-testid="text-home-win-rate">{homeTeamStats.winPercentage.toFixed(1)}%</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Goals Scored (Avg)</span>
-                  <span className="font-semibold" data-testid="text-home-goals-scored">{homeTeamStats.goalsScored.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Goals Conceded (Avg)</span>
-                  <span className="font-semibold" data-testid="text-home-goals-conceded">{homeTeamStats.goalsConceded.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Clean Sheets</span>
-                  <span className="font-semibold" data-testid="text-home-clean-sheets">{homeTeamStats.cleanSheetPercentage.toFixed(0)}%</span>
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <div className="text-sm font-medium mb-2">Form Scores</div>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Home</span>
-                    <span className="font-semibold">{homeTeamForm.homeForm}</span>
+            <CardContent>
+              <div className="space-y-3">
+                {homeTeamStats.doubleChance1X && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.doubleChance1X.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.doubleChance1X.count} / {homeTeamStats.doubleChance1X.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">1X</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.doubleChance1X?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.doubleChance1X?.count} / {awayTeamStats.doubleChance1X?.total}</div>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Away</span>
-                    <span className="font-semibold">{homeTeamForm.awayForm}</span>
+                )}
+                {homeTeamStats.doubleChanceX2 && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.doubleChanceX2.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.doubleChanceX2.count} / {homeTeamStats.doubleChanceX2.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">X2</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.doubleChanceX2?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.doubleChanceX2?.count} / {awayTeamStats.doubleChanceX2?.total}</div>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Overall</span>
-                    <span className="font-semibold">{homeTeamForm.overallForm}</span>
+                )}
+                {homeTeamStats.doubleChance12 && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.doubleChance12.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.doubleChance12.count} / {homeTeamStats.doubleChance12.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">12</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.doubleChance12?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.doubleChance12?.count} / {awayTeamStats.doubleChance12?.total}</div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </CardContent>
           </Card>
+        )}
 
-          {/* Away Team Stats */}
+        {/* To Nil */}
+        {(homeTeamStats.winToNil || homeTeamStats.loseToNil) && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">{awayTeam} Statistics</CardTitle>
+              <CardTitle>To Nil</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Win Rate</span>
-                  <span className="font-semibold" data-testid="text-away-win-rate">{awayTeamStats.winPercentage.toFixed(1)}%</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Goals Scored (Avg)</span>
-                  <span className="font-semibold" data-testid="text-away-goals-scored">{awayTeamStats.goalsScored.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Goals Conceded (Avg)</span>
-                  <span className="font-semibold" data-testid="text-away-goals-conceded">{awayTeamStats.goalsConceded.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Clean Sheets</span>
-                  <span className="font-semibold" data-testid="text-away-clean-sheets">{awayTeamStats.cleanSheetPercentage.toFixed(0)}%</span>
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <div className="text-sm font-medium mb-2">Form Scores</div>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Home</span>
-                    <span className="font-semibold">{awayTeamForm.homeForm}</span>
+            <CardContent>
+              <div className="space-y-3">
+                {homeTeamStats.winToNil && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.winToNil.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.winToNil.count} / {homeTeamStats.winToNil.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">Win to Nil</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.winToNil?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.winToNil?.count} / {awayTeamStats.winToNil?.total}</div>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Away</span>
-                    <span className="font-semibold">{awayTeamForm.awayForm}</span>
+                )}
+                {homeTeamStats.loseToNil && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.loseToNil.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.loseToNil.count} / {homeTeamStats.loseToNil.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">Lose to Nil</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.loseToNil?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.loseToNil?.count} / {awayTeamStats.loseToNil?.total}</div>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Overall</span>
-                    <span className="font-semibold">{awayTeamForm.overallForm}</span>
-                  </div>
-                </div>
+                )}
               </div>
             </CardContent>
           </Card>
-        </div>
+        )}
+
+        {/* Winning Margin */}
+        {(homeTeamStats.winByOneGoal || homeTeamStats.winByTwoPlusGoals) && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Winning Margin</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {homeTeamStats.winByOneGoal && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.winByOneGoal.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.winByOneGoal.count} / {homeTeamStats.winByOneGoal.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">By 1 goal</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.winByOneGoal?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.winByOneGoal?.count} / {awayTeamStats.winByOneGoal?.total}</div>
+                    </div>
+                  </div>
+                )}
+                {homeTeamStats.winByTwoPlusGoals && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.winByTwoPlusGoals.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.winByTwoPlusGoals.count} / {homeTeamStats.winByTwoPlusGoals.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">By 2+ goals</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.winByTwoPlusGoals?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.winByTwoPlusGoals?.count} / {awayTeamStats.winByTwoPlusGoals?.total}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Goals in Halves */}
+        {(homeTeamStats.goalsInFirstHalf || homeTeamStats.goalsInSecondHalf) && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Number of goals in halves</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {homeTeamStats.goalsInFirstHalf && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.goalsInFirstHalf.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.goalsInFirstHalf.count} / {homeTeamStats.goalsInFirstHalf.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">First Half</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.goalsInFirstHalf?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.goalsInFirstHalf?.count} / {awayTeamStats.goalsInFirstHalf?.total}</div>
+                    </div>
+                  </div>
+                )}
+                {homeTeamStats.goalsInSecondHalf && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.goalsInSecondHalf.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.goalsInSecondHalf.count} / {homeTeamStats.goalsInSecondHalf.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">Second Half</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.goalsInSecondHalf?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.goalsInSecondHalf?.count} / {awayTeamStats.goalsInSecondHalf?.total}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* BTTS Stats */}
+        {(homeTeamStats.btts || homeTeamStats.bttsAndOver25 || homeTeamStats.bttsAndWin || homeTeamStats.bttsAndLoss) && (
+          <Card>
+            <CardHeader>
+              <CardTitle>BTTS Stats</CardTitle>
+              <p className="text-sm text-muted-foreground">Both Teams To Score</p>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {homeTeamStats.btts?.overall && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.btts.overall.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.btts.overall.count} / {homeTeamStats.btts.overall.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">BTTS</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.btts?.overall?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.btts?.overall?.count} / {awayTeamStats.btts?.overall?.total}</div>
+                    </div>
+                  </div>
+                )}
+                {homeTeamStats.bttsAndOver25?.overall && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.bttsAndOver25.overall.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.bttsAndOver25.overall.count} / {homeTeamStats.bttsAndOver25.overall.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">BTTS & Over 2.5</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.bttsAndOver25?.overall?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.bttsAndOver25?.overall?.count} / {awayTeamStats.bttsAndOver25?.overall?.total}</div>
+                    </div>
+                  </div>
+                )}
+                {homeTeamStats.bttsAndWin?.overall && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.bttsAndWin.overall.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.bttsAndWin.overall.count} / {homeTeamStats.bttsAndWin.overall.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">BTTS & Win</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.bttsAndWin?.overall?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.bttsAndWin?.overall?.count} / {awayTeamStats.bttsAndWin?.overall?.total}</div>
+                    </div>
+                  </div>
+                )}
+                {homeTeamStats.bttsAndLoss?.overall && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.bttsAndLoss.overall.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.bttsAndLoss.overall.count} / {homeTeamStats.bttsAndLoss.overall.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">BTTS & Loss</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.bttsAndLoss?.overall?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.bttsAndLoss?.overall?.count} / {awayTeamStats.bttsAndLoss?.overall?.total}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Goals Scored Stats */}
+        {(homeTeamStats.scoredPercent?.overall || homeTeamStats.scoredAgainstPercent?.overall) && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Goals Scored</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {homeTeamStats.scoredPercent?.overall && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.scoredPercent.overall.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.scoredPercent.overall.count} / {homeTeamStats.scoredPercent.overall.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">Scored Percent</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.scoredPercent?.overall?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.scoredPercent?.overall?.count} / {awayTeamStats.scoredPercent?.overall?.total}</div>
+                    </div>
+                  </div>
+                )}
+                {homeTeamStats.scoredAgainstPercent?.overall && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.scoredAgainstPercent.overall.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.scoredAgainstPercent.overall.count} / {homeTeamStats.scoredAgainstPercent.overall.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">Scored Against Percent</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.scoredAgainstPercent?.overall?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.scoredAgainstPercent?.overall?.count} / {awayTeamStats.scoredAgainstPercent?.overall?.total}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Halftime Stats */}
+        {(homeTeamStats.halftimeStats && Object.keys(homeTeamStats.halftimeStats).length > 0) && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Halftime Stats</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {homeTeamStats.halftimeStats.wonFullTime && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.halftimeStats.wonFullTime.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.halftimeStats.wonFullTime.count} / {homeTeamStats.halftimeStats.wonFullTime.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">Won</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.halftimeStats?.wonFullTime?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.halftimeStats?.wonFullTime?.count} / {awayTeamStats.halftimeStats?.wonFullTime?.total}</div>
+                    </div>
+                  </div>
+                )}
+                {homeTeamStats.halftimeStats.tiedFullTime && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.halftimeStats.tiedFullTime.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.halftimeStats.tiedFullTime.count} / {homeTeamStats.halftimeStats.tiedFullTime.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">Tied</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.halftimeStats?.tiedFullTime?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.halftimeStats?.tiedFullTime?.count} / {awayTeamStats.halftimeStats?.tiedFullTime?.total}</div>
+                    </div>
+                  </div>
+                )}
+                {homeTeamStats.halftimeStats.lostFullTime && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.halftimeStats.lostFullTime.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.halftimeStats.lostFullTime.count} / {homeTeamStats.halftimeStats.lostFullTime.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">Lost</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.halftimeStats?.lostFullTime?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.halftimeStats?.lostFullTime?.count} / {awayTeamStats.halftimeStats?.lostFullTime?.total}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Head to Head */}
         {headToHead && headToHead.totalMatches > 0 && (

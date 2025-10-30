@@ -216,6 +216,47 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     
     const $ = cheerio.load(html);
     
+    // Extract the stats URL from HTMX attributes
+    const statsButton = $('button[hx-get*="/stats/"]').filter(function() {
+      return !$(this).attr('hx-get')?.includes('/form') && 
+             !$(this).attr('hx-get')?.includes('/matches') && 
+             !$(this).attr('hx-get')?.includes('/h2h');
+    });
+    const statsUrl = statsButton.attr('hx-get');
+    
+    // Fetch the stats content from HTMX endpoint
+    let statsHtml = '';
+    if (statsUrl) {
+      const fullStatsUrl = `https://sportstats365.com${statsUrl}`;
+      console.log(`Fetching stats from HTMX endpoint: ${fullStatsUrl}`);
+      
+      statsHtml = await new Promise((resolve, reject) => {
+        cloudscraper.get({
+          uri: fullStatsUrl,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'HX-Request': 'true',
+          },
+        }, (error: any, response: any, body: string) => {
+          if (error) {
+            console.warn('Failed to fetch stats HTML:', error.message);
+            resolve('');
+          } else {
+            resolve(body);
+          }
+        });
+      });
+      
+      // Load the stats HTML into a new cheerio instance
+      if (statsHtml) {
+        const $stats = cheerio.load(statsHtml);
+        // Append stats content to main document for parsing
+        $('#htmx_content').html(statsHtml);
+      }
+    }
+    
     // Extract match ID from URL
     const matchIdMatch = matchUrl.match(/\/(\d+)$/);
     const matchId = matchIdMatch ? matchIdMatch[1] : 'unknown';
@@ -323,10 +364,15 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
       return match ? parseFloat(match[1]) : defaultValue;
     };
     
-    // Helper function to parse stat with percentage and fraction
-    const parseStatWithFraction = (text: string): { percentage: number; count: number; total: number } | undefined => {
-      const percentMatch = text.match(/(\d+\.?\d*)\s*%/);
-      const fractionMatch = text.match(/(\d+)\s*\/\s*(\d+)/);
+    // Helper function to parse stat from a div.col-4 element
+    const parseStatFromCol = (colElement: any): { percentage: number; count: number; total: number } | undefined => {
+      // Find the percentage span (has text-info, text-danger, or text-success class) - not the badge span
+      const percentSpan = $(colElement).find('span[class*="text-"]').first();
+      const percentText = percentSpan.text();
+      const fractionText = $(colElement).find('small').first().text();
+      
+      const percentMatch = percentText.match(/(\d+\.?\d*)\s*%/);
+      const fractionMatch = fractionText.match(/(\d+)\s*\/\s*(\d+)/);
       
       if (percentMatch) {
         const percentage = parseFloat(percentMatch[1]);
@@ -337,6 +383,33 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
       return undefined;
     };
     
+    // Helper to find a stat section by header text
+    const findStatSection = (headerText: string) => {
+      return $('.card-header, .compare-header').filter(function() {
+        return $(this).text().includes(headerText);
+      }).closest('.card, section');
+    };
+    
+    // Helper to parse a list-group-item with 3 columns (home stat, label, away stat)
+    const parseStatRow = (row: any): { home: any; label: string; away: any } => {
+      const cols = $(row).find('.col-4, .col-6');
+      if (cols.length >= 3) {
+        return {
+          home: parseStatFromCol(cols[0]),
+          label: $(cols[1]).text().trim(),
+          away: parseStatFromCol(cols[2])
+        };
+      } else if (cols.length === 2) {
+        // Sometimes only 2 columns for correct score etc
+        return {
+          home: parseStatFromCol(cols[0]),
+          label: '',
+          away: parseStatFromCol(cols[1])
+        };
+      }
+      return { home: undefined, label: '', away: undefined };
+    };
+    
     // Extract all table rows for parsing statistics
     const allRows = $('tr, .row, div[class*="stat"]').toArray();
     
@@ -344,40 +417,18 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     let homeWinPercent = 0, homeDrawPercent = 0, homeLossPercent = 0;
     let awayWinPercent = 0, awayDrawPercent = 0, awayLossPercent = 0;
     
-    $('.card-body, .stat-row').each((i, section) => {
-      const text = $(section).text();
-      
-      // Look for "Team Statistics" section
-      if (text.includes('Team Statistics') || text.includes('Wins') && text.includes('Draws') && text.includes('Losses')) {
-        const rows = $(section).find('tr, .row, div[class*="row"]');
-        
-        rows.each((j, row) => {
-          const rowText = $(row).text();
-          const cells = $(row).find('td, .col, div[class*="col"]');
-          
-          if (rowText.includes('Wins') && cells.length >= 3) {
-            const homeText = $(cells[0]).text();
-            const awayText = $(cells[2]).text();
-            const homeMatch = homeText.match(/(\d+\.?\d*)\s*%/);
-            const awayMatch = awayText.match(/(\d+\.?\d*)\s*%/);
-            if (homeMatch) homeWinPercent = parseFloat(homeMatch[1]);
-            if (awayMatch) awayWinPercent = parseFloat(awayMatch[1]);
-          } else if (rowText.includes('Draws') && cells.length >= 3) {
-            const homeText = $(cells[0]).text();
-            const awayText = $(cells[2]).text();
-            const homeMatch = homeText.match(/(\d+\.?\d*)\s*%/);
-            const awayMatch = awayText.match(/(\d+\.?\d*)\s*%/);
-            if (homeMatch) homeDrawPercent = parseFloat(homeMatch[1]);
-            if (awayMatch) awayDrawPercent = parseFloat(awayMatch[1]);
-          } else if (rowText.includes('Losses') && cells.length >= 3) {
-            const homeText = $(cells[0]).text();
-            const awayText = $(cells[2]).text();
-            const homeMatch = homeText.match(/(\d+\.?\d*)\s*%/);
-            const awayMatch = awayText.match(/(\d+\.?\d*)\s*%/);
-            if (homeMatch) homeLossPercent = parseFloat(homeMatch[1]);
-            if (awayMatch) awayLossPercent = parseFloat(awayMatch[1]);
-          }
-        });
+    const teamStatsSection = findStatSection('Team Statistics');
+    teamStatsSection.find('.list-group-item').each((i, row) => {
+      const stat = parseStatRow(row);
+      if (stat.label.includes('Wins')) {
+        homeWinPercent = stat.home?.percentage || 0;
+        awayWinPercent = stat.away?.percentage || 0;
+      } else if (stat.label.includes('Draws')) {
+        homeDrawPercent = stat.home?.percentage || 0;
+        awayDrawPercent = stat.away?.percentage || 0;
+      } else if (stat.label.includes('Losses')) {
+        homeLossPercent = stat.home?.percentage || 0;
+        awayLossPercent = stat.away?.percentage || 0;
       }
     });
     
@@ -390,179 +441,125 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     const homeCleanSheet = extractStat(/Racing Club kept a clean sheet in (\d+)/);
     const awayCleanSheet = extractStat(/Flamengo kept a clean sheet in (\d+)/);
     
-    // Parse all statistics sections
-    const parseStatsSection = (sectionTitle: string, statLabel: string) => {
-      let homeStat, awayStat;
-      
-      $('.card-body, .stat-section').each((i, section) => {
-        const sectionText = $(section).text();
-        
-        if (sectionText.includes(sectionTitle)) {
-          const rows = $(section).find('tr, .row, div[class*="row"]');
-          
-          rows.each((j, row) => {
-            const rowText = $(row).text();
-            
-            if (rowText.includes(statLabel)) {
-              const cells = $(row).find('td, .col, div[class*="col"], .text-center, span');
-              
-              if (cells.length >= 2) {
-                const homeText = $(cells[0]).text();
-                const awayText = $(cells.length > 2 ? cells[cells.length - 1] : cells[1]).text();
-                
-                homeStat = parseStatWithFraction(homeText);
-                awayStat = parseStatWithFraction(awayText);
-              }
-            }
-          });
-        }
-      });
-      
-      return { homeStat, awayStat };
-    };
-    
     // Parse Double Chance statistics
-    const doubleChance1X = parseStatsSection('Double Chance', '1X');
-    const doubleChanceX2 = parseStatsSection('Double Chance', 'X2');
-    const doubleChance12 = parseStatsSection('Double Chance', '12');
+    let homeDoubleChance1X, homeDoubleChanceX2, homeDoubleChance12;
+    let awayDoubleChance1X, awayDoubleChanceX2, awayDoubleChance12;
+    
+    const doubleChanceSection = findStatSection('Double Chance');
+    doubleChanceSection.find('.list-group-item').each((i, row) => {
+      const stat = parseStatRow(row);
+      if (stat.label.includes('1X')) {
+        homeDoubleChance1X = stat.home;
+        awayDoubleChance1X = stat.away;
+      } else if (stat.label.includes('X2')) {
+        homeDoubleChanceX2 = stat.home;
+        awayDoubleChanceX2 = stat.away;
+      } else if (stat.label.includes('12')) {
+        homeDoubleChance12 = stat.home;
+        awayDoubleChance12 = stat.away;
+      }
+    });
     
     // Parse To Nil statistics
-    const winToNil = parseStatsSection('To Nil', 'Win to Nil');
-    const loseToNil = parseStatsSection('To Nil', 'Lose to Nil');
+    let homeWinToNil, homeLoseToNil, awayWinToNil, awayLoseToNil;
+    
+    const toNilSection = findStatSection('To Nil');
+    toNilSection.find('.list-group-item').each((i, row) => {
+      const stat = parseStatRow(row);
+      if (stat.label.includes('Win to Nil')) {
+        homeWinToNil = stat.home;
+        awayWinToNil = stat.away;
+      } else if (stat.label.includes('Lose to Nil')) {
+        homeLoseToNil = stat.home;
+        awayLoseToNil = stat.away;
+      }
+    });
     
     // Parse Winning Margin statistics
-    const winByOneGoal = parseStatsSection('Winning Margin', 'By 1 goal');
-    const winByTwoPlusGoals = parseStatsSection('Winning Margin', 'By 2+ goals');
+    let homeWinByOne, homeWinByTwoPlus, awayWinByOne, awayWinByTwoPlus;
     
-    // Parse BTTS statistics (with tabs for HOME, OVERALL, AWAY)
-    const parseBTTSStats = (statLabel: string) => {
-      const result: any = { overall: undefined, home: undefined, away: undefined };
-      
-      $('.card-body').each((i, section) => {
-        const sectionText = $(section).text();
-        
-        if (sectionText.includes('BTTS') && sectionText.includes(statLabel)) {
-          const rows = $(section).find('tr, .row, div[class*="row"]');
-          
-          rows.each((j, row) => {
-            const rowText = $(row).text();
-            
-            if (rowText.includes(statLabel)) {
-              const cells = $(row).find('td, .col, div[class*="col"], .text-center');
-              
-              if (cells.length >= 2) {
-                const homeText = $(cells[0]).text();
-                const awayText = $(cells.length > 2 ? cells[cells.length - 1] : cells[1]).text();
-                
-                // For BTTS, we get overall from the displayed value
-                result.overall = parseStatWithFraction(homeText);
-              }
-            }
-          });
-        }
-      });
-      
-      return result;
-    };
+    const winningMarginSection = findStatSection('Winning Margin');
+    winningMarginSection.find('.list-group-item').each((i, row) => {
+      const stat = parseStatRow(row);
+      if (stat.label.includes('By 1 goal')) {
+        homeWinByOne = stat.home;
+        awayWinByOne = stat.away;
+      } else if (stat.label.includes('By 2+ goals') || stat.label.includes('By 2 or more goals')) {
+        homeWinByTwoPlus = stat.home;
+        awayWinByTwoPlus = stat.away;
+      }
+    });
     
-    const homeBTTS = parseBTTSStats('BTTS');
-    const homeBTTSAndOver25 = parseBTTSStats('BTTS & Over');
-    const homeBTTSAndWin = parseBTTSStats('BTTS & Win');
-    const homeBTTSAndLoss = parseBTTSStats('BTTS & Loss');
+    // Parse BTTS statistics
+    let homeBTTS, homeBTTSAndOver25, homeBTTSAndWin, homeBTTSAndLoss;
+    let awayBTTS, awayBTTSAndOver25, awayBTTSAndWin, awayBTTSAndLoss;
     
-    const awayBTTS = { overall: undefined, home: undefined, away: undefined };
-    const awayBTTSAndOver25 = { overall: undefined, home: undefined, away: undefined };
-    const awayBTTSAndWin = { overall: undefined, home: undefined, away: undefined };
-    const awayBTTSAndLoss = { overall: undefined, home: undefined, away: undefined };
+    const bttsSection = findStatSection('BTTS');
+    bttsSection.find('.list-group-item').each((i, row) => {
+      const stat = parseStatRow(row);
+      if (stat.label === 'BTTS' || stat.label.match(/^BTTS$/)) {
+        homeBTTS = { overall: stat.home };
+        awayBTTS = { overall: stat.away };
+      } else if (stat.label.includes('BTTS & Over')) {
+        homeBTTSAndOver25 = { overall: stat.home };
+        awayBTTSAndOver25 = { overall: stat.away };
+      } else if (stat.label.includes('BTTS & Win')) {
+        homeBTTSAndWin = { overall: stat.home };
+        awayBTTSAndWin = { overall: stat.away };
+      } else if (stat.label.includes('BTTS & Loss')) {
+        homeBTTSAndLoss = { overall: stat.home };
+        awayBTTSAndLoss = { overall: stat.away };
+      }
+    });
     
     // Parse Goals Scored statistics
-    const parseGoalsScored = () => {
-      const homeResult: any = { overall: undefined, home: undefined, away: undefined };
-      const awayResult: any = { overall: undefined, home: undefined, away: undefined };
-      
-      $('.card-body').each((i, section) => {
-        const sectionText = $(section).text();
-        
-        if (sectionText.includes('Goals Scored') || sectionText.includes('Scored Percent')) {
-          const rows = $(section).find('tr, .row, div[class*="row"]');
-          
-          rows.each((j, row) => {
-            const rowText = $(row).text();
-            
-            if (rowText.includes('Scored Percent')) {
-              const cells = $(row).find('td, .col, div[class*="col"], .text-center');
-              
-              if (cells.length >= 2) {
-                const homeText = $(cells[0]).text();
-                const awayText = $(cells.length > 2 ? cells[cells.length - 1] : cells[1]).text();
-                
-                homeResult.overall = parseStatWithFraction(homeText);
-                awayResult.overall = parseStatWithFraction(awayText);
-              }
-            }
-          });
-        }
-      });
-      
-      return { homeResult, awayResult };
-    };
+    let homeScoredPercent, homeAgainstPercent, awayScoredPercent, awayAgainstPercent;
     
-    const scoredStats = parseGoalsScored();
-    const homeScoredPercent = scoredStats.homeResult;
-    const awayScoredPercent = scoredStats.awayResult;
-    
-    // For scored against, we'll use similar logic
-    const homeScoredAgainstPercent = { overall: undefined, home: undefined, away: undefined };
-    const awayScoredAgainstPercent = { overall: undefined, home: undefined, away: undefined };
+    const goalsScoredSection = findStatSection('Goals Scored');
+    goalsScoredSection.find('.list-group-item').each((i, row) => {
+      const stat = parseStatRow(row);
+      if (stat.label.includes('Scored Percent')) {
+        homeScoredPercent = { overall: stat.home };
+        awayScoredPercent = { overall: stat.away };
+      } else if (stat.label.includes('Scored Against')) {
+        homeAgainstPercent = { overall: stat.home };
+        awayAgainstPercent = { overall: stat.away };
+      }
+    });
     
     // Parse Goals in Halves statistics
-    const goalsInHalves = parseStatsSection('Number of goals in halves', 'First Half');
-    const goalsInSecondHalf = parseStatsSection('Number of goals in halves', 'Second Half');
+    let homeFirstHalfGoals, homeSecondHalfGoals, awayFirstHalfGoals, awaySecondHalfGoals;
+    
+    const goalsInHalvesSection = findStatSection('Number of goals in halves');
+    goalsInHalvesSection.find('.list-group-item').each((i, row) => {
+      const stat = parseStatRow(row);
+      if (stat.label.includes('First Half')) {
+        homeFirstHalfGoals = stat.home;
+        awayFirstHalfGoals = stat.away;
+      } else if (stat.label.includes('Second Half')) {
+        homeSecondHalfGoals = stat.home;
+        awaySecondHalfGoals = stat.away;
+      }
+    });
     
     // Parse Halftime Stats
-    const parseHalftimeStats = () => {
-      const homeResult: any = {};
-      const awayResult: any = {};
-      
-      $('.card-body').each((i, section) => {
-        const sectionText = $(section).text();
-        
-        if (sectionText.includes('Halftime Stats')) {
-          const rows = $(section).find('tr, .row, div[class*="row"]');
-          
-          rows.each((j, row) => {
-            const rowText = $(row).text();
-            const cells = $(row).find('td, .col, div[class*="col"], .text-center');
-            
-            if (rowText.includes('Won') && cells.length >= 2) {
-              const homeText = $(cells[0]).text();
-              const awayText = $(cells.length > 2 ? cells[cells.length - 1] : cells[1]).text();
-              
-              homeResult.wonFullTime = parseStatWithFraction(homeText);
-              awayResult.wonFullTime = parseStatWithFraction(awayText);
-            } else if (rowText.includes('Tied') && cells.length >= 2) {
-              const homeText = $(cells[0]).text();
-              const awayText = $(cells.length > 2 ? cells[cells.length - 1] : cells[1]).text();
-              
-              homeResult.tiedFullTime = parseStatWithFraction(homeText);
-              awayResult.tiedFullTime = parseStatWithFraction(awayText);
-            } else if (rowText.includes('Lost') && cells.length >= 2) {
-              const homeText = $(cells[0]).text();
-              const awayText = $(cells.length > 2 ? cells[cells.length - 1] : cells[1]).text();
-              
-              homeResult.lostFullTime = parseStatWithFraction(homeText);
-              awayResult.lostFullTime = parseStatWithFraction(awayText);
-            }
-          });
-        }
-      });
-      
-      return { homeResult, awayResult };
-    };
+    let homeHalftimeWon, homeHalftimeTied, homeHalftimeLost;
+    let awayHalftimeWon, awayHalftimeTied, awayHalftimeLost;
     
-    const halftimeStats = parseHalftimeStats();
-    const homeHalftimeStats = halftimeStats.homeResult;
-    const awayHalftimeStats = halftimeStats.awayResult;
+    const halftimeSection = findStatSection('Halftime');
+    halftimeSection.find('.list-group-item').each((i, row) => {
+      const stat = parseStatRow(row);
+      if (stat.label.includes('Won')) {
+        homeHalftimeWon = stat.home;
+        awayHalftimeWon = stat.away;
+      } else if (stat.label.includes('Tied')) {
+        homeHalftimeTied = stat.home;
+        awayHalftimeTied = stat.away;
+      } else if (stat.label.includes('Lost')) {
+        homeHalftimeLost = stat.home;
+        awayHalftimeLost = stat.away;
+      }
+    });
     
     // Extract H2H stats
     const h2hMatches = extractStat(/played against.*?(\d+)\s*times/, 0);
@@ -654,17 +651,17 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
         cleanSheetPercentage: homeCleanSheet,
         
         // Double Chance
-        doubleChance1X: doubleChance1X.homeStat,
-        doubleChanceX2: doubleChanceX2.homeStat,
-        doubleChance12: doubleChance12.homeStat,
+        doubleChance1X: homeDoubleChance1X,
+        doubleChanceX2: homeDoubleChanceX2,
+        doubleChance12: homeDoubleChance12,
         
         // To Nil
-        winToNil: winToNil.homeStat,
-        loseToNil: loseToNil.homeStat,
+        winToNil: homeWinToNil,
+        loseToNil: homeLoseToNil,
         
         // Winning Margin
-        winByOneGoal: winByOneGoal.homeStat,
-        winByTwoPlusGoals: winByTwoPlusGoals.homeStat,
+        winByOneGoal: homeWinByOne,
+        winByTwoPlusGoals: homeWinByTwoPlus,
         
         // BTTS
         btts: homeBTTS,
@@ -674,14 +671,18 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
         
         // Goals Scored
         scoredPercent: homeScoredPercent,
-        scoredAgainstPercent: homeScoredAgainstPercent,
+        scoredAgainstPercent: homeAgainstPercent,
         
         // Goals in Halves
-        goalsInFirstHalf: goalsInHalves.homeStat,
-        goalsInSecondHalf: goalsInSecondHalf.homeStat,
+        goalsInFirstHalf: homeFirstHalfGoals,
+        goalsInSecondHalf: homeSecondHalfGoals,
         
         // Halftime Stats
-        halftimeStats: homeHalftimeStats,
+        halftimeStats: {
+          wonFullTime: homeHalftimeWon,
+          tiedFullTime: homeHalftimeTied,
+          lostFullTime: homeHalftimeLost,
+        },
       },
       awayTeamStats: {
         winPercentage: awayWinPercent,
@@ -692,17 +693,17 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
         cleanSheetPercentage: awayCleanSheet,
         
         // Double Chance
-        doubleChance1X: doubleChance1X.awayStat,
-        doubleChanceX2: doubleChanceX2.awayStat,
-        doubleChance12: doubleChance12.awayStat,
+        doubleChance1X: awayDoubleChance1X,
+        doubleChanceX2: awayDoubleChanceX2,
+        doubleChance12: awayDoubleChance12,
         
         // To Nil
-        winToNil: winToNil.awayStat,
-        loseToNil: loseToNil.awayStat,
+        winToNil: awayWinToNil,
+        loseToNil: awayLoseToNil,
         
         // Winning Margin
-        winByOneGoal: winByOneGoal.awayStat,
-        winByTwoPlusGoals: winByTwoPlusGoals.awayStat,
+        winByOneGoal: awayWinByOne,
+        winByTwoPlusGoals: awayWinByTwoPlus,
         
         // BTTS
         btts: awayBTTS,
@@ -712,14 +713,18 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
         
         // Goals Scored
         scoredPercent: awayScoredPercent,
-        scoredAgainstPercent: awayScoredAgainstPercent,
+        scoredAgainstPercent: awayAgainstPercent,
         
         // Goals in Halves
-        goalsInFirstHalf: goalsInHalves.awayStat,
-        goalsInSecondHalf: goalsInSecondHalf.awayStat,
+        goalsInFirstHalf: awayFirstHalfGoals,
+        goalsInSecondHalf: awaySecondHalfGoals,
         
         // Halftime Stats
-        halftimeStats: awayHalftimeStats,
+        halftimeStats: {
+          wonFullTime: awayHalftimeWon,
+          tiedFullTime: awayHalftimeTied,
+          lostFullTime: awayHalftimeLost,
+        },
       },
       headToHead: h2hMatches > 0 ? {
         totalMatches: h2hMatches,
