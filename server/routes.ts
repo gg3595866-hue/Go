@@ -743,6 +743,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete all models
+  app.delete("/api/ml/models", async (req, res) => {
+    try {
+      const success = await databaseStorage.deleteAllModels();
+      if (!success) {
+        return res.status(500).json({ error: 'Failed to delete models' });
+      }
+      res.json({ success: true, message: 'All models deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting all models:', error);
+      res.status(500).json({ error: 'Failed to delete models' });
+    }
+  });
+
   // Predict matches in tester database
   app.post("/api/ml/predict", async (req, res) => {
     try {
