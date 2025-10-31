@@ -1140,106 +1140,133 @@ export async function scrapeLeagueMatches(
       $doc('.list-group-item').each((_, element) => {
         const $item = $doc(element);
         
-        // Look for date and time
-        const dateTimeElem = $item.find('small.text-muted').first();
-        if (dateTimeElem.length === 0) return;
-        
-        const dateTimeText = dateTimeElem.text().trim();
-        const dateMatch = dateTimeText.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-        const timeMatch = dateTimeText.match(/(\d{1,2}):(\d{2})/);
-        
-        if (!dateMatch) return;
-        
-        let matchDate = '';
-        let time = '';
-        
-        if (dateMatch) {
-          const month = dateMatch[1].padStart(2, '0');
-          const day = dateMatch[2].padStart(2, '0');
-          let fullYear = dateMatch[3];
-          
-          // Convert 2-digit year to 4-digit
-          if (fullYear.length === 2) {
-            fullYear = '20' + fullYear;
-          }
-          
-          matchDate = `${fullYear}-${month}-${day}`;
+        // Skip if this is a header/separator (text-muted with border-0)
+        if ($item.hasClass('text-muted') && $item.hasClass('border-0')) {
+          return;
         }
         
-        if (timeMatch) {
-          time = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
-        }
-        
-        // Extract teams
-        const teamLinks = $item.find('a.text-primary');
-        if (teamLinks.length < 2) return;
-        
-        const homeTeam = $doc(teamLinks[0]).text().trim();
-        const awayTeam = $doc(teamLinks[1]).text().trim();
-        
-        if (!homeTeam || !awayTeam) return;
+        // This should be a match item - look for match link
+        const matchLink = $item.find('a[href*="/compare/"]').first();
+        if (matchLink.length === 0) return; // Not a match
         
         // Extract match URL
-        const matchUrl = $doc(teamLinks[0]).attr('href');
+        const matchUrl = matchLink.attr('href');
         const fullMatchUrl = matchUrl ? `https://sportstats365.com${matchUrl}` : undefined;
         
-        // Extract scores
-        const scoreText = $item.find('span').filter((_, el) => {
-          const text = $doc(el).text();
-          return /\d+\s*[:–-]\s*\d+/.test(text);
-        }).first().text().trim();
-        
-        let homeScore: number | null = null;
-        let awayScore: number | null = null;
-        let status: 'FT' | 'LIVE' | 'SCHEDULED' | 'POSTPONED' = 'SCHEDULED';
-        
-        const scoreMatch = scoreText.match(/(\d+)\s*[:–-]\s*(\d+)/);
-        if (scoreMatch) {
-          homeScore = parseInt(scoreMatch[1]);
-          awayScore = parseInt(scoreMatch[2]);
-          status = 'FT';
-        }
-        
-        // Extract odds
-        let odds;
-        const oddsTexts: string[] = [];
-        $item.find('.badge-light, small').each((_, el) => {
-          const text = $doc(el).text().trim();
-          const num = parseFloat(text);
-          if (!isNaN(num) && num > 1.0 && num < 100) {
-            oddsTexts.push(text);
-          }
-        });
-        
-        if (oddsTexts.length >= 3) {
-          const homeOdds = parseFloat(oddsTexts[0]);
-          const drawOdds = parseFloat(oddsTexts[1]);
-          const awayOdds = parseFloat(oddsTexts[2]);
+        try {
+          // Extract time/status
+          const eventTime = $item.find('.event-time small').text().trim();
+          let time = '';
+          let status: 'FT' | 'LIVE' | 'SCHEDULED' | 'POSTPONED' = 'SCHEDULED';
           
-          if (!isNaN(homeOdds) && !isNaN(drawOdds) && !isNaN(awayOdds)) {
-            odds = {
-              home: homeOdds,
-              draw: drawOdds,
-              away: awayOdds,
-            };
+          if (eventTime === 'FT' || eventTime.includes('FT')) {
+            status = 'FT';
+            time = 'FT';
+          } else if (eventTime.match(/^\d{1,2}:\d{2}$/)) {
+            time = eventTime;
+            status = 'SCHEDULED';
+          } else {
+            time = eventTime;
           }
+          
+          // Extract teams
+          const teamSpans = matchLink.find('.event-team');
+          if (teamSpans.length < 2) return;
+          
+          const homeTeamSpan = $doc(teamSpans[0]);
+          const awayTeamSpan = $doc(teamSpans[1]);
+          
+          const homeTeamImg = homeTeamSpan.find('img');
+          const awayTeamImg = awayTeamSpan.find('img');
+          
+          const homeTeam = homeTeamImg.attr('alt')?.trim() || homeTeamSpan.text().trim();
+          const awayTeam = awayTeamImg.attr('alt')?.trim() || awayTeamSpan.text().trim();
+          const homeTeamLogo = homeTeamImg.attr('src');
+          const awayTeamLogo = awayTeamImg.attr('src');
+          
+          if (!homeTeam || !awayTeam) return;
+          
+          // Extract scores
+          const scoreDiv = $item.find('.score-list');
+          let homeScore: number | null = null;
+          let awayScore: number | null = null;
+          let homeHalfScore: number | null = null;
+          let awayHalfScore: number | null = null;
+          
+          if (scoreDiv.length > 0) {
+            const scoreText = scoreDiv.text();
+            
+            // Check if it's not just dashes
+            if (scoreText && !scoreText.trim().match(/^-\s*-$/)) {
+              // Extract main scores
+              const mainScores = scoreDiv.find('.fw-bold, .fw-strong');
+              if (mainScores.length >= 2) {
+                const homeScoreText = $doc(mainScores[0]).text().trim();
+                const awayScoreText = $doc(mainScores[1]).text().trim();
+                
+                if (homeScoreText && !isNaN(parseInt(homeScoreText))) {
+                  homeScore = parseInt(homeScoreText);
+                }
+                if (awayScoreText && !isNaN(parseInt(awayScoreText))) {
+                  awayScore = parseInt(awayScoreText);
+                }
+              }
+              
+              // Extract half-time scores (in parentheses)
+              const halfScores = scoreDiv.find('.score-period');
+              if (halfScores.length > 0) {
+                const halfText = halfScores.text();
+                const halfMatches = halfText.match(/\((\d+)\)[^\d]*\((\d+)\)/);
+                if (halfMatches) {
+                  homeHalfScore = parseInt(halfMatches[1]);
+                  awayHalfScore = parseInt(halfMatches[2]);
+                }
+              }
+            }
+          }
+          
+          // If we have scores, mark as FT if not already marked
+          if (homeScore !== null && awayScore !== null && status === 'SCHEDULED') {
+            status = 'FT';
+          }
+          
+          // Extract odds
+          let odds;
+          const oddsBadges = $item.find('.badge-light');
+          if (oddsBadges.length >= 3) {
+            const homeOdds = parseFloat($doc(oddsBadges[0]).text().trim());
+            const drawOdds = parseFloat($doc(oddsBadges[1]).text().trim());
+            const awayOdds = parseFloat($doc(oddsBadges[2]).text().trim());
+            
+            if (!isNaN(homeOdds) && !isNaN(drawOdds) && !isNaN(awayOdds)) {
+              odds = {
+                home: homeOdds,
+                draw: drawOdds,
+                away: awayOdds,
+              };
+            }
+          }
+          
+          matches.push({
+            id: `match-${matchId++}`,
+            matchUrl: fullMatchUrl,
+            homeTeam: homeTeam.replace(/\s+$/, '').replace(/\s{2,}/g, ' '),
+            awayTeam: awayTeam.replace(/\s+$/, '').replace(/\s{2,}/g, ' '),
+            homeTeamLogo,
+            awayTeamLogo,
+            homeScore,
+            awayScore,
+            homeHalfScore,
+            awayHalfScore,
+            status,
+            time: time || '00:00',
+            competition: competitionName,
+            competitionLogo: undefined,
+            odds,
+          });
+        } catch (err) {
+          console.error('Error parsing match:', err);
         }
-        
-        matches.push({
-          id: `match-${matchId++}`,
-          matchUrl: fullMatchUrl,
-          homeTeam: homeTeam.replace(/\s+$/, '').replace(/\s{2,}/g, ' '),
-          awayTeam: awayTeam.replace(/\s+$/, '').replace(/\s{2,}/g, ' '),
-          homeScore,
-          awayScore,
-          homeHalfScore: null,
-          awayHalfScore: null,
-          status,
-          time: time || matchDate,
-          competition: competitionName,
-          competitionLogo: undefined,
-          odds,
-        });
       });
       
       return matches;
