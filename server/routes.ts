@@ -3,6 +3,13 @@ import { createServer, type Server } from "http";
 import { scrapeFixtures, scrapeMatchDetails } from "./scraper";
 import { storage } from "./storage";
 import { insertMatchStatsSchema } from "@shared/schema";
+import {
+  extractFeaturesForDatabase,
+  extractFeaturesForTester,
+  generateTeamId,
+  generateLeagueId,
+  generateCountryId,
+} from "./feature-extraction";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get fixtures for a specific date
@@ -121,6 +128,270 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting match stats:", error);
       res.status(500).json({ error: "Failed to delete match statistics" });
+    }
+  });
+
+  // Bulk Upload Routes with Server-Sent Events
+  app.post("/api/bulk-upload/database", async (req, res) => {
+    const { date } = req.body;
+
+    if (!date) {
+      return res.status(400).json({ error: "Date is required" });
+    }
+
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const sendEvent = (data: any) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      // Fetch fixtures for the date
+      const fixturesDate = new Date(date);
+      const matches = await scrapeFixtures(fixturesDate);
+
+      sendEvent({
+        status: 'processing',
+        totalMatches: matches.length,
+        processed: 0,
+        stored: 0,
+      });
+
+      let processed = 0;
+      let stored = 0;
+
+      // Load existing stats once at the beginning for duplicate checking
+      const existingStats = await storage.getAllMatchStats();
+      const existingKeys = new Set(
+        existingStats.map((stat) => `${stat.homeTeamId}-${stat.awayTeamId}-${stat.ftHomeScore}-${stat.ftAwayScore}`)
+      );
+
+      // Process each match
+      for (const match of matches) {
+        try {
+          sendEvent({
+            status: 'processing',
+            totalMatches: matches.length,
+            processed,
+            stored,
+            currentMatch: `${match.homeTeam} vs ${match.awayTeam}`,
+          });
+
+          // Only process finished matches for database
+          if (match.status !== 'FT' || !match.matchUrl) {
+            processed++;
+            continue;
+          }
+
+          // Fetch match details
+          const matchDetails = await scrapeMatchDetails(match.matchUrl);
+
+          // Generate IDs
+          const homeTeamId = generateTeamId(matchDetails.homeTeam);
+          const awayTeamId = generateTeamId(matchDetails.awayTeam);
+          const leagueId = generateLeagueId(matchDetails.competition);
+          const countryId = generateCountryId(matchDetails.competition);
+
+          // Extract features
+          const features = extractFeaturesForDatabase(
+            matchDetails,
+            homeTeamId,
+            awayTeamId,
+            leagueId,
+            countryId
+          );
+
+          // Check if all required data is present
+          if (
+            features.ftHomeScore === null ||
+            features.ftAwayScore === null ||
+            features.homeTeamFormOverallL5 === 0 ||
+            features.awayTeamFormOverallL5 === 0
+          ) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - incomplete data`);
+            processed++;
+            continue;
+          }
+
+          // Check for duplicates using the pre-loaded set
+          const matchKey = `${homeTeamId}-${awayTeamId}-${features.ftHomeScore}-${features.ftAwayScore}`;
+          if (existingKeys.has(matchKey)) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - duplicate`);
+            processed++;
+            continue;
+          }
+
+          // Store in database
+          await storage.createMatchStats(features);
+          existingKeys.add(matchKey); // Add to set to prevent duplicates within this batch
+          stored++;
+          processed++;
+
+          sendEvent({
+            status: 'processing',
+            totalMatches: matches.length,
+            processed,
+            stored,
+          });
+        } catch (error) {
+          console.error(`Error processing match ${match.homeTeam} vs ${match.awayTeam}:`, error);
+          processed++;
+        }
+      }
+
+      // Send completion event
+      sendEvent({
+        status: 'completed',
+        totalMatches: matches.length,
+        processed,
+        stored,
+      });
+
+      res.end();
+    } catch (error) {
+      console.error("Error in bulk upload:", error);
+      sendEvent({
+        status: 'error',
+        error: 'Failed to process bulk upload',
+        totalMatches: 0,
+        processed: 0,
+        stored: 0,
+      });
+      res.end();
+    }
+  });
+
+  app.post("/api/bulk-upload/tester", async (req, res) => {
+    const { date } = req.body;
+
+    if (!date) {
+      return res.status(400).json({ error: "Date is required" });
+    }
+
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const sendEvent = (data: any) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      // Fetch fixtures for the date
+      const fixturesDate = new Date(date);
+      const matches = await scrapeFixtures(fixturesDate);
+
+      sendEvent({
+        status: 'processing',
+        totalMatches: matches.length,
+        processed: 0,
+        loaded: 0,
+      });
+
+      let processed = 0;
+      let loaded = 0;
+
+      // Process each match
+      for (const match of matches) {
+        try {
+          sendEvent({
+            status: 'processing',
+            totalMatches: matches.length,
+            processed,
+            loaded,
+            currentMatch: `${match.homeTeam} vs ${match.awayTeam}`,
+          });
+
+          // Only process scheduled/upcoming matches for tester
+          if (!match.matchUrl) {
+            processed++;
+            continue;
+          }
+
+          // Fetch match details
+          const matchDetails = await scrapeMatchDetails(match.matchUrl);
+
+          // Generate IDs
+          const homeTeamId = generateTeamId(matchDetails.homeTeam);
+          const awayTeamId = generateTeamId(matchDetails.awayTeam);
+          const leagueId = generateLeagueId(matchDetails.competition);
+          const countryId = generateCountryId(matchDetails.competition);
+
+          // Extract features without target variables
+          const features = extractFeaturesForTester(
+            matchDetails,
+            homeTeamId,
+            awayTeamId,
+            leagueId,
+            countryId
+          );
+
+          // Check if required statistical data is present
+          if (
+            features.homeTeamFormOverallL5 === 0 ||
+            features.awayTeamFormOverallL5 === 0
+          ) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - incomplete data`);
+            processed++;
+            continue;
+          }
+
+          // Check for duplicates
+          const existingStats = await storage.getAllMatchStats();
+          const isDuplicate = existingStats.some(
+            (stat) =>
+              stat.homeTeamId === homeTeamId &&
+              stat.awayTeamId === awayTeamId &&
+              stat.ftHomeScore === null &&
+              stat.ftAwayScore === null
+          );
+
+          if (isDuplicate) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - duplicate`);
+            processed++;
+            continue;
+          }
+
+          // Store in database
+          await storage.createMatchStats(features);
+          loaded++;
+          processed++;
+
+          sendEvent({
+            status: 'processing',
+            totalMatches: matches.length,
+            processed,
+            loaded,
+          });
+        } catch (error) {
+          console.error(`Error processing match ${match.homeTeam} vs ${match.awayTeam}:`, error);
+          processed++;
+        }
+      }
+
+      // Send completion event
+      sendEvent({
+        status: 'completed',
+        totalMatches: matches.length,
+        processed,
+        loaded,
+      });
+
+      res.end();
+    } catch (error) {
+      console.error("Error in test loading:", error);
+      sendEvent({
+        status: 'error',
+        error: 'Failed to process test loading',
+        totalMatches: 0,
+        processed: 0,
+        loaded: 0,
+      });
+      res.end();
     }
   });
 

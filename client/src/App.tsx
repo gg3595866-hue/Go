@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import FixturesPage from "@/pages/fixtures";
 import DatabasePage from "@/pages/database";
 import TesterPage from "@/pages/tester";
+import ProcessingPage from "@/pages/processing";
 import MatchDetailsPage from "@/pages/match-details";
 import NotFound from "@/pages/not-found";
 
@@ -15,6 +16,7 @@ function Router() {
       <Route path="/" component={FixturesPage} />
       <Route path="/database" component={DatabasePage} />
       <Route path="/tester" component={TesterPage} />
+      <Route path="/processing" component={ProcessingPage} />
       <Route path="/match/:url" component={MatchDetailsPage} />
       <Route component={NotFound} />
     </Switch>
@@ -28,6 +30,7 @@ function NavigationTabs() {
     { name: "Fixtures", path: "/" },
     { name: "Database", path: "/database" },
     { name: "Tester", path: "/tester" },
+    { name: "Processing", path: "/processing" },
   ];
   
   return (
