@@ -6,6 +6,9 @@ import {
   countries,
   modelMetadata,
   matchPredictions,
+  basketballStats,
+  basketballModelMetadata,
+  basketballPredictions,
   type User, 
   type InsertUser, 
   type MatchStats, 
@@ -16,7 +19,13 @@ import {
   type ModelMetadata,
   type InsertModelMetadata,
   type MatchPrediction,
-  type InsertMatchPrediction
+  type InsertMatchPrediction,
+  type BasketballStats,
+  type InsertBasketballStats,
+  type BasketballModelMetadata,
+  type InsertBasketballModelMetadata,
+  type BasketballPrediction,
+  type InsertBasketballPrediction
 } from "@shared/schema";
 import { databaseDb, testerDb } from "./db";
 import { eq, desc } from "drizzle-orm";
@@ -53,6 +62,27 @@ export interface IStorage {
   getPredictionsByMatchStatsId(matchStatsId: number): Promise<MatchPrediction[]>;
   getAllPredictions(): Promise<MatchPrediction[]>;
   deleteAllPredictions(): Promise<boolean>;
+  
+  // Basketball Statistics methods
+  getAllBasketballStats(): Promise<BasketballStats[]>;
+  getBasketballStatsById(id: number): Promise<BasketballStats | undefined>;
+  createBasketballStats(stats: InsertBasketballStats): Promise<BasketballStats>;
+  updateBasketballStats(id: number, stats: Partial<InsertBasketballStats>): Promise<BasketballStats | undefined>;
+  deleteBasketballStats(id: number): Promise<boolean>;
+  deleteAllBasketballStats(): Promise<boolean>;
+  
+  // Basketball Model methods
+  getAllBasketballModels(): Promise<BasketballModelMetadata[]>;
+  getActiveBasketballModel(): Promise<BasketballModelMetadata | undefined>;
+  createBasketballModel(model: InsertBasketballModelMetadata): Promise<BasketballModelMetadata>;
+  setActiveBasketballModel(id: number): Promise<boolean>;
+  deleteAllBasketballModels(): Promise<boolean>;
+  
+  // Basketball Prediction methods
+  createBasketballPrediction(prediction: InsertBasketballPrediction): Promise<BasketballPrediction>;
+  getBasketballPredictionsByStatsId(basketballStatsId: number): Promise<BasketballPrediction[]>;
+  getAllBasketballPredictions(): Promise<BasketballPrediction[]>;
+  deleteAllBasketballPredictions(): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -376,6 +406,123 @@ export class DatabaseStorage implements IStorage {
       return true;
     } catch (error) {
       console.error('Error deleting all predictions:', error);
+      return false;
+    }
+  }
+  
+  // Basketball Statistics methods
+  async getAllBasketballStats(): Promise<BasketballStats[]> {
+    return this.db.select().from(basketballStats).orderBy(desc(basketballStats.createdAt));
+  }
+
+  async getBasketballStatsById(id: number): Promise<BasketballStats | undefined> {
+    const [stats] = await this.db.select().from(basketballStats).where(eq(basketballStats.id, id));
+    return stats || undefined;
+  }
+
+  async createBasketballStats(stats: InsertBasketballStats): Promise<BasketballStats> {
+    const [created] = await this.db
+      .insert(basketballStats)
+      .values(stats)
+      .returning();
+    return created;
+  }
+
+  async updateBasketballStats(id: number, stats: Partial<InsertBasketballStats>): Promise<BasketballStats | undefined> {
+    const [updated] = await this.db
+      .update(basketballStats)
+      .set(stats)
+      .where(eq(basketballStats.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteBasketballStats(id: number): Promise<boolean> {
+    const result = await this.db
+      .delete(basketballStats)
+      .where(eq(basketballStats.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  async deleteAllBasketballStats(): Promise<boolean> {
+    await this.db.delete(basketballStats);
+    return true;
+  }
+
+  // Basketball Model methods
+  async getAllBasketballModels(): Promise<BasketballModelMetadata[]> {
+    return this.db.select().from(basketballModelMetadata).orderBy(desc(basketballModelMetadata.createdAt));
+  }
+
+  async getActiveBasketballModel(): Promise<BasketballModelMetadata | undefined> {
+    const [model] = await this.db
+      .select()
+      .from(basketballModelMetadata)
+      .where(eq(basketballModelMetadata.isActive, true))
+      .limit(1);
+    return model || undefined;
+  }
+
+  async createBasketballModel(model: InsertBasketballModelMetadata): Promise<BasketballModelMetadata> {
+    const [created] = await this.db
+      .insert(basketballModelMetadata)
+      .values(model)
+      .returning();
+    return created;
+  }
+
+  async setActiveBasketballModel(id: number): Promise<boolean> {
+    await this.db
+      .update(basketballModelMetadata)
+      .set({ isActive: false });
+    
+    const result = await this.db
+      .update(basketballModelMetadata)
+      .set({ isActive: true })
+      .where(eq(basketballModelMetadata.id, id))
+      .returning();
+    
+    return result.length > 0;
+  }
+
+  async deleteAllBasketballModels(): Promise<boolean> {
+    try {
+      await this.db.delete(basketballModelMetadata);
+      return true;
+    } catch (error) {
+      console.error('Error deleting all basketball models:', error);
+      return false;
+    }
+  }
+
+  // Basketball Prediction methods
+  async createBasketballPrediction(prediction: InsertBasketballPrediction): Promise<BasketballPrediction> {
+    const [created] = await this.db
+      .insert(basketballPredictions)
+      .values(prediction)
+      .returning();
+    return created;
+  }
+
+  async getBasketballPredictionsByStatsId(basketballStatsId: number): Promise<BasketballPrediction[]> {
+    return this.db
+      .select()
+      .from(basketballPredictions)
+      .where(eq(basketballPredictions.basketballStatsId, basketballStatsId))
+      .orderBy(desc(basketballPredictions.createdAt));
+  }
+
+  async getAllBasketballPredictions(): Promise<BasketballPrediction[]> {
+    return this.db.select().from(basketballPredictions).orderBy(desc(basketballPredictions.createdAt));
+  }
+
+  async deleteAllBasketballPredictions(): Promise<boolean> {
+    try {
+      await this.db.delete(basketballPredictions);
+      return true;
+    } catch (error) {
+      console.error('Error deleting all basketball predictions:', error);
       return false;
     }
   }

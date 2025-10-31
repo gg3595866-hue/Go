@@ -9,6 +9,9 @@ import DatabasePage from "@/pages/database";
 import TesterPage from "@/pages/tester";
 import TrainingPage from "@/pages/training";
 import ProcessingPage from "@/pages/processing";
+import BasketballDatabasePage from "@/pages/basketball-database";
+import BasketballTesterPage from "@/pages/basketball-tester";
+import BasketballProcessingPage from "@/pages/basketball-processing";
 import MatchDetailsPage from "@/pages/match-details";
 import NotFound from "@/pages/not-found";
 
@@ -22,6 +25,9 @@ function Router() {
       <Route path="/football/training" component={TrainingPage} />
       <Route path="/football/processing" component={ProcessingPage} />
       <Route path="/basketball" component={BasketballPage} />
+      <Route path="/basketball/database" component={BasketballDatabasePage} />
+      <Route path="/basketball/tester" component={BasketballTesterPage} />
+      <Route path="/basketball/processing" component={BasketballProcessingPage} />
       <Route path="/match/:url" component={MatchDetailsPage} />
       <Route component={NotFound} />
     </Switch>
@@ -49,6 +55,9 @@ function NavigationTabs() {
   
   const basketballSubTabs = [
     { name: "Fixtures", path: "/basketball" },
+    { name: "Database", path: "/basketball/database" },
+    { name: "Tester", path: "/basketball/tester" },
+    { name: "Processing", path: "/basketball/processing" },
   ];
   
   const currentSubTabs = isBasketball ? basketballSubTabs : footballSubTabs;

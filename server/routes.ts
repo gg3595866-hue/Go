@@ -697,9 +697,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const archConfig = {
-        numTeams: Math.max(...uniqueTeams),
-        numLeagues: Math.max(...uniqueLeagues),
-        numCountries: Math.max(...uniqueCountries),
+        numTeams: Math.max(...Array.from(uniqueTeams)),
+        numLeagues: Math.max(...Array.from(uniqueLeagues)),
+        numCountries: Math.max(...Array.from(uniqueCountries)),
         teamEmbeddingSize,
         leagueEmbeddingSize,
         countryEmbeddingSize,
@@ -1005,6 +1005,319 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stack: error.stack,
         statusCode: error.statusCode
       });
+    }
+  });
+
+  // ========== Basketball API Routes ==========
+  
+  // Get all basketball stats from database
+  app.get("/api/basketball-stats/database", async (req, res) => {
+    try {
+      const stats = await databaseStorage.getAllBasketballStats();
+      res.json(stats);
+    } catch (error) {
+      console.error('Error fetching basketball database stats:', error);
+      res.status(500).json({ error: 'Failed to fetch basketball database stats' });
+    }
+  });
+
+  // Clear all basketball stats from database
+  app.delete("/api/basketball-stats/database/clear", async (req, res) => {
+    try {
+      await databaseStorage.deleteAllBasketballStats();
+      res.json({ success: true, message: 'Basketball database cleared successfully' });
+    } catch (error) {
+      console.error('Error clearing basketball database:', error);
+      res.status(500).json({ error: 'Failed to clear basketball database' });
+    }
+  });
+
+  // Get all basketball stats from tester with enriched team names
+  app.get("/api/basketball-stats/tester", async (req, res) => {
+    try {
+      const stats = await testerStorage.getAllBasketballStats();
+      
+      const enrichedStats = await Promise.all(
+        stats.map(async (stat) => {
+          const homeTeam = await databaseStorage.getTeamById(stat.homeTeamId);
+          const awayTeam = await databaseStorage.getTeamById(stat.awayTeamId);
+          
+          return {
+            ...stat,
+            homeTeamName: homeTeam?.name || `Team ${stat.homeTeamId}`,
+            awayTeamName: awayTeam?.name || `Team ${stat.awayTeamId}`,
+          };
+        })
+      );
+      
+      res.json(enrichedStats);
+    } catch (error) {
+      console.error('Error fetching basketball tester stats:', error);
+      res.status(500).json({ error: 'Failed to fetch basketball tester stats' });
+    }
+  });
+
+  // Clear all basketball stats from tester
+  app.delete("/api/basketball-stats/tester/clear", async (req, res) => {
+    try {
+      await testerStorage.deleteAllBasketballStats();
+      await testerStorage.deleteAllBasketballPredictions();
+      res.json({ success: true, message: 'Basketball tester cleared successfully' });
+    } catch (error) {
+      console.error('Error clearing basketball tester:', error);
+      res.status(500).json({ error: 'Failed to clear basketball tester' });
+    }
+  });
+
+  // Basketball ML Training endpoint
+  app.post("/api/basketball/ml/train", async (req, res) => {
+    try {
+      const {
+        epochs = 30,
+        batchSize = 32,
+        validationSplit = 0.2,
+        learningRate = 0.001,
+        teamEmbeddingSize = 50,
+        leagueEmbeddingSize = 20,
+        countryEmbeddingSize = 10,
+        hiddenLayers = [128, 64]
+      } = req.body;
+
+      console.log('Starting basketball model training...');
+      
+      const basketballStatsArray = await databaseStorage.getAllBasketballStats();
+      
+      if (basketballStatsArray.length < 100) {
+        return res.status(400).json({
+          error: 'Insufficient training data',
+          message: 'At least 100 completed basketball matches are required for training'
+        });
+      }
+
+      const { trainBasketballModel, saveBasketballModel } = await import('./ml-model-basketball');
+      
+      const uniqueTeams = new Set<number>();
+      const uniqueLeagues = new Set<number>();
+      const uniqueCountries = new Set<number>();
+      
+      basketballStatsArray.forEach(stats => {
+        uniqueTeams.add(stats.homeTeamId);
+        uniqueTeams.add(stats.awayTeamId);
+        uniqueLeagues.add(stats.leagueId);
+        uniqueCountries.add(stats.countryId);
+      });
+      
+      const archConfig = {
+        numTeams: Math.max(...Array.from(uniqueTeams)),
+        numLeagues: Math.max(...Array.from(uniqueLeagues)),
+        numCountries: Math.max(...Array.from(uniqueCountries)),
+        teamEmbeddingSize,
+        leagueEmbeddingSize,
+        countryEmbeddingSize,
+        hiddenLayers
+      };
+      
+      const trainingConfig = {
+        epochs,
+        batchSize,
+        validationSplit,
+        learningRate
+      };
+      
+      const { model, result } = await trainBasketballModel(
+        basketballStatsArray,
+        trainingConfig,
+        archConfig
+      );
+      
+      const modelPath = `./basketball-models/model_${Date.now()}`;
+      await saveBasketballModel(model, modelPath);
+      
+      const modelMetadata = await databaseStorage.createBasketballModel({
+        modelName: 'Basketball Predictor',
+        version: '1.0',
+        architecture: JSON.stringify({ trainingConfig, archConfig }),
+        trainingAccuracy: result.finalMetrics.trainingAccuracy,
+        validationAccuracy: result.finalMetrics.validationAccuracy,
+        loss: result.finalMetrics.loss,
+        trainingDate: new Date(),
+        totalEpochs: epochs,
+        totalSamples: basketballStatsArray.length,
+        isActive: true,
+        modelPath
+      });
+      
+      await databaseStorage.setActiveBasketballModel(modelMetadata.id);
+      
+      res.json({
+        success: true,
+        modelId: modelMetadata.id,
+        trainingMetrics: result.finalMetrics,
+        history: result.history
+      });
+      
+    } catch (error) {
+      console.error('Error training basketball model:', error);
+      res.status(500).json({
+        error: 'Failed to train basketball model',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Basketball Prediction endpoint
+  app.post("/api/basketball/ml/predict", async (req, res) => {
+    try {
+      console.log('Starting basketball predictions...');
+      
+      const activeModel = await databaseStorage.getActiveBasketballModel();
+      
+      if (!activeModel || !activeModel.modelPath) {
+        return res.status(400).json({
+          error: 'No active basketball model found',
+          message: 'Please train a basketball model first'
+        });
+      }
+      
+      const { loadBasketballModel, predictBasketball } = await import('./ml-model-basketball');
+      const model = await loadBasketballModel(activeModel.modelPath);
+      
+      const testerMatches = await testerStorage.getAllBasketballStats();
+      
+      if (testerMatches.length === 0) {
+        return res.status(400).json({
+          error: 'No basketball matches in tester',
+          message: 'Load basketball matches into the tester first'
+        });
+      }
+      
+      await testerStorage.deleteAllBasketballPredictions();
+      
+      const predictions = [];
+      
+      for (const match of testerMatches) {
+        try {
+          const prediction = await predictBasketball(model, match);
+          
+          const savedPrediction = await testerStorage.createBasketballPrediction({
+            basketballStatsId: match.id,
+            modelId: activeModel.id,
+            predHomeWinProb: prediction.winner.home,
+            predAwayWinProb: prediction.winner.away,
+            predResult: prediction.winner.predicted,
+            predHomePoints: prediction.points.homePoints,
+            predAwayPoints: prediction.points.awayPoints,
+            confidence: prediction.confidence
+          });
+          
+          predictions.push(savedPrediction);
+        } catch (error) {
+          console.error(`Error predicting basketball match ${match.id}:`, error);
+        }
+      }
+      
+      console.log(`Basketball predictions completed: ${predictions.length}/${testerMatches.length}`);
+      
+      res.json({
+        success: true,
+        totalMatches: testerMatches.length,
+        predictions: predictions.length,
+        results: predictions
+      });
+      
+    } catch (error) {
+      console.error('Error making basketball predictions:', error);
+      res.status(500).json({
+        error: 'Failed to make basketball predictions',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Get all basketball predictions
+  app.get("/api/basketball/ml/predictions", async (req, res) => {
+    try {
+      const predictions = await testerStorage.getAllBasketballPredictions();
+      res.json(predictions);
+    } catch (error) {
+      console.error('Error fetching basketball predictions:', error);
+      res.status(500).json({ error: 'Failed to fetch basketball predictions' });
+    }
+  });
+
+  // Basketball Database Bulk Upload (SSE endpoint)
+  app.post("/api/basketball/bulk-upload/database", async (req, res) => {
+    try {
+      const { date } = req.body;
+      
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      
+      const sendUpdate = (data: any) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+      
+      sendUpdate({
+        status: 'processing',
+        totalMatches: 0,
+        processed: 0,
+        stored: 0,
+        currentMatch: 'Initializing...',
+      });
+      
+      // Note: Actual basketball data fetching logic needs to be implemented
+      // This is a placeholder that shows the structure
+      sendUpdate({
+        status: 'error',
+        totalMatches: 0,
+        processed: 0,
+        stored: 0,
+        error: 'Basketball data fetching not yet implemented. Please add your basketball data source integration here.',
+      });
+      
+      res.end();
+    } catch (error) {
+      console.error('Error in basketball bulk upload:', error);
+      res.status(500).json({ error: 'Failed to process basketball bulk upload' });
+    }
+  });
+
+  // Basketball Tester Bulk Upload (SSE endpoint)
+  app.post("/api/basketball/bulk-upload/tester", async (req, res) => {
+    try {
+      const { date } = req.body;
+      
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      
+      const sendUpdate = (data: any) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+      
+      sendUpdate({
+        status: 'processing',
+        totalMatches: 0,
+        processed: 0,
+        loaded: 0,
+        currentMatch: 'Initializing...',
+      });
+      
+      // Note: Actual basketball data fetching logic needs to be implemented
+      // This is a placeholder that shows the structure
+      sendUpdate({
+        status: 'error',
+        totalMatches: 0,
+        processed: 0,
+        loaded: 0,
+        error: 'Basketball data fetching not yet implemented. Please add your basketball data source integration here.',
+      });
+      
+      res.end();
+    } catch (error) {
+      console.error('Error in basketball tester bulk upload:', error);
+      res.status(500).json({ error: 'Failed to process basketball tester bulk upload' });
     }
   });
 

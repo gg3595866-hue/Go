@@ -408,3 +408,105 @@ export const insertMatchPredictionSchema = createInsertSchema(matchPredictions).
 
 export type MatchPrediction = typeof matchPredictions.$inferSelect;
 export type InsertMatchPrediction = z.infer<typeof insertMatchPredictionSchema>;
+
+// Basketball Statistics Table
+export const basketballStats = sqliteTable("basketball_stats", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  
+  // Team IDs
+  homeTeamId: integer("home_team_id").notNull(),
+  awayTeamId: integer("away_team_id").notNull(),
+  leagueId: integer("league_id").notNull(),
+  countryId: integer("country_id").notNull(),
+  
+  // Points scored and received per game
+  homePointsScoredPerGame: real("home_points_scored_per_game").notNull(),
+  awayPointsScoredPerGame: real("away_points_scored_per_game").notNull(),
+  homePointsReceivedPerGame: real("home_points_received_per_game").notNull(),
+  awayPointsReceivedPerGame: real("away_points_received_per_game").notNull(),
+  
+  // Win/Tie/Loss records
+  homeWon: integer("home_won").notNull(),
+  awayWon: integer("away_won").notNull(),
+  homeTied: integer("home_tied").notNull(),
+  awayTied: integer("away_tied").notNull(),
+  homeLost: integer("home_lost").notNull(),
+  awayLost: integer("away_lost").notNull(),
+  
+  // Average points per quarter
+  homeAvgPointsQ1: real("home_avg_points_q1").notNull(),
+  awayAvgPointsQ1: real("away_avg_points_q1").notNull(),
+  homeAvgPointsQ2: real("home_avg_points_q2").notNull(),
+  awayAvgPointsQ2: real("away_avg_points_q2").notNull(),
+  homeAvgPointsQ3: real("home_avg_points_q3").notNull(),
+  awayAvgPointsQ3: real("away_avg_points_q3").notNull(),
+  
+  // Target variables (actual match results)
+  ftHomePoints: integer("ft_home_points"),
+  ftAwayPoints: integer("ft_away_points"),
+  ftResult: text("ft_result"),
+  
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+export const insertBasketballStatsSchema = createInsertSchema(basketballStats).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertBasketballStats = z.infer<typeof insertBasketballStatsSchema>;
+export type BasketballStats = typeof basketballStats.$inferSelect;
+
+// Basketball Model Metadata Table
+export const basketballModelMetadata = sqliteTable("basketball_model_metadata", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  modelName: text("model_name").notNull(),
+  version: text("version").notNull(),
+  architecture: text("architecture").notNull(),
+  trainingAccuracy: real("training_accuracy"),
+  validationAccuracy: real("validation_accuracy"),
+  loss: real("loss"),
+  trainingDate: integer("training_date", { mode: 'timestamp' }).notNull(),
+  totalEpochs: integer("total_epochs").notNull(),
+  totalSamples: integer("total_samples").notNull(),
+  isActive: integer("is_active", { mode: 'boolean' }).notNull().default(false),
+  modelPath: text("model_path"),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+export const insertBasketballModelMetadataSchema = createInsertSchema(basketballModelMetadata).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type BasketballModelMetadata = typeof basketballModelMetadata.$inferSelect;
+export type InsertBasketballModelMetadata = z.infer<typeof insertBasketballModelMetadataSchema>;
+
+// Basketball Predictions Table
+export const basketballPredictions = sqliteTable("basketball_predictions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  basketballStatsId: integer("basketball_stats_id").notNull(),
+  modelId: integer("model_id").notNull(),
+  
+  // Prediction probabilities for winner
+  predHomeWinProb: real("pred_home_win_prob").notNull(),
+  predAwayWinProb: real("pred_away_win_prob").notNull(),
+  predResult: text("pred_result").notNull(),
+  
+  // Score predictions
+  predHomePoints: real("pred_home_points").notNull(),
+  predAwayPoints: real("pred_away_points").notNull(),
+  
+  // Confidence score
+  confidence: real("confidence").notNull(),
+  
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+export const insertBasketballPredictionSchema = createInsertSchema(basketballPredictions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type BasketballPrediction = typeof basketballPredictions.$inferSelect;
+export type InsertBasketballPrediction = z.infer<typeof insertBasketballPredictionSchema>;
