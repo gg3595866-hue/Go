@@ -66,6 +66,8 @@ export default function MatchDetailsPage() {
   if (isBasketball) {
     const { homeTeam, awayTeam, homeTeamLogo, awayTeamLogo, homeScore, awayScore, status, quarterScores, homeForm, awayForm, stats } = matchDetails;
     
+    console.log('Basketball stats data:', JSON.stringify(stats, null, 2));
+    
     const FormBadge = ({ result }: { result: 'W' | 'L' }) => {
       const variants = {
         W: 'bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30',

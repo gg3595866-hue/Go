@@ -1152,9 +1152,14 @@ export async function scrapeBasketballMatchDetails(matchUrl: string): Promise<an
       if (statsHtml) {
         const $stats = cheerio.load(statsHtml);
         
+        console.log('Basketball stats HTML length:', statsHtml.length);
+        console.log('Number of tables found:', $stats('table').length);
+        console.log('Stats HTML preview:', statsHtml.substring(0, 500));
+        
         $stats('table').each((tableIndex, table) => {
           const $table = $stats(table);
           const tableText = $table.text();
+          console.log(`Table ${tableIndex} text:`, tableText.substring(0, 200));
           
           if (tableText.includes('Avg Points per Quarter') || tableText.includes('1st Q')) {
             const rows = $table.find('tr');
