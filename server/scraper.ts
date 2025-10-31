@@ -862,6 +862,19 @@ function getLeagueSlug(competitionName: string): string {
 
 // Function to scrape league statistics
 export async function scrapeLeagueStats(competitionName: string): Promise<LeagueStats> {
+  // Handle empty or invalid competition names
+  if (!competitionName || competitionName.trim() === '') {
+    console.warn('Empty competition name provided, using default stats');
+    return {
+      homeWins: 45,
+      draws: 27,
+      awayWins: 28,
+      under25: 53,
+      over25: 47,
+      avgGoals: 2.61
+    };
+  }
+  
   const leagueSlug = getLeagueSlug(competitionName);
   
   // Check cache first
@@ -875,7 +888,7 @@ export async function scrapeLeagueStats(competitionName: string): Promise<League
     const currentYear = new Date().getFullYear();
     const statsUrl = `https://sportstats365.com/football/${leagueSlug}/${currentYear}`;
     
-    console.log(`Scraping league stats from: ${statsUrl}`);
+    console.log(`Scraping league stats for "${competitionName}" from: ${statsUrl}`);
     
     const html: string = await new Promise((resolve, reject) => {
       cloudscraper.get({
@@ -921,6 +934,21 @@ export async function scrapeLeagueStats(competitionName: string): Promise<League
         }
       }
     });
+    
+    // If all values are 0, the scraping failed to find data
+    if (homeWins === 0 && draws === 0 && awayWins === 0 && under25 === 0 && over25 === 0 && avgGoals === 0) {
+      console.warn(`No league stats found for ${competitionName} at ${statsUrl}, using defaults`);
+      const defaultStats: LeagueStats = {
+        homeWins: 45,
+        draws: 27,
+        awayWins: 28,
+        under25: 53,
+        over25: 47,
+        avgGoals: 2.61
+      };
+      leagueStatsCache.set(leagueSlug, defaultStats);
+      return defaultStats;
+    }
     
     const stats: LeagueStats = {
       homeWins,
