@@ -216,6 +216,13 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     
     const $ = cheerio.load(html);
     
+    // Extract score-like patterns and status from body text for fallback
+    const bodyText = $('body').text();
+    const scorePattern = /(\d+)\s*[:\-]\s*(\d+)/g;
+    const foundScores = bodyText.match(scorePattern);
+    const hasFT = bodyText.includes('FT');
+    const hasLive = bodyText.includes('LIVE');
+    
     // Extract the stats URL from HTMX attributes
     const statsButton = $('button[hx-get*="/stats/"]').filter(function() {
       return !$(this).attr('hx-get')?.includes('/form') && 
@@ -253,10 +260,8 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
         });
       });
       
-      // Load the stats HTML into a new cheerio instance
+      // Load the stats HTML into the main document
       if (statsHtml) {
-        const $stats = cheerio.load(statsHtml);
-        // Append stats content to main document for parsing
         $('#htmx_content').html(statsHtml);
       }
     }
@@ -308,11 +313,18 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     const competition = competitionLink.text().trim();
     const competitionLogo = competitionLink.find('img').attr('src');
     
-    // Extract score
-    const scoreText = $('.display-4').text().trim();
-    const scoreMatch = scoreText.match(/(\d+)\s*:\s*(\d+)/);
-    const homeScore = scoreMatch ? parseInt(scoreMatch[1]) : null;
-    const awayScore = scoreMatch ? parseInt(scoreMatch[2]) : null;
+    // Extract score - try .display-4 first, fallback to first score pattern in body
+    let scoreText = $('.display-4').text().trim();
+    let homeScore: number | null = null;
+    let awayScore: number | null = null;
+    
+    if (!scoreText && foundScores && foundScores.length > 0) {
+      scoreText = foundScores[0];
+    }
+    
+    const scoreMatch = scoreText.match(/(\d+)\s*[:]\s*(\d+)/);
+    homeScore = scoreMatch ? parseInt(scoreMatch[1]) : null;
+    awayScore = scoreMatch ? parseInt(scoreMatch[2]) : null;
     
     // Extract half-time score
     const halfScoreText = $('.text-muted').filter(function() {
@@ -327,30 +339,27 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
       const text = $(this).text().trim();
       return text === 'FT' || text === 'LIVE' || text.includes("'");
     }).first();
-    const status = statusBadge.text().trim() || 'SCHEDULED';
+    console.log('Status badge text:', statusBadge.text().trim());
     
-    // Extract form (W/L/D sequences)
-    const formSections = $('a').filter(function() {
-      const href = $(this).attr('href');
-      return !!href && href.includes('/compare/');
-    });
+    let status: 'FT' | 'LIVE' | 'SCHEDULED' | 'POSTPONED' = 'SCHEDULED';
+    const badgeText = statusBadge.text().trim();
     
-    const extractFormSequence = (container: any): ('W' | 'L' | 'D')[] => {
-      const sequence: ('W' | 'L' | 'D')[] = [];
-      container.find('a[href*="/compare/"]').each((i: number, el: any) => {
-        const text = $(el).text().trim();
-        if (text === 'W' || text === 'L' || text === 'D') {
-          sequence.push(text as 'W' | 'L' | 'D');
-        }
-      });
-      return sequence.slice(-5);
-    };
+    if (badgeText === 'FT' || badgeText === 'LIVE') {
+      status = badgeText;
+    } else if (!badgeText && hasFT && homeScore !== null && awayScore !== null) {
+      // If badge is empty but we found "FT" in the body and have a score, assume FT
+      status = 'FT';
+      console.log('Using FT status from body text');
+    } else if (!badgeText && hasLive) {
+      status = 'LIVE';
+      console.log('Using LIVE status from body text');
+    }
     
-    // Get form sequences from team sections
-    const homeFormContainer = $(teamHeaders[0]).parent().parent();
-    const awayFormContainer = $(teamHeaders[1]).parent().parent();
-    const homeFormSequence = extractFormSequence(homeFormContainer);
-    const awayFormSequence = extractFormSequence(awayFormContainer);
+    console.log('Final status:', status);
+    
+    // Extract form (W/L/D sequences) - will be extracted from form HTML later
+    let homeFormSequence: ('W' | 'L' | 'D')[] = [];
+    let awayFormSequence: ('W' | 'L' | 'D')[] = [];
     
     // Extract form scores
     let homeFormHome = 0, homeFormAway = 0, homeFormOverall = 0;
@@ -359,6 +368,42 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     // Parse form data from the form HTML endpoint
     if (formHtml) {
       const $form = cheerio.load(formHtml);
+      
+      // Extract last 5 form sequences from badges or links
+      // Look for elements containing W, L, D (usually in badges or links)
+      const extractLast5FromHtml = (htmlContent: cheerio.CheerioAPI): { home: ('W' | 'L' | 'D')[]; away: ('W' | 'L' | 'D')[] } => {
+        const home: ('W' | 'L' | 'D')[] = [];
+        const away: ('W' | 'L' | 'D')[] = [];
+        
+        // Look for all elements with text W, L, or D
+        const wldElements = htmlContent('a, span, div').filter(function() {
+          const text = htmlContent(this).text().trim();
+          return text === 'W' || text === 'L' || text === 'D';
+        });
+        
+        console.log('Found', wldElements.length, 'W/L/D elements in form HTML');
+        
+        // The first half are typically for home team, second half for away team
+        const halfPoint = Math.floor(wldElements.length / 2);
+        wldElements.each((i, el) => {
+          const text = htmlContent(el).text().trim() as 'W' | 'L' | 'D';
+          if (i < halfPoint) {
+            home.push(text);
+          } else {
+            away.push(text);
+          }
+        });
+        
+        return {
+          home: home.slice(-5),
+          away: away.slice(-5)
+        };
+      };
+      
+      const last5 = extractLast5FromHtml($form);
+      homeFormSequence = last5.home;
+      awayFormSequence = last5.away;
+      console.log('Extracted last 5 form:', { home: homeFormSequence, away: awayFormSequence });
       
       // Parse form data from list-group-item elements
       const formRows = $form('.list-group-item');
