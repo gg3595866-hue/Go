@@ -276,13 +276,13 @@ export async function trainBasketballModel(
   const trainingResult: BasketballTrainingResult = {
     history: {
       loss: history.history.loss as number[],
-      accuracy: history.history.winner_output_accuracy as number[],
+      accuracy: history.history.winner_output_acc as number[],
       valLoss: history.history.val_loss as number[],
-      valAccuracy: history.history.val_winner_output_accuracy as number[],
+      valAccuracy: history.history.val_winner_output_acc as number[],
     },
     finalMetrics: {
-      trainingAccuracy: (history.history.winner_output_accuracy as number[]).slice(-1)[0],
-      validationAccuracy: (history.history.val_winner_output_accuracy as number[]).slice(-1)[0],
+      trainingAccuracy: (history.history.winner_output_acc as number[]).slice(-1)[0],
+      validationAccuracy: (history.history.val_winner_output_acc as number[]).slice(-1)[0],
       loss: (history.history.loss as number[]).slice(-1)[0],
     },
   };
