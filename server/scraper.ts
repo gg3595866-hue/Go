@@ -759,9 +759,9 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
         
         // Halftime Stats
         halftimeStats: {
-          wonFullTime: homeHalftimeWon,
-          tiedFullTime: homeHalftimeTied,
-          lostFullTime: homeHalftimeLost,
+          wonFirstHalf: homeHalftimeWon,
+          tiedFirstHalf: homeHalftimeTied,
+          lostFirstHalf: homeHalftimeLost,
         },
       },
       awayTeamStats: {
@@ -801,9 +801,9 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
         
         // Halftime Stats
         halftimeStats: {
-          wonFullTime: awayHalftimeWon,
-          tiedFullTime: awayHalftimeTied,
-          lostFullTime: awayHalftimeLost,
+          wonFirstHalf: awayHalftimeWon,
+          tiedFirstHalf: awayHalftimeTied,
+          lostFirstHalf: awayHalftimeLost,
         },
       },
       headToHead: h2hMatches > 0 ? {
