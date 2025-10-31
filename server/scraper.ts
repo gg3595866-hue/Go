@@ -1044,6 +1044,15 @@ export async function scrapeBasketballMatchDetails(matchUrl: string): Promise<an
     
     const $ = cheerio.load(html);
     
+    // Extract competition name from URL
+    // URL pattern: https://sportstats365.com/basketball/COMPETITION/YYYY-YYYY/compare/...
+    const urlParts = matchUrl.split('/');
+    const competitionSlug = urlParts[4] || 'unknown';  // Get the competition slug from URL
+    // Convert slug to readable name (e.g., "euroleague-m" -> "Euroleague")
+    const competition = competitionSlug
+      .split('-')[0]  // Take first part before hyphen
+      .replace(/^./, (str) => str.toUpperCase());  // Capitalize first letter
+    
     const teamHeaders = $('h2.team-compare a');
     const homeTeam = $(teamHeaders[0]).text().trim();
     const awayTeam = $(teamHeaders[1]).text().trim();
@@ -1292,6 +1301,7 @@ export async function scrapeBasketballMatchDetails(matchUrl: string): Promise<an
     
     const matchDetails = {
       matchUrl,
+      competition,
       homeTeam,
       awayTeam,
       homeTeamLogo,
