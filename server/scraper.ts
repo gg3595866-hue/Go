@@ -1105,10 +1105,12 @@ export async function scrapeLeagueMatches(
 ): Promise<Match[]> {
   try {
     const leagueSlug = extractLeagueSlug(competitionName);
-    const baseUrl = `https://sportstats365.com/football/${leagueSlug}/${year}`;
+    // Convert single year to season format (e.g., 2023 -> 2023-2024)
+    const seasonFormat = `${year}-${year + 1}`;
+    const baseUrl = `https://sportstats365.com/football/${leagueSlug}/${seasonFormat}`;
     
-    console.log(`Starting league scrape for ${competitionName} ${year}`);
-    onProgress?.(`Fetching matches for ${competitionName} ${year}...`, 0);
+    console.log(`Starting league scrape for ${competitionName} ${seasonFormat}`);
+    onProgress?.(`Fetching matches for ${competitionName} ${seasonFormat}...`, 0);
     
     // First, fetch the main page to get the initial matches
     const html: string = await new Promise((resolve, reject) => {
@@ -1283,7 +1285,7 @@ export async function scrapeLeagueMatches(
     const paginationUrls: string[] = [];
     $('button[hx-get], a[hx-get]').each((_, element) => {
       const hxGet = $(element).attr('hx-get');
-      if (hxGet && hxGet.includes(leagueSlug) && hxGet.includes(year.toString())) {
+      if (hxGet && hxGet.includes(leagueSlug) && hxGet.includes(seasonFormat)) {
         if (!paginationUrls.includes(hxGet)) {
           paginationUrls.push(hxGet);
         }
@@ -1334,12 +1336,12 @@ export async function scrapeLeagueMatches(
       }
     }
     
-    console.log(`Successfully scraped ${allMatches.length} total matches for ${competitionName} ${year}`);
-    onProgress?.(`Completed! Found ${allMatches.length} matches for ${competitionName} ${year}`, allMatches.length);
+    console.log(`Successfully scraped ${allMatches.length} total matches for ${competitionName} ${seasonFormat}`);
+    onProgress?.(`Completed! Found ${allMatches.length} matches for ${competitionName} ${seasonFormat}`, allMatches.length);
     
     return allMatches;
   } catch (error) {
-    console.error(`Failed to scrape league matches for ${competitionName} ${year}:`, error);
+    console.error(`Failed to scrape league matches for ${competitionName}:`, error);
     throw error;
   }
 }
