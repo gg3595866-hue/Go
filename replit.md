@@ -92,12 +92,26 @@ Preferred communication style: Simple, everyday language.
 - Cheerio for HTML parsing and web scraping
 
 **Database/ORM Setup**
-- Drizzle ORM configured for PostgreSQL (via drizzle.config.ts)
-- Neon serverless PostgreSQL driver (@neondatabase/serverless)
-- Current implementation includes user schema but not actively used
-- In-memory storage fallback available (MemStorage class)
+- Drizzle ORM with SQLite (Better-SQLite3)
+- Two separate databases: `database.db` (for training data) and `tester.db` (for prediction data)
+- Shared entity mapping tables ensure consistent IDs across both databases
+- Match statistics stored with features for neural network training
 
-**Note:** The database configuration exists but is not currently utilized for fixture data - all match information is scraped in real-time. The database setup appears to be prepared for future features like user accounts or favorites.
+**Entity ID Mapping System (for Neural Network Embeddings)**
+The application uses a centralized ID mapping system to ensure each team, league, and country gets a unique, consistent ID across both databases:
+- **Teams Table**: Maps team names to unique team IDs
+- **Leagues Table**: Maps competition names to unique league IDs  
+- **Countries Table**: Maps extracted country names to unique country IDs
+- All entity names are normalized (lowercase, trimmed, spaces collapsed) before lookup/insert
+- The main database (`database.db`) stores all entity mappings
+- Both database and tester storage use the same mapping tables, ensuring consistency
+- This approach enables proper neural network embedding layers where:
+  - Each team_id has its own learned vector representation
+  - Each league_id has its own embedding vector
+  - Each country_id has its own embedding vector
+  - IDs remain stable across training and prediction datasets
+
+**Previous Implementation:** Previously used hash-based ID generation which could cause collisions and inconsistencies. Now uses database-backed get-or-create operations with race condition handling.
 
 **Build & Development Tools**
 - Vite for fast development and optimized production builds
