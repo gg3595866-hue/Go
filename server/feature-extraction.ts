@@ -196,11 +196,11 @@ export function extractBasketballFeaturesForDatabase(
   leagueId: number,
   countryId: number
 ): any {
-  const { pointStats, quarterStats, teamStats, score, quarterScores } = basketballMatchDetails;
+  const { stats, homeScore, awayScore, quarterScores } = basketballMatchDetails;
 
   // Calculate target variables from actual scores
-  const ftHomePoints = score.home ?? null;
-  const ftAwayPoints = score.away ?? null;
+  const ftHomePoints = homeScore ?? null;
+  const ftAwayPoints = awayScore ?? null;
 
   let ftResult: string | null = null;
   if (ftHomePoints !== null && ftAwayPoints !== null) {
@@ -210,16 +210,16 @@ export function extractBasketballFeaturesForDatabase(
   }
 
   // Extract stats with defaults
-  const homePointsScoredPerGame = pointStats?.home?.pointsScoredPerGame ?? 0;
-  const awayPointsScoredPerGame = pointStats?.away?.pointsScoredPerGame ?? 0;
-  const homePointsReceivedPerGame = pointStats?.home?.pointsReceivedPerGame ?? 0;
-  const awayPointsReceivedPerGame = pointStats?.away?.pointsReceivedPerGame ?? 0;
+  const homePointsScoredPerGame = stats?.pointStats?.home?.pointsScoredPerGame ?? 0;
+  const awayPointsScoredPerGame = stats?.pointStats?.away?.pointsScoredPerGame ?? 0;
+  const homePointsReceivedPerGame = stats?.pointStats?.home?.pointsReceivedPerGame ?? 0;
+  const awayPointsReceivedPerGame = stats?.pointStats?.away?.pointsReceivedPerGame ?? 0;
 
   // Win/Tie/Loss records based on percentages
-  const homeWinsPercent = teamStats?.home?.winsPercent ?? 50;
-  const awayWinsPercent = teamStats?.away?.winsPercent ?? 50;
-  const homeLossesPercent = teamStats?.home?.lossesPercent ?? 50;
-  const awayLossesPercent = teamStats?.away?.lossesPercent ?? 50;
+  const homeWinsPercent = stats?.teamStats?.home?.winsPercent ?? 50;
+  const awayWinsPercent = stats?.teamStats?.away?.winsPercent ?? 50;
+  const homeLossesPercent = stats?.teamStats?.home?.lossesPercent ?? 50;
+  const awayLossesPercent = stats?.teamStats?.away?.lossesPercent ?? 50;
 
   // Estimate counts from percentages (assuming 10 recent games)
   const gamesPlayed = 10;
@@ -236,14 +236,14 @@ export function extractBasketballFeaturesForDatabase(
   const totalAvgHome = homePointsScoredPerGame || 100;
   const totalAvgAway = awayPointsScoredPerGame || 100;
 
-  const homeAvgPointsQ1 = totalAvgHome * (basketballMatchDetails.avgPointsPerQuarter?.home?.q1Percent ?? 25) / 100;
-  const awayAvgPointsQ1 = totalAvgAway * (basketballMatchDetails.avgPointsPerQuarter?.away?.q1Percent ?? 25) / 100;
-  const homeAvgPointsQ2 = totalAvgHome * (basketballMatchDetails.avgPointsPerQuarter?.home?.q2Percent ?? 25) / 100;
-  const awayAvgPointsQ2 = totalAvgAway * (basketballMatchDetails.avgPointsPerQuarter?.away?.q2Percent ?? 25) / 100;
-  const homeAvgPointsQ3 = totalAvgHome * (basketballMatchDetails.avgPointsPerQuarter?.home?.q3Percent ?? 25) / 100;
-  const awayAvgPointsQ3 = totalAvgAway * (basketballMatchDetails.avgPointsPerQuarter?.away?.q3Percent ?? 25) / 100;
-  const homeAvgPointsQ4 = totalAvgHome * (basketballMatchDetails.avgPointsPerQuarter?.home?.q4Percent ?? 25) / 100;
-  const awayAvgPointsQ4 = totalAvgAway * (basketballMatchDetails.avgPointsPerQuarter?.away?.q4Percent ?? 25) / 100;
+  const homeAvgPointsQ1 = totalAvgHome * (stats?.avgPointsPerQuarter?.home?.q1Percent ?? 25) / 100;
+  const awayAvgPointsQ1 = totalAvgAway * (stats?.avgPointsPerQuarter?.away?.q1Percent ?? 25) / 100;
+  const homeAvgPointsQ2 = totalAvgHome * (stats?.avgPointsPerQuarter?.home?.q2Percent ?? 25) / 100;
+  const awayAvgPointsQ2 = totalAvgAway * (stats?.avgPointsPerQuarter?.away?.q2Percent ?? 25) / 100;
+  const homeAvgPointsQ3 = totalAvgHome * (stats?.avgPointsPerQuarter?.home?.q3Percent ?? 25) / 100;
+  const awayAvgPointsQ3 = totalAvgAway * (stats?.avgPointsPerQuarter?.away?.q3Percent ?? 25) / 100;
+  const homeAvgPointsQ4 = totalAvgHome * (stats?.avgPointsPerQuarter?.home?.q4Percent ?? 25) / 100;
+  const awayAvgPointsQ4 = totalAvgAway * (stats?.avgPointsPerQuarter?.away?.q4Percent ?? 25) / 100;
 
   return {
     homeTeamId,
