@@ -51,7 +51,7 @@ export default function BasketballTrainingPage() {
     onSuccess: (data) => {
       toast({
         title: "Training Completed",
-        description: `Basketball model trained successfully with ${(data.metrics.validationAccuracy * 100).toFixed(1)}% validation accuracy`,
+        description: `Basketball model trained successfully with ${(data.trainingMetrics.validationAccuracy * 100).toFixed(1)}% validation accuracy`,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/basketball/ml/models'] });
       queryClient.invalidateQueries({ queryKey: ['/api/basketball/ml/models/active'] });
@@ -222,13 +222,13 @@ export default function BasketballTrainingPage() {
                   <div>
                     <p className="text-muted-foreground">Training Accuracy:</p>
                     <p className="font-medium" data-testid="text-training-accuracy">
-                      {(trainMutation.data.metrics.trainingAccuracy * 100).toFixed(1)}%
+                      {(trainMutation.data.trainingMetrics.trainingAccuracy * 100).toFixed(1)}%
                     </p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Validation Accuracy:</p>
                     <p className="font-medium" data-testid="text-validation-accuracy">
-                      {(trainMutation.data.metrics.validationAccuracy * 100).toFixed(1)}%
+                      {(trainMutation.data.trainingMetrics.validationAccuracy * 100).toFixed(1)}%
                     </p>
                   </div>
                   <div>
@@ -240,7 +240,7 @@ export default function BasketballTrainingPage() {
                   <div>
                     <p className="text-muted-foreground">Loss:</p>
                     <p className="font-medium" data-testid="text-loss">
-                      {trainMutation.data.metrics.loss.toFixed(4)}
+                      {trainMutation.data.trainingMetrics.loss.toFixed(4)}
                     </p>
                   </div>
                 </div>

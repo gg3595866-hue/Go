@@ -1153,7 +1153,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true,
         modelId: modelMetadata.id,
         trainingMetrics: result.finalMetrics,
-        history: result.history
+        history: result.history,
+        totalSamples: basketballStatsArray.length
       });
       
     } catch (error) {
