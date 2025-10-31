@@ -467,6 +467,8 @@ export async function predict(
  * Save model to file system
  */
 export async function saveModel(model: tf.LayersModel, path: string): Promise<void> {
+  const fs = await import('fs/promises');
+  await fs.mkdir(path, { recursive: true });
   await model.save(`file://${path}`);
 }
 
