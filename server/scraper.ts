@@ -1024,15 +1024,48 @@ export async function scrapeLeagueStats(competitionName: string): Promise<League
 
 /**
  * Extract league slug from competition name
- * Converts "Copa Libertadores" or "Spain La Liga 2025/2026" to "copa-libertadores" or "spain-la-liga"
+ * Converts "Copa Libertadores" or "Spain La Liga 2025/2026" to "copa-libertadores" or "la-liga"
  */
 export function extractLeagueSlug(competitionName: string): string {
   // Remove season suffix (e.g., "2024/2025", "2025/2026") from competition name
-  let cleanedName = competitionName.replace(/\s+\d{4}\/\d{4}$/g, '');
+  let cleanedName = competitionName.replace(/\s+\d{4}\/\d{4}$/g, '').trim();
   
+  // Manual mappings for leagues that don't follow the simple pattern
+  const leagueSlugMap: Record<string, string> = {
+    'Spain La Liga': 'la-liga',
+    'La Liga': 'la-liga',
+    'England Premier League': 'premier-league',
+    'Premier League': 'premier-league',
+    'Italy Serie A': 'serie-a',
+    'Serie A': 'serie-a',
+    'Germany Bundesliga': 'bundesliga',
+    'Bundesliga': 'bundesliga',
+    'France Ligue 1': 'ligue-1',
+    'Ligue 1': 'ligue-1',
+    'Portugal Liga Portugal': 'liga-portugal',
+    'Liga Portugal': 'liga-portugal',
+    'Netherlands Eredivisie': 'eredivisie',
+    'Eredivisie': 'eredivisie',
+    'Belgium Pro League': 'jupiler-pro-league',
+    'Pro League': 'jupiler-pro-league',
+    'Brazil Serie A': 'brasileiro-serie-a',
+    'Serie A Brazil': 'brasileiro-serie-a',
+    'Argentina Primera Division': 'liga-profesional',
+    'Primera Division': 'liga-profesional',
+    'UEFA Champions League': 'champions-league',
+    'Champions League': 'champions-league',
+    'UEFA Europa League': 'europa-league',
+    'Europa League': 'europa-league',
+  };
+  
+  // Check if we have a manual mapping
+  if (leagueSlugMap[cleanedName]) {
+    return leagueSlugMap[cleanedName];
+  }
+  
+  // Default: convert to slug format
   return cleanedName
     .toLowerCase()
-    .trim()
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-]/g, '')
     .replace(/-+/g, '-')
@@ -1112,7 +1145,7 @@ export async function scrapeLeagueMatches(
     console.log(`Base URL: ${baseUrl}`);
     onProgress?.(`Fetching matches for ${competitionName} ${seasonFormat}...`, 0);
     
-    // Fetch the main league page
+    // Fetch the main league page (without HX-Request to get full page, not partial)
     const html: string = await new Promise((resolve, reject) => {
       cloudscraper.get({
         uri: baseUrl,
@@ -1130,12 +1163,12 @@ export async function scrapeLeagueMatches(
       });
     });
     
-    const $ = cheerio.load(html);
+    const $basePage = cheerio.load(html);
     const allMatches: Match[] = [];
     let matchId = 0;
     
-    // Parse matches from HTML
-    const parseMatches = ($doc: cheerio.CheerioAPI) => {
+    // Helper function to parse matches from HTML
+    const parseMatches = ($doc: cheerio.CheerioAPI): Match[] => {
       const matches: Match[] = [];
       
       // Find all match items in the list
@@ -1227,11 +1260,6 @@ export async function scrapeLeagueMatches(
             }
           }
           
-          // If we have scores, mark as FT if not already marked
-          if (homeScore !== null && awayScore !== null && status === 'SCHEDULED') {
-            status = 'FT';
-          }
-          
           // Extract odds
           let odds;
           const oddsBadges = $item.find('.badge-light');
@@ -1274,27 +1302,74 @@ export async function scrapeLeagueMatches(
       return matches;
     };
     
-    // Parse matches from the initial page
-    const initialMatches = parseMatches($);
-    allMatches.push(...initialMatches);
-    console.log(`Found ${initialMatches.length} matches on initial page`);
-    onProgress?.(`Found ${allMatches.length} matches so far...`, allMatches.length);
-    
-    // Find all week navigation buttons (hx-get attributes for week navigation)
+    // Look for the matches URL and week navigation URLs in the base page
+    let matchesUrl = '';
     const weekUrls: Set<string> = new Set();
-    $('button[hx-get], a[hx-get]').each((_, element) => {
-      const hxGet = $(element).attr('hx-get');
+    
+    $basePage('a[hx-get], button[hx-get]').each((_, element) => {
+      const hxGet = $basePage(element).attr('hx-get');
       if (hxGet) {
-        // Look for URLs that contain fixtures/week navigation patterns
-        if (hxGet.includes('/fixtures') || hxGet.includes('/week') || hxGet.match(/\d+$/)) {
+        // Find the base matches URL (without week parameter)
+        if (hxGet.includes('/matches') && !hxGet.includes('week=') && !matchesUrl) {
+          matchesUrl = hxGet;
+        }
+        // Find week navigation URLs
+        if (hxGet.includes('/matches') && hxGet.includes('week=')) {
           weekUrls.add(hxGet);
         }
       }
     });
     
-    console.log(`Found ${weekUrls.size} week navigation URLs`);
+    console.log(`Found matches URL: ${matchesUrl}`);
+    console.log(`Found ${weekUrls.size} week navigation URLs in base page`);
     
-    // Fetch each week's fixtures
+    // If we found a matches URL, fetch it with HX-Request to get fixtures
+    if (matchesUrl) {
+      const fullMatchesUrl = matchesUrl.startsWith('http') ? matchesUrl : `https://sportstats365.com${matchesUrl}`;
+      console.log(`Found matches URL: ${fullMatchesUrl}`);
+      onProgress?.(`Loading fixtures from matches URL...`, 0);
+      
+      const matchesHtml: string = await new Promise((resolve, reject) => {
+        cloudscraper.get({
+          uri: fullMatchesUrl,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'HX-Request': 'true',
+            'HX-Current-URL': baseUrl,
+          },
+        }, (error: any, response: any, body: string) => {
+          if (error) {
+            console.warn(`Failed to fetch matches URL:`, error.message);
+            resolve('');
+          } else {
+            resolve(body);
+          }
+        });
+      });
+      
+      if (matchesHtml) {
+        const $ = cheerio.load(matchesHtml);
+        console.log(`Loaded matches HTML, parsing...`);
+        
+        // Parse matches from the initial matches page
+        const initialMatches = parseMatches($);
+        allMatches.push(...initialMatches);
+        console.log(`Found ${initialMatches.length} matches on initial matches page`);
+        onProgress?.(`Found ${allMatches.length} matches so far...`, allMatches.length);
+      }
+    } else {
+      console.log(`No matches URL found, trying to parse from base page...`);
+      // Try parsing from base page as fallback
+      const initialMatches = parseMatches($basePage);
+      allMatches.push(...initialMatches);
+      console.log(`Found ${initialMatches.length} matches on base page`);
+      onProgress?.(`Found ${allMatches.length} matches so far...`, allMatches.length);
+    }
+    
+    // Now fetch all week-specific URLs we found in the base page
+    console.log(`Fetching ${weekUrls.size} week pages...`);
     for (const weekUrl of Array.from(weekUrls)) {
       try {
         const fullUrl = weekUrl.startsWith('http') ? weekUrl : `https://sportstats365.com${weekUrl}`;
@@ -1359,3 +1434,4 @@ export async function scrapeLeagueMatches(
     throw error;
   }
 }
+
