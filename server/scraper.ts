@@ -1153,7 +1153,18 @@ export async function scrapeLeagueMatches(
 ): Promise<Match[]> {
   try {
     const leagueSlug = extractLeagueSlug(competitionName);
-    const seasonFormat = `${year}-${year + 1}`;
+    
+    // Determine if this league uses single year or season format
+    const singleYearLeagues = [
+      'copa-libertadores',
+      'copa-sudamericana',
+      'champions-league',
+      'europa-league',
+      'mls'
+    ];
+    
+    const useSingleYear = singleYearLeagues.includes(leagueSlug);
+    const seasonFormat = useSingleYear ? `${year}` : `${year}-${year + 1}`;
     const baseUrl = `https://sportstats365.com/football/${leagueSlug}/${seasonFormat}`;
     
     console.log(`Starting league scrape for ${competitionName} ${seasonFormat}`);
@@ -1162,6 +1173,7 @@ export async function scrapeLeagueMatches(
     
     // Fetch the main league page (without HX-Request to get full page, not partial)
     const html: string = await new Promise((resolve, reject) => {
+      console.log(`Fetching base page: ${baseUrl}`);
       cloudscraper.get({
         uri: baseUrl,
         headers: {
@@ -1171,8 +1183,10 @@ export async function scrapeLeagueMatches(
         },
       }, (error: any, response: any, body: string) => {
         if (error) {
+          console.error(`Failed to fetch base page: ${error.message}`);
           reject(error);
         } else {
+          console.log(`Successfully fetched base page (${body.length} chars)`);
           resolve(body);
         }
       });
