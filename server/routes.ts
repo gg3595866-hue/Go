@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { scrapeFixtures, scrapeBasketballFixtures, scrapeMatchDetails, scrapeLeagueStats } from "./scraper";
+import { scrapeFixtures, scrapeBasketballFixtures, scrapeMatchDetails, scrapeBasketballMatchDetails, scrapeLeagueStats } from "./scraper";
 import { storage, databaseStorage, testerStorage } from "./storage";
 import { insertMatchStatsSchema } from "@shared/schema";
 import {
@@ -68,6 +68,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching match details:", error);
       res.status(500).json({ error: "Failed to fetch match details" });
+    }
+  });
+
+  // Get basketball match details by URL
+  app.post("/api/basketball/match-details", async (req, res) => {
+    try {
+      const { matchUrl } = req.body;
+      
+      if (!matchUrl || typeof matchUrl !== 'string') {
+        return res.status(400).json({ error: "matchUrl is required" });
+      }
+      
+      const matchDetails = await scrapeBasketballMatchDetails(matchUrl);
+      
+      res.json(matchDetails);
+    } catch (error) {
+      console.error("Error fetching basketball match details:", error);
+      res.status(500).json({ error: "Failed to fetch basketball match details" });
     }
   });
 

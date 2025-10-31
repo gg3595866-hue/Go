@@ -1021,6 +1021,336 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
   }
 }
 
+export async function scrapeBasketballMatchDetails(matchUrl: string): Promise<any> {
+  try {
+    console.log(`Scraping basketball match details from: ${matchUrl}`);
+    
+    const html: string = await new Promise((resolve, reject) => {
+      cloudscraper.get({
+        uri: matchUrl,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      }, (error: any, response: any, body: string) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(body);
+        }
+      });
+    });
+    
+    const $ = cheerio.load(html);
+    
+    const teamHeaders = $('.text-center h2');
+    const homeTeam = $(teamHeaders[0]).text().trim();
+    const awayTeam = $(teamHeaders[1]).text().trim();
+    
+    const homeTeamLogoImg = $(teamHeaders[0]).parent().find('img').first();
+    const awayTeamLogoImg = $(teamHeaders[1]).parent().find('img').first();
+    const homeTeamLogo = homeTeamLogoImg.attr('src');
+    const awayTeamLogo = awayTeamLogoImg.attr('src');
+    
+    const scoreElements = $('.display-4');
+    let homeScore: number | null = null;
+    let awayScore: number | null = null;
+    
+    if (scoreElements.length >= 2) {
+      const homeScoreText = $(scoreElements[0]).text().trim();
+      const awayScoreText = $(scoreElements[1]).text().trim();
+      homeScore = parseInt(homeScoreText) || null;
+      awayScore = parseInt(awayScoreText) || null;
+    }
+    
+    const statusElement = $('.badge').first();
+    const status = statusElement.text().trim() || 'SCHEDULED';
+    
+    const quarterScores: any = {
+      q1: { home: null, away: null },
+      q2: { home: null, away: null },
+      q3: { home: null, away: null },
+      q4: { home: null, away: null }
+    };
+    
+    const quarterHeaders = $('th:contains("Q1"), th:contains("Q2"), th:contains("Q3"), th:contains("Q4")');
+    const quarterRows = $('tr').filter(function() {
+      return $(this).find('td').length > 0 && 
+             $(this).closest('table').find('th:contains("Q1")').length > 0;
+    });
+    
+    if (quarterRows.length >= 2) {
+      const homeRow = $(quarterRows[0]);
+      const awayRow = $(quarterRows[1]);
+      
+      const homeQuarters = homeRow.find('td');
+      const awayQuarters = awayRow.find('td');
+      
+      if (homeQuarters.length >= 4 && awayQuarters.length >= 4) {
+        quarterScores.q1.home = parseInt($(homeQuarters[0]).text().trim()) || null;
+        quarterScores.q1.away = parseInt($(awayQuarters[0]).text().trim()) || null;
+        quarterScores.q2.home = parseInt($(homeQuarters[1]).text().trim()) || null;
+        quarterScores.q2.away = parseInt($(awayQuarters[1]).text().trim()) || null;
+        quarterScores.q3.home = parseInt($(homeQuarters[2]).text().trim()) || null;
+        quarterScores.q3.away = parseInt($(awayQuarters[2]).text().trim()) || null;
+        quarterScores.q4.home = parseInt($(homeQuarters[3]).text().trim()) || null;
+        quarterScores.q4.away = parseInt($(awayQuarters[3]).text().trim()) || null;
+      }
+    }
+    
+    const statsButton = $('button[hx-get*="/stats/"]').filter(function() {
+      return !$(this).attr('hx-get')?.includes('/form') && 
+             !$(this).attr('hx-get')?.includes('/matches') && 
+             !$(this).attr('hx-get')?.includes('/h2h');
+    });
+    const statsUrl = statsButton.attr('hx-get');
+    
+    let statsData: any = {
+      avgPointsPerQuarter: { home: {}, away: {} },
+      quarterStats: { home: {}, away: {} },
+      pointStats: { home: {}, away: {} },
+      teamStats: { home: {}, away: {} }
+    };
+    
+    if (statsUrl) {
+      const fullStatsUrl = `https://sportstats365.com${statsUrl}`;
+      console.log(`Fetching basketball stats from: ${fullStatsUrl}`);
+      
+      const statsHtml: string = await new Promise((resolve, reject) => {
+        cloudscraper.get({
+          uri: fullStatsUrl,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'HX-Request': 'true',
+          },
+        }, (error: any, response: any, body: string) => {
+          if (error) {
+            console.warn('Failed to fetch basketball stats:', error.message);
+            resolve('');
+          } else {
+            resolve(body);
+          }
+        });
+      });
+      
+      if (statsHtml) {
+        const $stats = cheerio.load(statsHtml);
+        
+        $stats('table').each((tableIndex, table) => {
+          const $table = $stats(table);
+          const tableText = $table.text();
+          
+          if (tableText.includes('Avg Points per Quarter') || tableText.includes('1st Q')) {
+            const rows = $table.find('tr');
+            rows.each((rowIndex, row) => {
+              const $row = $stats(row);
+              const cells = $row.find('td');
+              
+              if (cells.length >= 3) {
+                const homeValue = $stats(cells[0]).text().trim();
+                const label = $stats(cells[1]).text().trim();
+                const awayValue = $stats(cells[2]).text().trim();
+                
+                if (label.includes('1st Q')) {
+                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+                  if (homePercent) statsData.avgPointsPerQuarter.home.q1Percent = parseFloat(homePercent[1]);
+                  if (awayPercent) statsData.avgPointsPerQuarter.away.q1Percent = parseFloat(awayPercent[1]);
+                } else if (label.includes('2nd Q')) {
+                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+                  if (homePercent) statsData.avgPointsPerQuarter.home.q2Percent = parseFloat(homePercent[1]);
+                  if (awayPercent) statsData.avgPointsPerQuarter.away.q2Percent = parseFloat(awayPercent[1]);
+                } else if (label.includes('3rd Q')) {
+                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+                  if (homePercent) statsData.avgPointsPerQuarter.home.q3Percent = parseFloat(homePercent[1]);
+                  if (awayPercent) statsData.avgPointsPerQuarter.away.q3Percent = parseFloat(awayPercent[1]);
+                } else if (label.includes('4th Q')) {
+                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+                  if (homePercent) statsData.avgPointsPerQuarter.home.q4Percent = parseFloat(homePercent[1]);
+                  if (awayPercent) statsData.avgPointsPerQuarter.away.q4Percent = parseFloat(awayPercent[1]);
+                }
+              }
+            });
+          }
+          
+          if (tableText.includes('Quarter Stats') || tableText.includes('Won')) {
+            const rows = $table.find('tr');
+            rows.each((rowIndex, row) => {
+              const $row = $stats(row);
+              const cells = $row.find('td');
+              
+              if (cells.length >= 3) {
+                const homeValue = $stats(cells[0]).text().trim();
+                const label = $stats(cells[1]).text().trim();
+                const awayValue = $stats(cells[2]).text().trim();
+                
+                if (label.includes('Won')) {
+                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+                  if (homePercent) statsData.quarterStats.home.wonPercent = parseFloat(homePercent[1]);
+                  if (awayPercent) statsData.quarterStats.away.wonPercent = parseFloat(awayPercent[1]);
+                } else if (label.includes('Tied')) {
+                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+                  if (homePercent) statsData.quarterStats.home.tiedPercent = parseFloat(homePercent[1]);
+                  if (awayPercent) statsData.quarterStats.away.tiedPercent = parseFloat(awayPercent[1]);
+                } else if (label.includes('Lost')) {
+                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+                  if (homePercent) statsData.quarterStats.home.lostPercent = parseFloat(homePercent[1]);
+                  if (awayPercent) statsData.quarterStats.away.lostPercent = parseFloat(awayPercent[1]);
+                }
+              }
+            });
+          }
+          
+          if (tableText.includes('Point Stats') || tableText.includes('Points Scored/Game')) {
+            const rows = $table.find('tr');
+            rows.each((rowIndex, row) => {
+              const $row = $stats(row);
+              const cells = $row.find('td');
+              
+              if (cells.length >= 3) {
+                const homeValue = $stats(cells[0]).text().trim();
+                const label = $stats(cells[1]).text().trim();
+                const awayValue = $stats(cells[2]).text().trim();
+                
+                if (label.includes('Points Scored/Game')) {
+                  const homePoints = parseFloat(homeValue);
+                  const awayPoints = parseFloat(awayValue);
+                  if (!isNaN(homePoints)) statsData.pointStats.home.pointsScoredPerGame = homePoints;
+                  if (!isNaN(awayPoints)) statsData.pointStats.away.pointsScoredPerGame = awayPoints;
+                } else if (label.includes('Points Received/Game')) {
+                  const homePoints = parseFloat(homeValue);
+                  const awayPoints = parseFloat(awayValue);
+                  if (!isNaN(homePoints)) statsData.pointStats.home.pointsReceivedPerGame = homePoints;
+                  if (!isNaN(awayPoints)) statsData.pointStats.away.pointsReceivedPerGame = awayPoints;
+                } else if (label.includes('Total Points/Game')) {
+                  const homePoints = parseFloat(homeValue);
+                  const awayPoints = parseFloat(awayValue);
+                  if (!isNaN(homePoints)) statsData.pointStats.home.totalPointsPerGame = homePoints;
+                  if (!isNaN(awayPoints)) statsData.pointStats.away.totalPointsPerGame = awayPoints;
+                }
+              }
+            });
+          }
+          
+          if (tableText.includes('Team Statistics') || tableText.includes('Wins')) {
+            const rows = $table.find('tr');
+            rows.each((rowIndex, row) => {
+              const $row = $stats(row);
+              const cells = $row.find('td');
+              
+              if (cells.length >= 3) {
+                const homeValue = $stats(cells[0]).text().trim();
+                const label = $stats(cells[1]).text().trim();
+                const awayValue = $stats(cells[2]).text().trim();
+                
+                if (label.includes('Wins') && !label.includes('Losses')) {
+                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+                  if (homePercent) statsData.teamStats.home.winsPercent = parseFloat(homePercent[1]);
+                  if (awayPercent) statsData.teamStats.away.winsPercent = parseFloat(awayPercent[1]);
+                } else if (label.includes('Losses')) {
+                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+                  if (homePercent) statsData.teamStats.home.lossesPercent = parseFloat(homePercent[1]);
+                  if (awayPercent) statsData.teamStats.away.lossesPercent = parseFloat(awayPercent[1]);
+                }
+              }
+            });
+          }
+        });
+      }
+    }
+    
+    const formButton = $('button[hx-get*="/form"]').first();
+    const formUrl = formButton.attr('hx-get');
+    
+    let homeForm: string[] = [];
+    let awayForm: string[] = [];
+    
+    if (formUrl) {
+      const fullFormUrl = `https://sportstats365.com${formUrl}`;
+      console.log(`Fetching basketball form from: ${fullFormUrl}`);
+      
+      const formHtml: string = await new Promise((resolve, reject) => {
+        cloudscraper.get({
+          uri: fullFormUrl,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'HX-Request': 'true',
+          },
+        }, (error: any, response: any, body: string) => {
+          if (error) {
+            console.warn('Failed to fetch basketball form:', error.message);
+            resolve('');
+          } else {
+            resolve(body);
+          }
+        });
+      });
+      
+      if (formHtml) {
+        const $form = cheerio.load(formHtml);
+        
+        const formContainers = $form('.d-flex.gap-1, .d-flex.gap-2').filter(function() {
+          return $form(this).find('.badge, .rounded-circle').length >= 3;
+        });
+        
+        if (formContainers.length >= 2) {
+          const homeBadges = $form(formContainers[0]).find('.badge, .rounded-circle');
+          const awayBadges = $form(formContainers[1]).find('.badge, .rounded-circle');
+          
+          homeBadges.each((i, badge) => {
+            const text = $form(badge).text().trim();
+            if (text === 'W' || text === 'L' || text === 'D') {
+              homeForm.push(text);
+            }
+          });
+          
+          awayBadges.each((i, badge) => {
+            const text = $form(badge).text().trim();
+            if (text === 'W' || text === 'L' || text === 'D') {
+              awayForm.push(text);
+            }
+          });
+        }
+      }
+    }
+    
+    const matchDetails = {
+      matchUrl,
+      homeTeam,
+      awayTeam,
+      homeTeamLogo,
+      awayTeamLogo,
+      homeScore,
+      awayScore,
+      status,
+      quarterScores,
+      homeForm: homeForm.length > 0 ? homeForm : undefined,
+      awayForm: awayForm.length > 0 ? awayForm : undefined,
+      stats: statsData,
+    };
+    
+    console.log(`Successfully scraped basketball match details for ${homeTeam} vs ${awayTeam}`);
+    return matchDetails;
+    
+  } catch (error) {
+    console.error('Error scraping basketball match details:', error);
+    throw new Error('Failed to scrape basketball match details');
+  }
+}
+
 // League statistics type
 export interface LeagueStats {
   homeWins: number;
