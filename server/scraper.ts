@@ -1024,11 +1024,15 @@ export async function scrapeLeagueStats(competitionName: string): Promise<League
 
 /**
  * Extract league slug from competition name
- * Converts "Copa Libertadores" to "copa-libertadores"
+ * Converts "Copa Libertadores" or "Spain La Liga 2025/2026" to "copa-libertadores" or "spain-la-liga"
  */
 export function extractLeagueSlug(competitionName: string): string {
-  return competitionName
+  // Remove season suffix (e.g., "2024/2025", "2025/2026") from competition name
+  let cleanedName = competitionName.replace(/\s+\d{4}\/\d{4}$/g, '');
+  
+  return cleanedName
     .toLowerCase()
+    .trim()
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-]/g, '')
     .replace(/-+/g, '-')
