@@ -1,5 +1,6 @@
 import type { MatchDetails } from "@shared/schema";
 import type { InsertMatchStats } from "@shared/schema";
+import type { LeagueStats } from "./scraper";
 
 // Helper function to calculate form score
 function calculateFormScore(results: ('W' | 'L' | 'D')[]): number {
@@ -16,7 +17,8 @@ export function extractFeaturesForDatabase(
   homeTeamId: number,
   awayTeamId: number,
   leagueId: number,
-  countryId: number
+  countryId: number,
+  leagueStats?: LeagueStats
 ): InsertMatchStats {
   const { homeTeamForm, awayTeamForm, homeTeamStats, awayTeamStats, score } = matchDetails;
 
@@ -37,13 +39,13 @@ export function extractFeaturesForDatabase(
   const totalGoals = (ftHomeScore ?? 0) + (ftAwayScore ?? 0);
   const uO25Goals = totalGoals >= 3 ? 1 : 0;
 
-  // Calculate league statistics (using dummy values - you can enhance this)
-  const leagueHomeWins = 0.45;
-  const leagueDraws = 0.27;
-  const leagueAwayWins = 0.28;
-  const leagueUnder25 = 0.53;
-  const leagueOver25 = 0.47;
-  const leagueAvgGoals = 2.61;
+  // Use league statistics if provided, otherwise use default values
+  const leagueHomeWins = leagueStats ? leagueStats.homeWins / 100 : 0.45;
+  const leagueDraws = leagueStats ? leagueStats.draws / 100 : 0.27;
+  const leagueAwayWins = leagueStats ? leagueStats.awayWins / 100 : 0.28;
+  const leagueUnder25 = leagueStats ? leagueStats.under25 / 100 : 0.53;
+  const leagueOver25 = leagueStats ? leagueStats.over25 / 100 : 0.47;
+  const leagueAvgGoals = leagueStats ? leagueStats.avgGoals : 2.61;
 
   return {
     homeTeamId,
@@ -123,9 +125,10 @@ export function extractFeaturesForTester(
   homeTeamId: number,
   awayTeamId: number,
   leagueId: number,
-  countryId: number
+  countryId: number,
+  leagueStats?: LeagueStats
 ): InsertMatchStats {
-  const features = extractFeaturesForDatabase(matchDetails, homeTeamId, awayTeamId, leagueId, countryId);
+  const features = extractFeaturesForDatabase(matchDetails, homeTeamId, awayTeamId, leagueId, countryId, leagueStats);
 
   // Remove target variables for tester data
   return {

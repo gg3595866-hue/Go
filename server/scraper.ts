@@ -825,3 +825,129 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     throw new Error('Failed to scrape match details');
   }
 }
+
+// League statistics type
+export interface LeagueStats {
+  homeWins: number;
+  draws: number;
+  awayWins: number;
+  under25: number;
+  over25: number;
+  avgGoals: number;
+}
+
+// Cache for league statistics to avoid repeated scraping
+const leagueStatsCache: Map<string, LeagueStats> = new Map();
+
+// Function to extract league slug from competition name
+function getLeagueSlug(competitionName: string): string {
+  // Convert competition name to URL slug
+  // Examples:
+  // "Copa Libertadores" -> "copa-libertadores"
+  // "Primera División" -> "primera-division"
+  // "Premier League" -> "premier-league"
+  
+  return competitionName
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[áàâä]/g, 'a')
+    .replace(/[éèêë]/g, 'e')
+    .replace(/[íìîï]/g, 'i')
+    .replace(/[óòôö]/g, 'o')
+    .replace(/[úùûü]/g, 'u')
+    .replace(/[ñ]/g, 'n')
+    .replace(/[ç]/g, 'c')
+    .replace(/[^a-z0-9-]/g, '');
+}
+
+// Function to scrape league statistics
+export async function scrapeLeagueStats(competitionName: string): Promise<LeagueStats> {
+  const leagueSlug = getLeagueSlug(competitionName);
+  
+  // Check cache first
+  if (leagueStatsCache.has(leagueSlug)) {
+    console.log(`Using cached stats for ${competitionName}`);
+    return leagueStatsCache.get(leagueSlug)!;
+  }
+  
+  try {
+    // Use current year for stats
+    const currentYear = new Date().getFullYear();
+    const statsUrl = `https://sportstats365.com/football/${leagueSlug}/${currentYear}`;
+    
+    console.log(`Scraping league stats from: ${statsUrl}`);
+    
+    const html: string = await new Promise((resolve, reject) => {
+      cloudscraper.get({
+        uri: statsUrl,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'HX-Request': 'true',
+        },
+      }, (error: any, response: any, body: string) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(body);
+        }
+      });
+    });
+    
+    const $ = cheerio.load(html);
+    
+    let homeWins = 0, draws = 0, awayWins = 0, under25 = 0, over25 = 0, avgGoals = 0;
+    
+    // Parse the statistics from list items
+    $('.list-group-item').each((i, item) => {
+      const $item = $(item);
+      const badge = $item.find('.badge').first();
+      const badgeText = badge.text().trim();
+      
+      if (['H', 'D', 'A', 'U', 'O', 'G'].includes(badgeText)) {
+        // Find the h6 tag containing the value
+        const h6 = $item.find('h6').first();
+        const valueText = h6.text().trim();
+        const value = parseFloat(valueText);
+        
+        if (!isNaN(value)) {
+          if (badgeText === 'H') homeWins = value;
+          else if (badgeText === 'D') draws = value;
+          else if (badgeText === 'A') awayWins = value;
+          else if (badgeText === 'U') under25 = value;
+          else if (badgeText === 'O') over25 = value;
+          else if (badgeText === 'G') avgGoals = value;
+        }
+      }
+    });
+    
+    const stats: LeagueStats = {
+      homeWins,
+      draws,
+      awayWins,
+      under25,
+      over25,
+      avgGoals
+    };
+    
+    // Cache the results
+    leagueStatsCache.set(leagueSlug, stats);
+    
+    console.log(`Scraped league stats for ${competitionName}:`, stats);
+    
+    return stats;
+  } catch (error) {
+    console.error(`Failed to scrape league stats for ${competitionName}:`, error);
+    
+    // Return default values if scraping fails
+    return {
+      homeWins: 45,
+      draws: 27,
+      awayWins: 28,
+      under25: 53,
+      over25: 47,
+      avgGoals: 2.61
+    };
+  }
+}

@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { scrapeFixtures, scrapeMatchDetails } from "./scraper";
+import { scrapeFixtures, scrapeMatchDetails, scrapeLeagueStats } from "./scraper";
 import { storage, databaseStorage, testerStorage } from "./storage";
 import { insertMatchStatsSchema } from "@shared/schema";
 import {
@@ -235,13 +235,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const leagueId = generateLeagueId(matchDetails.competition);
           const countryId = generateCountryId(matchDetails.competition);
 
+          // Fetch league statistics
+          const leagueStats = await scrapeLeagueStats(matchDetails.competition);
+
           // Extract features
           const features = extractFeaturesForDatabase(
             matchDetails,
             homeTeamId,
             awayTeamId,
             leagueId,
-            countryId
+            countryId,
+            leagueStats
           );
 
           // Check if all required data is present (scores must exist for database)
@@ -365,13 +369,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const leagueId = generateLeagueId(matchDetails.competition);
           const countryId = generateCountryId(matchDetails.competition);
 
+          // Fetch league statistics
+          const leagueStats = await scrapeLeagueStats(matchDetails.competition);
+
           // Extract features without target variables
           const features = extractFeaturesForTester(
             matchDetails,
             homeTeamId,
             awayTeamId,
             leagueId,
-            countryId
+            countryId,
+            leagueStats
           );
 
           // For tester data, we don't need to validate form (0 is acceptable)
