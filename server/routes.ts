@@ -1245,79 +1245,425 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Basketball Database Bulk Upload (SSE endpoint)
-  app.post("/api/basketball/bulk-upload/database", async (req, res) => {
+  // Basketball League-Based Bulk Upload (Database only, for training data)
+  app.post("/api/basketball/bulk-upload/league", async (req, res) => {
+    const { competition, year } = req.body;
+
+    if (!competition || !year) {
+      return res.status(400).json({ error: "Competition name and year are required" });
+    }
+
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const sendEvent = (data: any) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
     try {
-      const { date } = req.body;
-      
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      
-      const sendUpdate = (data: any) => {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
-      };
-      
-      sendUpdate({
+      sendEvent({
+        status: 'starting',
+        message: `Fetching basketball matches for ${competition} ${year}...`,
+        totalMatches: 0,
+        processed: 0,
+        stored: 0,
+      });
+
+      // Scrape all basketball matches for the league and year
+      const { scrapeBasketballLeagueMatches } = await import('./scraper');
+      const matches = await scrapeBasketballLeagueMatches(
+        competition,
+        year,
+        (message, matchCount) => {
+          sendEvent({
+            status: 'fetching',
+            message,
+            totalMatches: matchCount,
+            processed: 0,
+            stored: 0,
+          });
+        }
+      );
+
+      sendEvent({
         status: 'processing',
-        totalMatches: 0,
+        message: `Processing ${matches.length} basketball matches...`,
+        totalMatches: matches.length,
         processed: 0,
         stored: 0,
-        currentMatch: 'Initializing...',
       });
-      
-      // Note: Actual basketball data fetching logic needs to be implemented
-      // This is a placeholder that shows the structure
-      sendUpdate({
-        status: 'error',
-        totalMatches: 0,
-        processed: 0,
-        stored: 0,
-        error: 'Basketball data fetching not yet implemented. Please add your basketball data source integration here.',
+
+      let processed = 0;
+      let stored = 0;
+
+      // Load existing basketball stats once at the beginning for duplicate checking
+      const existingStats = await databaseStorage.getAllBasketballStats();
+      const existingKeys = new Set(
+        existingStats.map((stat) => `${stat.homeTeamId}-${stat.awayTeamId}-${stat.ftHomePoints}-${stat.ftAwayPoints}`)
+      );
+
+      // Process each match
+      for (const match of matches) {
+        try {
+          sendEvent({
+            status: 'processing',
+            message: `Processing ${match.homeTeam} vs ${match.awayTeam}...`,
+            totalMatches: matches.length,
+            processed,
+            stored,
+            currentMatch: `${match.homeTeam} vs ${match.awayTeam}`,
+          });
+
+          // Only process finished matches for database
+          if (match.status !== 'FT' || !match.matchUrl) {
+            processed++;
+            continue;
+          }
+
+          // Fetch basketball match details
+          const matchDetails = await scrapeBasketballMatchDetails(match.matchUrl);
+
+          // Get or create IDs using database mapping (ensures consistency)
+          const homeTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.homeTeam);
+          const awayTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.awayTeam);
+          const leagueId = await databaseStorage.getOrCreateLeagueId(matchDetails.competition);
+          const countryId = await databaseStorage.getOrCreateCountryId(matchDetails.competition);
+
+          // Extract basketball features
+          const { extractBasketballFeaturesForDatabase } = await import('./feature-extraction');
+          const features = extractBasketballFeaturesForDatabase(
+            matchDetails,
+            homeTeamId,
+            awayTeamId,
+            leagueId,
+            countryId
+          );
+
+          // Check if all required data is present (scores must exist for database)
+          if (
+            features.ftHomePoints === null ||
+            features.ftAwayPoints === null ||
+            features.ftResult === null
+          ) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - missing scores or incomplete features`);
+            processed++;
+            continue;
+          }
+
+          // Check for duplicates using the pre-loaded set
+          const matchKey = `${homeTeamId}-${awayTeamId}-${features.ftHomePoints}-${features.ftAwayPoints}`;
+          if (existingKeys.has(matchKey)) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - duplicate`);
+            processed++;
+            continue;
+          }
+
+          // Store in database
+          await databaseStorage.createBasketballStats(features);
+          existingKeys.add(matchKey); // Add to set to prevent duplicates within this batch
+          stored++;
+          processed++;
+
+          sendEvent({
+            status: 'processing',
+            message: `Stored ${match.homeTeam} vs ${match.awayTeam}`,
+            totalMatches: matches.length,
+            processed,
+            stored,
+          });
+
+          // Add delay between requests to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        } catch (error) {
+          console.error(`Error processing basketball match ${match.homeTeam} vs ${match.awayTeam}:`, error);
+          processed++;
+        }
+      }
+
+      // Send completion event
+      sendEvent({
+        status: 'completed',
+        totalMatches: matches.length,
+        processed,
+        stored,
       });
-      
+
       res.end();
     } catch (error) {
-      console.error('Error in basketball bulk upload:', error);
-      res.status(500).json({ error: 'Failed to process basketball bulk upload' });
+      console.error("Error in basketball league bulk upload:", error);
+      sendEvent({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Failed to process basketball league bulk upload',
+        totalMatches: 0,
+        processed: 0,
+        stored: 0,
+      });
+      res.end();
+    }
+  });
+
+  // Basketball Database Bulk Upload (SSE endpoint)
+  app.post("/api/basketball/bulk-upload/database", async (req, res) => {
+    const { date } = req.body;
+
+    if (!date) {
+      return res.status(400).json({ error: "Date is required" });
+    }
+
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const sendEvent = (data: any) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      sendEvent({
+        status: 'starting',
+        message: `Fetching basketball fixtures for ${date}...`,
+        totalMatches: 0,
+        processed: 0,
+        stored: 0,
+      });
+
+      const dateObj = new Date(date);
+      const matches = await scrapeBasketballFixtures(dateObj);
+
+      sendEvent({
+        status: 'processing',
+        message: `Processing ${matches.length} basketball matches...`,
+        totalMatches: matches.length,
+        processed: 0,
+        stored: 0,
+      });
+
+      let processed = 0;
+      let stored = 0;
+
+      // Load existing basketball stats once at the beginning for duplicate checking
+      const existingStats = await databaseStorage.getAllBasketballStats();
+      const existingKeys = new Set(
+        existingStats.map((stat) => `${stat.homeTeamId}-${stat.awayTeamId}-${stat.ftHomePoints}-${stat.ftAwayPoints}`)
+      );
+
+      for (const match of matches) {
+        try {
+          sendEvent({
+            status: 'processing',
+            message: `Processing ${match.homeTeam} vs ${match.awayTeam}...`,
+            totalMatches: matches.length,
+            processed,
+            stored,
+            currentMatch: `${match.homeTeam} vs ${match.awayTeam}`,
+          });
+
+          // Only process finished matches for database
+          if (match.status !== 'FT' || !match.matchUrl) {
+            processed++;
+            continue;
+          }
+
+          const matchDetails = await scrapeBasketballMatchDetails(match.matchUrl);
+
+          const homeTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.homeTeam);
+          const awayTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.awayTeam);
+          const leagueId = await databaseStorage.getOrCreateLeagueId(matchDetails.competition);
+          const countryId = await databaseStorage.getOrCreateCountryId(matchDetails.competition);
+
+          const { extractBasketballFeaturesForDatabase } = await import('./feature-extraction');
+          const features = extractBasketballFeaturesForDatabase(
+            matchDetails,
+            homeTeamId,
+            awayTeamId,
+            leagueId,
+            countryId
+          );
+
+          if (
+            features.ftHomePoints === null ||
+            features.ftAwayPoints === null ||
+            features.ftResult === null
+          ) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - missing scores`);
+            processed++;
+            continue;
+          }
+
+          const matchKey = `${homeTeamId}-${awayTeamId}-${features.ftHomePoints}-${features.ftAwayPoints}`;
+          if (existingKeys.has(matchKey)) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - duplicate`);
+            processed++;
+            continue;
+          }
+
+          await databaseStorage.createBasketballStats(features);
+          existingKeys.add(matchKey);
+          stored++;
+          processed++;
+
+          sendEvent({
+            status: 'processing',
+            message: `Stored ${match.homeTeam} vs ${match.awayTeam}`,
+            totalMatches: matches.length,
+            processed,
+            stored,
+          });
+
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        } catch (error) {
+          console.error(`Error processing basketball match ${match.homeTeam} vs ${match.awayTeam}:`, error);
+          processed++;
+        }
+      }
+
+      sendEvent({
+        status: 'completed',
+        totalMatches: matches.length,
+        processed,
+        stored,
+      });
+
+      res.end();
+    } catch (error) {
+      console.error("Error in basketball database bulk upload:", error);
+      sendEvent({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Failed to process basketball database bulk upload',
+        totalMatches: 0,
+        processed: 0,
+        stored: 0,
+      });
+      res.end();
     }
   });
 
   // Basketball Tester Bulk Upload (SSE endpoint)
   app.post("/api/basketball/bulk-upload/tester", async (req, res) => {
+    const { date } = req.body;
+
+    if (!date) {
+      return res.status(400).json({ error: "Date is required" });
+    }
+
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const sendEvent = (data: any) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
     try {
-      const { date } = req.body;
-      
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      
-      const sendUpdate = (data: any) => {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
-      };
-      
-      sendUpdate({
+      sendEvent({
+        status: 'starting',
+        message: `Fetching basketball fixtures for ${date}...`,
+        totalMatches: 0,
+        processed: 0,
+        loaded: 0,
+      });
+
+      const dateObj = new Date(date);
+      const matches = await scrapeBasketballFixtures(dateObj);
+
+      sendEvent({
         status: 'processing',
-        totalMatches: 0,
+        message: `Processing ${matches.length} basketball matches...`,
+        totalMatches: matches.length,
         processed: 0,
         loaded: 0,
-        currentMatch: 'Initializing...',
       });
-      
-      // Note: Actual basketball data fetching logic needs to be implemented
-      // This is a placeholder that shows the structure
-      sendUpdate({
-        status: 'error',
-        totalMatches: 0,
-        processed: 0,
-        loaded: 0,
-        error: 'Basketball data fetching not yet implemented. Please add your basketball data source integration here.',
+
+      let processed = 0;
+      let loaded = 0;
+
+      // Load existing tester basketball stats for duplicate checking
+      const existingStats = await testerStorage.getAllBasketballStats();
+      const existingKeys = new Set(
+        existingStats.map((stat) => `${stat.homeTeamId}-${stat.awayTeamId}`)
+      );
+
+      for (const match of matches) {
+        try {
+          sendEvent({
+            status: 'processing',
+            message: `Processing ${match.homeTeam} vs ${match.awayTeam}...`,
+            totalMatches: matches.length,
+            processed,
+            loaded,
+            currentMatch: `${match.homeTeam} vs ${match.awayTeam}`,
+          });
+
+          if (!match.matchUrl) {
+            processed++;
+            continue;
+          }
+
+          const matchDetails = await scrapeBasketballMatchDetails(match.matchUrl);
+
+          const homeTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.homeTeam);
+          const awayTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.awayTeam);
+          const leagueId = await databaseStorage.getOrCreateLeagueId(matchDetails.competition);
+          const countryId = await databaseStorage.getOrCreateCountryId(matchDetails.competition);
+
+          const { extractBasketballFeaturesForTester } = await import('./feature-extraction');
+          const features = extractBasketballFeaturesForTester(
+            matchDetails,
+            homeTeamId,
+            awayTeamId,
+            leagueId,
+            countryId
+          );
+
+          const matchKey = `${homeTeamId}-${awayTeamId}`;
+          if (existingKeys.has(matchKey)) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - duplicate`);
+            processed++;
+            continue;
+          }
+
+          await testerStorage.createBasketballStats(features);
+          existingKeys.add(matchKey);
+          loaded++;
+          processed++;
+
+          sendEvent({
+            status: 'processing',
+            message: `Loaded ${match.homeTeam} vs ${match.awayTeam}`,
+            totalMatches: matches.length,
+            processed,
+            loaded,
+          });
+
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        } catch (error) {
+          console.error(`Error processing basketball match ${match.homeTeam} vs ${match.awayTeam}:`, error);
+          processed++;
+        }
+      }
+
+      sendEvent({
+        status: 'completed',
+        totalMatches: matches.length,
+        processed,
+        loaded,
       });
-      
+
       res.end();
     } catch (error) {
-      console.error('Error in basketball tester bulk upload:', error);
-      res.status(500).json({ error: 'Failed to process basketball tester bulk upload' });
+      console.error("Error in basketball tester bulk upload:", error);
+      sendEvent({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Failed to process basketball tester bulk upload',
+        totalMatches: 0,
+        processed: 0,
+        loaded: 0,
+      });
+      res.end();
     }
   });
 
