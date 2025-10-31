@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, real, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -16,6 +16,91 @@ export const insertUserSchema = createInsertSchema(users).pick({
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// Match Statistics Table for Database and Tester tabs
+export const matchStats = pgTable("match_stats", {
+  id: serial("id").primaryKey(),
+  
+  // Team IDs
+  homeTeamId: integer("home_team_id").notNull(),
+  awayTeamId: integer("away_team_id").notNull(),
+  leagueId: integer("league_id").notNull(),
+  countryId: integer("country_id").notNull(),
+  
+  // Form metrics
+  homeTeamFormHomeL5: real("home_team_form_home_l5").notNull(),
+  awayTeamFormAwayL5: real("away_team_form_away_l5").notNull(),
+  homeTeamFormOverallL5: real("home_team_form_overall_l5").notNull(),
+  awayTeamFormOverallL5: real("away_team_form_overall_l5").notNull(),
+  homeTeamFormDiffOverall: real("home_team_form_diff_overall").notNull(),
+  
+  // Win/Draw/Loss rates (Last 8 games)
+  homeTeamWinRateL8: real("home_team_win_rate_l8").notNull(),
+  awayTeamWinRateL8: real("away_team_win_rate_l8").notNull(),
+  homeTeamDrawRateL8: real("home_team_draw_rate_l8").notNull(),
+  awayTeamDrawRateL8: real("away_team_draw_rate_l8").notNull(),
+  homeTeamLossRateL8: real("home_team_loss_rate_l8").notNull(),
+  awayTeamLossRateL8: real("away_team_loss_rate_l8").notNull(),
+  
+  // To Nil rates (Last 8 games)
+  homeTeamToNilRateL8: real("home_team_to_nil_rate_l8").notNull(),
+  awayTeamToNilRateL8: real("away_team_to_nil_rate_l8").notNull(),
+  
+  // Winning margin rates (Last 8 games)
+  homeTeamWinningMargin1GoalRateL8: real("home_team_winning_margin_1_goal_rate_l8").notNull(),
+  awayTeamWinningMargin1GoalRateL8: real("away_team_winning_margin_1_goal_rate_l8").notNull(),
+  homeTeamWinningMargin2GoalRateL8: real("home_team_winning_margin_2_goal_rate_l8").notNull(),
+  awayTeamWinningMargin2GoalRateL8: real("away_team_winning_margin_2_goal_rate_l8").notNull(),
+  
+  // Half goal rates
+  homeTeamFirstHalfGoalRate: real("home_team_first_half_goal_rate").notNull(),
+  awayTeamFirstHalfGoalRate: real("away_team_first_half_goal_rate").notNull(),
+  homeTeamSecondHalfGoalRate: real("home_team_second_half_goal_rate").notNull(),
+  awayTeamSecondHalfGoalRate: real("away_team_second_half_goal_rate").notNull(),
+  
+  // BTTS and scoring rates (Last 4 games)
+  homeTeamBttsRateL4: real("home_team_btts_rate_l4").notNull(),
+  awayTeamBttsRateL4: real("away_team_btts_rate_l4").notNull(),
+  homeTeamScoredRateL4: real("home_team_scored_rate_l4").notNull(),
+  awayTeamScoredRateL4: real("away_team_scored_rate_l4").notNull(),
+  homeTeamScoredAgainstRateL4: real("home_team_scored_against_rate_l4").notNull(),
+  awayTeamScoredAgainstRateL4: real("away_team_scored_against_rate_l4").notNull(),
+  
+  // Half-time rates (Last 8 games)
+  homeTeamHtWonRateL8: real("home_team_ht_won_rate_l8").notNull(),
+  awayTeamHtWonRateL8: real("away_team_ht_won_rate_l8").notNull(),
+  homeTeamHtTiedRateL8: real("home_team_ht_tied_rate_l8").notNull(),
+  awayTeamHtTiedRateL8: real("away_team_ht_tied_rate_l8").notNull(),
+  homeTeamHtLostRateL8: real("home_team_ht_lost_rate_l8").notNull(),
+  awayTeamHtLostRateL8: real("away_team_ht_lost_rate_l8").notNull(),
+  
+  // League statistics
+  leagueHomeWins: real("league_home_wins").notNull(),
+  leagueDraws: real("league_draws").notNull(),
+  leagueAwayWins: real("league_away_wins").notNull(),
+  leagueUnder25: real("league_under_2_5").notNull(),
+  leagueOver25: real("league_over_2_5").notNull(),
+  leagueAvgGoals: real("league_avg_goals").notNull(),
+  
+  // Target variables (actual match results)
+  ftHomeScore: integer("ft_home_score"),
+  ftAwayScore: integer("ft_away_score"),
+  htHomeScore: integer("ht_home_score"),
+  htAwayScore: integer("ht_away_score"),
+  ftResult: text("ft_result"),
+  bttsYesNo: integer("btts_yes_no"),
+  uO25Goals: integer("u_o_2_5_goals"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMatchStatsSchema = createInsertSchema(matchStats).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertMatchStats = z.infer<typeof insertMatchStatsSchema>;
+export type MatchStats = typeof matchStats.$inferSelect;
 
 // Football fixtures types
 export const matchSchema = z.object({
