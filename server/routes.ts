@@ -816,6 +816,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             predResult: prediction.ftResult.predicted,
             predHomeScore: prediction.scores.homeScore,
             predAwayScore: prediction.scores.awayScore,
+            predHtHomeScore: prediction.htScores.homeScore,
+            predHtAwayScore: prediction.htScores.awayScore,
             predBttsProb: prediction.btts.probability,
             predBtts: prediction.btts.predicted,
             predOver25Prob: prediction.over25.probability,

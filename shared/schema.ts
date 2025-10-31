@@ -385,6 +385,10 @@ export const matchPredictions = sqliteTable("match_predictions", {
   predHomeScore: real("pred_home_score").notNull(),
   predAwayScore: real("pred_away_score").notNull(),
   
+  // Half-time score predictions
+  predHtHomeScore: real("pred_ht_home_score").notNull(),
+  predHtAwayScore: real("pred_ht_away_score").notNull(),
+  
   // BTTS and Over/Under predictions
   predBttsProb: real("pred_btts_prob").notNull(),
   predBtts: integer("pred_btts", { mode: 'boolean' }).notNull(),
