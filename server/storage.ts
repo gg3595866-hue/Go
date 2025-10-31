@@ -4,13 +4,19 @@ import {
   teams, 
   leagues, 
   countries,
+  modelMetadata,
+  matchPredictions,
   type User, 
   type InsertUser, 
   type MatchStats, 
   type InsertMatchStats,
   type Team,
   type League,
-  type Country
+  type Country,
+  type ModelMetadata,
+  type InsertModelMetadata,
+  type MatchPrediction,
+  type InsertMatchPrediction
 } from "@shared/schema";
 import { databaseDb, testerDb } from "./db";
 import { eq, desc } from "drizzle-orm";
@@ -31,6 +37,17 @@ export interface IStorage {
   getOrCreateTeamId(teamName: string): Promise<number>;
   getOrCreateLeagueId(leagueName: string): Promise<number>;
   getOrCreateCountryId(countryName: string): Promise<number>;
+  
+  // ML Model methods
+  getAllModels(): Promise<ModelMetadata[]>;
+  getActiveModel(): Promise<ModelMetadata | undefined>;
+  createModel(model: InsertModelMetadata): Promise<ModelMetadata>;
+  setActiveModel(id: number): Promise<boolean>;
+  
+  // Prediction methods
+  createPrediction(prediction: InsertMatchPrediction): Promise<MatchPrediction>;
+  getPredictionsByMatchStatsId(matchStatsId: number): Promise<MatchPrediction[]>;
+  getAllPredictions(): Promise<MatchPrediction[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -253,6 +270,65 @@ export class DatabaseStorage implements IStorage {
       }
       throw error;
     }
+  }
+
+  // ML Model methods
+  async getAllModels(): Promise<ModelMetadata[]> {
+    return this.db.select().from(modelMetadata).orderBy(desc(modelMetadata.createdAt));
+  }
+
+  async getActiveModel(): Promise<ModelMetadata | undefined> {
+    const [model] = await this.db
+      .select()
+      .from(modelMetadata)
+      .where(eq(modelMetadata.isActive, true))
+      .limit(1);
+    return model || undefined;
+  }
+
+  async createModel(model: InsertModelMetadata): Promise<ModelMetadata> {
+    const [created] = await this.db
+      .insert(modelMetadata)
+      .values(model)
+      .returning();
+    return created;
+  }
+
+  async setActiveModel(id: number): Promise<boolean> {
+    // First, deactivate all models
+    await this.db
+      .update(modelMetadata)
+      .set({ isActive: false });
+    
+    // Then activate the specified model
+    const result = await this.db
+      .update(modelMetadata)
+      .set({ isActive: true })
+      .where(eq(modelMetadata.id, id))
+      .returning();
+    
+    return result.length > 0;
+  }
+
+  // Prediction methods
+  async createPrediction(prediction: InsertMatchPrediction): Promise<MatchPrediction> {
+    const [created] = await this.db
+      .insert(matchPredictions)
+      .values(prediction)
+      .returning();
+    return created;
+  }
+
+  async getPredictionsByMatchStatsId(matchStatsId: number): Promise<MatchPrediction[]> {
+    return this.db
+      .select()
+      .from(matchPredictions)
+      .where(eq(matchPredictions.matchStatsId, matchStatsId))
+      .orderBy(desc(matchPredictions.createdAt));
+  }
+
+  async getAllPredictions(): Promise<MatchPrediction[]> {
+    return this.db.select().from(matchPredictions).orderBy(desc(matchPredictions.createdAt));
   }
 }
 

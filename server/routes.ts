@@ -591,6 +591,253 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ML Training endpoint
+  app.post("/api/ml/train", async (req, res) => {
+    try {
+      const {
+        epochs = 30,
+        batchSize = 32,
+        validationSplit = 0.2,
+        learningRate = 0.001,
+        teamEmbeddingSize = 50,
+        leagueEmbeddingSize = 20,
+        countryEmbeddingSize = 10,
+        hiddenLayers = [128, 64]
+      } = req.body;
+
+      console.log('Starting model training...');
+      
+      // Get all training data from database
+      const matchStatsArray = await databaseStorage.getAllMatchStats();
+      
+      if (matchStatsArray.length < 100) {
+        return res.status(400).json({
+          error: 'Insufficient training data',
+          message: 'At least 100 completed matches are required for training'
+        });
+      }
+
+      // Import ML functions
+      const { trainModel, saveModel } = await import('./ml-model');
+      
+      // Determine unique counts for embeddings
+      const uniqueTeams = new Set<number>();
+      const uniqueLeagues = new Set<number>();
+      const uniqueCountries = new Set<number>();
+      
+      matchStatsArray.forEach(stats => {
+        uniqueTeams.add(stats.homeTeamId);
+        uniqueTeams.add(stats.awayTeamId);
+        uniqueLeagues.add(stats.leagueId);
+        uniqueCountries.add(stats.countryId);
+      });
+      
+      const archConfig = {
+        numTeams: Math.max(...uniqueTeams),
+        numLeagues: Math.max(...uniqueLeagues),
+        numCountries: Math.max(...uniqueCountries),
+        teamEmbeddingSize,
+        leagueEmbeddingSize,
+        countryEmbeddingSize,
+        hiddenLayers
+      };
+      
+      const trainingConfig = {
+        epochs,
+        batchSize,
+        validationSplit,
+        learningRate
+      };
+      
+      // Train model
+      const { model, result } = await trainModel(
+        matchStatsArray,
+        trainingConfig,
+        archConfig
+      );
+      
+      // Save model
+      const modelPath = `./models/model_${Date.now()}`;
+      await saveModel(model, modelPath);
+      
+      // Save model metadata
+      const modelMetadata = await databaseStorage.createModel({
+        modelName: 'Multi-Task Football Predictor',
+        version: '1.0',
+        architecture: JSON.stringify({ trainingConfig, archConfig }),
+        trainingAccuracy: result.finalMetrics.trainingAccuracy,
+        validationAccuracy: result.finalMetrics.validationAccuracy,
+        loss: result.finalMetrics.loss,
+        trainingDate: new Date(),
+        totalEpochs: epochs,
+        totalSamples: matchStatsArray.length,
+        isActive: true,
+        modelPath
+      });
+      
+      // Set as active model
+      await databaseStorage.setActiveModel(modelMetadata.id);
+      
+      console.log('Model training completed successfully');
+      
+      res.json({
+        success: true,
+        modelId: modelMetadata.id,
+        metrics: result.finalMetrics,
+        history: result.history,
+        totalSamples: matchStatsArray.length
+      });
+      
+    } catch (error) {
+      console.error('Error training model:', error);
+      res.status(500).json({
+        error: 'Failed to train model',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Get all models
+  app.get("/api/ml/models", async (req, res) => {
+    try {
+      const models = await databaseStorage.getAllModels();
+      res.json(models);
+    } catch (error) {
+      console.error('Error fetching models:', error);
+      res.status(500).json({ error: 'Failed to fetch models' });
+    }
+  });
+
+  // Get active model
+  app.get("/api/ml/models/active", async (req, res) => {
+    try {
+      const model = await databaseStorage.getActiveModel();
+      if (!model) {
+        return res.status(404).json({ error: 'No active model found' });
+      }
+      res.json(model);
+    } catch (error) {
+      console.error('Error fetching active model:', error);
+      res.status(500).json({ error: 'Failed to fetch active model' });
+    }
+  });
+
+  // Set active model
+  app.post("/api/ml/models/:id/activate", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await databaseStorage.setActiveModel(parseInt(id));
+      if (!success) {
+        return res.status(404).json({ error: 'Model not found' });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error activating model:', error);
+      res.status(500).json({ error: 'Failed to activate model' });
+    }
+  });
+
+  // Predict matches in tester database
+  app.post("/api/ml/predict", async (req, res) => {
+    try {
+      console.log('Starting predictions for tester matches...');
+      
+      // Get active model
+      const activeModel = await databaseStorage.getActiveModel();
+      if (!activeModel) {
+        return res.status(404).json({
+          error: 'No active model found',
+          message: 'Please train a model first'
+        });
+      }
+
+      // Load the model
+      const { loadModel, predict } = await import('./ml-model');
+      const model = await loadModel(activeModel.modelPath!);
+      
+      // Get all matches from tester database
+      const testerMatches = await testerStorage.getAllMatchStats();
+      
+      if (testerMatches.length === 0) {
+        return res.status(400).json({
+          error: 'No matches to predict',
+          message: 'Please add matches to the Tester tab first'
+        });
+      }
+
+      const predictions = [];
+      
+      for (const match of testerMatches) {
+        try {
+          const prediction = await predict(model, match);
+          
+          // Store prediction in database
+          const savedPrediction = await testerStorage.createPrediction({
+            matchStatsId: match.id,
+            modelId: activeModel.id,
+            predHomeWinProb: prediction.ftResult.home,
+            predDrawProb: prediction.ftResult.draw,
+            predAwayWinProb: prediction.ftResult.away,
+            predResult: prediction.ftResult.predicted,
+            predHomeScore: prediction.scores.homeScore,
+            predAwayScore: prediction.scores.awayScore,
+            predBttsProb: prediction.btts.probability,
+            predBtts: prediction.btts.predicted,
+            predOver25Prob: prediction.over25.probability,
+            predOver25: prediction.over25.predicted,
+            confidence: prediction.confidence
+          });
+          
+          predictions.push({
+            matchId: match.id,
+            prediction: savedPrediction
+          });
+        } catch (error) {
+          console.error(`Error predicting match ${match.id}:`, error);
+        }
+      }
+      
+      console.log(`Predictions completed: ${predictions.length}/${testerMatches.length}`);
+      
+      res.json({
+        success: true,
+        totalMatches: testerMatches.length,
+        predictions: predictions.length,
+        results: predictions
+      });
+      
+    } catch (error) {
+      console.error('Error making predictions:', error);
+      res.status(500).json({
+        error: 'Failed to make predictions',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Get predictions for a specific match
+  app.get("/api/ml/predictions/:matchStatsId", async (req, res) => {
+    try {
+      const { matchStatsId } = req.params;
+      const predictions = await testerStorage.getPredictionsByMatchStatsId(parseInt(matchStatsId));
+      res.json(predictions);
+    } catch (error) {
+      console.error('Error fetching predictions:', error);
+      res.status(500).json({ error: 'Failed to fetch predictions' });
+    }
+  });
+
+  // Get all predictions
+  app.get("/api/ml/predictions", async (req, res) => {
+    try {
+      const predictions = await testerStorage.getAllPredictions();
+      res.json(predictions);
+    } catch (error) {
+      console.error('Error fetching predictions:', error);
+      res.status(500).json({ error: 'Failed to fetch predictions' });
+    }
+  });
+
   // Test endpoint to examine league page HTML structure
   app.get("/api/test/league-page", async (req, res) => {
     const { competition, year } = req.query;

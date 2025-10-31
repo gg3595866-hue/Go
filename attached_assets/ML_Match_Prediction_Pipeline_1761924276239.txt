@@ -1,0 +1,161 @@
+# Machine Learning Football Match Prediction Pipeline (Step-by-Step Guide)
+
+This document provides a comprehensive, error-free, and step-by-step explanation for building a machine learning pipeline that predicts multiple football match outcomes such as 1x2, full-time/half-time scores, BTTS (Yes/No), and Over/Under 2.5 goals. The process includes data preparation, model architecture, embedding layers, and training strategy.
+
+---
+
+## 1. DATA COLLECTION AND PRE-PROCESSING
+
+### 1.1 Data Structure
+Each row in your dataset must represent **one match**. The columns (features) describe the two teams, league context, and historical performance up to that point.
+
+### 1.2 Feature Engineering
+
+#### Identifiers and Metadata
+- `match_id`: Unique match identifier.
+- `date`: Match date.
+- `country_id`, `league_id`: Encoded integers handled by embedding layers.
+- `home_team_id`, `away_team_id`: Encoded integers handled by embedding layers.
+
+#### Target Variables (Labels)
+These are the multi-task outputs for the model:
+- `ft_result`: (1 = Home Win, X = Draw, 2 = Away Win)
+- `ft_home_score`, `ft_away_score`: Full-time scores.
+- `ht_home_score`, `ht_away_score`: Half-time scores.
+- `btts_yes_no`: 1 (Yes) or 0 (No) — both teams to score.
+- `u_o_2.5`: 1 (Over 2.5) or 0 (Under 2.5).
+
+#### Time-Windowed Features
+(Computed using N past matches, typically N=5 or 10)
+- `home_team_form_last_N`, `away_team_form_last_N`
+- `form_diff_home_vs_away`
+- `home_team_win_rate_home_last_N`, `away_team_win_rate_away_last_N`
+- `home_team_avg_goals_scored_home_last_N`, `away_team_avg_goals_scored_away_last_N`
+- `home_team_avg_goals_conceded_home_last_N`, `away_team_avg_goals_conceded_away_last_N`
+- `home_team_btts_rate_home_last_N`, `away_team_btts_rate_away_last_N`
+- `home_team_ht_win_rate_home_last_N`, `away_team_ht_win_rate_away_last_N`
+
+#### League-Level Features
+- `league_home_win_rate`
+- `league_draw_rate`
+- `league_away_win_rate`
+- `league_avg_goals`
+- `league_over_2.5_rate`
+
+#### Combined Statistical Features
+- `form_diff = home_team_form_overall - away_team_form_overall`
+- `goals_per_game_diff = (home_scored - home_conceded) - (away_scored - away_conceded)`
+
+### 1.3 Example Row
+| match_id | date | home_team_id | away_team_id | country_id | league_id | form_diff | home_avg_goals_scored | away_avg_goals_scored | league_avg_goals | ft_result | u_o_2.5 |
+|-----------|------|---------------|---------------|-------------|-------------|-----------|------------------------|------------------------|------------------|------------|----------|
+| 1234 | 2025-10-31 | 101 | 102 | 1 | 10 | -12 | 1.5 | 1.8 | 2.61 | '2' | 1 |
+
+---
+
+## 2. MODEL ARCHITECTURE — MULTI-TASK NEURAL NETWORK
+
+### 2.1 Input Layers
+- **Numeric features:** Form, goals, rates, etc.
+- **Categorical inputs (integer IDs):** home_team_id, away_team_id, league_id, country_id.
+
+Each ID input will connect to an **embedding layer** to learn vector representations.
+
+### 2.2 Embedding Layers
+Convert categorical IDs into dense representations that capture similarities.
+
+| Input | Input Dim | Output Dim | Notes |
+|--------|------------|-------------|--------|
+| home_team_id | num_teams | team_embedding_size | 50 (example) |
+| away_team_id | num_teams | team_embedding_size | 50 (example) |
+| league_id | num_leagues | league_embedding_size | 20 (example) |
+| country_id | num_countries | country_embedding_size | 10 (example) |
+
+### 2.3 Feature Concatenation
+After flattening embeddings, concatenate all numerical and categorical embeddings into one dense vector.
+
+`concatenated_features = [numeric_features + embeddings(home, away, league, country)]`
+
+### 2.4 Shared Hidden Layers
+Add multiple dense (fully connected) layers to learn joint feature representations:
+
+```python
+hidden = Dense(128, activation='relu')(concatenated_features)
+hidden = Dense(64, activation='relu')(hidden)
+```
+
+### 2.5 Task-Specific Output Layers
+
+| Task | Output Units | Activation | Loss Function |
+|------|---------------|-------------|----------------|
+| 1x2 (ft_result) | 3 | softmax | categorical_crossentropy |
+| Over/Under 2.5 | 1 | sigmoid | binary_crossentropy |
+| BTTS (Yes/No) | 1 | sigmoid | binary_crossentropy |
+| Full-Time Scores | 2 | ReLU or linear | mean_squared_error / poisson_loss |
+| Half-Time Scores | 2 | ReLU or linear | mean_squared_error |
+
+---
+
+## 3. TRAINING STRATEGY
+
+### 3.1 Data Splitting
+- Use **chronological splitting** — earlier data for training, newer data for testing.
+- Avoid leakage: Do not include future data in training.
+
+### 3.2 Model Compilation
+Example:
+
+```python
+model.compile(
+    optimizer='adam',
+    loss={
+        'ft_result': 'categorical_crossentropy',
+        'u_o_2.5_goals': 'binary_crossentropy',
+        'btts_yes_no': 'binary_crossentropy'
+    },
+    metrics={
+        'ft_result': 'accuracy',
+        'u_o_2.5_goals': 'accuracy',
+        'btts_yes_no': 'accuracy'
+    }
+)
+```
+
+### 3.3 Model Fitting
+Train using all inputs and outputs:
+
+```python
+model.fit(
+    x={
+        'home_team_id': X_home_team,
+        'away_team_id': X_away_team,
+        'league_id': X_league,
+        'country_id': X_country,
+        'numeric_features': X_numerical
+    },
+    y={
+        'ft_result': y_result,
+        'u_o_2.5_goals': y_over_under,
+        'btts_yes_no': y_btts
+    },
+    validation_split=0.2,
+    epochs=50,
+    batch_size=64
+)
+```
+
+### 3.4 Evaluation
+Use separate metrics for each prediction task:
+- Accuracy for classification tasks (1x2, BTTS, Over/Under)
+- RMSE for regression tasks (scores)
+
+---
+
+## 4. SUMMARY
+
+This multi-task neural network efficiently captures:
+- Statistical relationships between teams, leagues, and countries (via embeddings).
+- Temporal trends through form and rolling statistics.
+- Cross-task dependencies (e.g., a match predicted 3–1 likely means Over 2.5 and BTTS Yes).
+
+By combining structured features, embeddings, and multi-task outputs, this model provides a scalable foundation for accurate, data-driven football match prediction.

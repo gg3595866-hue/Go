@@ -343,3 +343,64 @@ export const matchDetailsSchema = z.object({
 });
 
 export type MatchDetails = z.infer<typeof matchDetailsSchema>;
+
+// ML Model Metadata Table
+export const modelMetadata = sqliteTable("model_metadata", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  modelName: text("model_name").notNull(),
+  version: text("version").notNull(),
+  architecture: text("architecture").notNull(), // JSON string of model config
+  trainingAccuracy: real("training_accuracy"),
+  validationAccuracy: real("validation_accuracy"),
+  loss: real("loss"),
+  trainingDate: integer("training_date", { mode: 'timestamp' }).notNull(),
+  totalEpochs: integer("total_epochs").notNull(),
+  totalSamples: integer("total_samples").notNull(),
+  isActive: integer("is_active", { mode: 'boolean' }).notNull().default(false),
+  modelPath: text("model_path"),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+export const insertModelMetadataSchema = createInsertSchema(modelMetadata).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type ModelMetadata = typeof modelMetadata.$inferSelect;
+export type InsertModelMetadata = z.infer<typeof insertModelMetadataSchema>;
+
+// Match Predictions Table
+export const matchPredictions = sqliteTable("match_predictions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  matchStatsId: integer("match_stats_id").notNull(),
+  modelId: integer("model_id").notNull(),
+  
+  // Prediction probabilities for 1X2
+  predHomeWinProb: real("pred_home_win_prob").notNull(),
+  predDrawProb: real("pred_draw_prob").notNull(),
+  predAwayWinProb: real("pred_away_win_prob").notNull(),
+  predResult: text("pred_result").notNull(), // '1', 'X', or '2'
+  
+  // Score predictions
+  predHomeScore: real("pred_home_score").notNull(),
+  predAwayScore: real("pred_away_score").notNull(),
+  
+  // BTTS and Over/Under predictions
+  predBttsProb: real("pred_btts_prob").notNull(),
+  predBtts: integer("pred_btts", { mode: 'boolean' }).notNull(),
+  predOver25Prob: real("pred_over_2_5_prob").notNull(),
+  predOver25: integer("pred_over_2_5", { mode: 'boolean' }).notNull(),
+  
+  // Confidence score
+  confidence: real("confidence").notNull(),
+  
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+export const insertMatchPredictionSchema = createInsertSchema(matchPredictions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type MatchPrediction = typeof matchPredictions.$inferSelect;
+export type InsertMatchPrediction = z.infer<typeof insertMatchPredictionSchema>;

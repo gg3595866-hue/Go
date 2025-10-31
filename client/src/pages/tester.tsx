@@ -4,6 +4,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { Brain } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import type { MatchStats } from "@shared/schema";
+import type { MatchStats, MatchPrediction } from "@shared/schema";
 
 export default function TesterPage() {
   const queryClient = useQueryClient();
@@ -23,6 +25,32 @@ export default function TesterPage() {
   
   const { data: stats, isLoading } = useQuery<MatchStats[]>({
     queryKey: ['/api/match-stats/tester'],
+  });
+
+  const { data: predictions } = useQuery<MatchPrediction[]>({
+    queryKey: ['/api/ml/predictions'],
+  });
+
+  const predictMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/ml/predict', {
+        method: 'POST',
+      });
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Predictions Completed",
+        description: `Generated ${data.predictions} predictions for ${data.totalMatches} matches`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/ml/predictions'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Prediction Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const clearData = useMutation({
@@ -77,35 +105,59 @@ export default function TesterPage() {
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle>Match Statistics Tester</CardTitle>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button 
-                    variant="destructive" 
-                    disabled={clearData.isPending || !stats || stats.length === 0}
-                    data-testid="button-clear-tester"
-                  >
-                    Clear Data
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This action cannot be undone. This will permanently delete all match statistics from the tester database.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction 
-                      onClick={() => clearData.mutate()}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => predictMutation.mutate()}
+                  disabled={predictMutation.isPending || !stats || stats.length === 0}
+                  data-testid="button-predict"
+                  variant="default"
+                >
+                  {predictMutation.isPending ? (
+                    <>Predicting...</>
+                  ) : (
+                    <>
+                      <Brain className="w-4 h-4 mr-2" />
+                      Predict
+                    </>
+                  )}
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button 
+                      variant="destructive" 
+                      disabled={clearData.isPending || !stats || stats.length === 0}
+                      data-testid="button-clear-tester"
                     >
-                      Delete All Data
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                      Clear Data
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete all match statistics from the tester database.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction 
+                        onClick={() => clearData.mutate()}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Delete All Data
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </div>
+            {predictions && predictions.length > 0 && (
+              <div className="mt-3 p-3 bg-primary/10 rounded-md">
+                <p className="text-sm text-muted-foreground">
+                  {predictions.length} prediction(s) available. Predictions shown alongside match statistics below.
+                </p>
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -163,18 +215,24 @@ export default function TesterPage() {
                     <TableHead className="min-w-[100px]">FT Result</TableHead>
                     <TableHead className="min-w-[100px]">BTTS</TableHead>
                     <TableHead className="min-w-[120px]">Over 2.5</TableHead>
+                    <TableHead className="min-w-[120px] bg-primary/5">Pred Result</TableHead>
+                    <TableHead className="min-w-[120px] bg-primary/5">Pred Score</TableHead>
+                    <TableHead className="min-w-[100px] bg-primary/5">Pred BTTS</TableHead>
+                    <TableHead className="min-w-[120px] bg-primary/5">Pred O/U 2.5</TableHead>
+                    <TableHead className="min-w-[100px] bg-primary/5">Confidence</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {!stats || stats.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={51} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
+                      <TableCell colSpan={56} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
                         No data available. Add match statistics to see them here.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    stats.map((stat) => (
-                      <TableRow key={stat.id} data-testid={`row-stat-${stat.id}`}>
+                    stats.map((stat) => {
+                      const prediction = predictions?.find(p => p.matchStatsId === stat.id);
+                      return <TableRow key={stat.id} data-testid={`row-stat-${stat.id}`}>
                         <TableCell>{stat.id}</TableCell>
                         <TableCell>{stat.homeTeamId}</TableCell>
                         <TableCell>{stat.awayTeamId}</TableCell>
@@ -226,8 +284,23 @@ export default function TesterPage() {
                         <TableCell>{stat.ftResult ?? '-'}</TableCell>
                         <TableCell>{stat.bttsYesNo === 1 ? 'Yes' : stat.bttsYesNo === 0 ? 'No' : '-'}</TableCell>
                         <TableCell>{stat.uO25Goals === 1 ? 'Over' : stat.uO25Goals === 0 ? 'Under' : '-'}</TableCell>
-                      </TableRow>
-                    ))
+                        <TableCell className="bg-primary/5 font-medium" data-testid={`pred-result-${stat.id}`}>
+                          {prediction ? prediction.predResult : '-'}
+                        </TableCell>
+                        <TableCell className="bg-primary/5" data-testid={`pred-score-${stat.id}`}>
+                          {prediction ? `${prediction.predHomeScore}-${prediction.predAwayScore}` : '-'}
+                        </TableCell>
+                        <TableCell className="bg-primary/5" data-testid={`pred-btts-${stat.id}`}>
+                          {prediction ? (prediction.predBtts ? 'Yes' : 'No') : '-'}
+                        </TableCell>
+                        <TableCell className="bg-primary/5" data-testid={`pred-over-${stat.id}`}>
+                          {prediction ? (prediction.predOver25 ? 'Over' : 'Under') : '-'}
+                        </TableCell>
+                        <TableCell className="bg-primary/5" data-testid={`pred-confidence-${stat.id}`}>
+                          {prediction ? `${(prediction.confidence * 100).toFixed(0)}%` : '-'}
+                        </TableCell>
+                      </TableRow>;
+                    })
                   )}
                 </TableBody>
               </Table>
