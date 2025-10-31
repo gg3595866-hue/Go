@@ -6,9 +6,6 @@ import { insertMatchStatsSchema } from "@shared/schema";
 import {
   extractFeaturesForDatabase,
   extractFeaturesForTester,
-  generateTeamId,
-  generateLeagueId,
-  generateCountryId,
 } from "./feature-extraction";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -229,11 +226,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Fetch match details
           const matchDetails = await scrapeMatchDetails(match.matchUrl);
 
-          // Generate IDs
-          const homeTeamId = generateTeamId(matchDetails.homeTeam);
-          const awayTeamId = generateTeamId(matchDetails.awayTeam);
-          const leagueId = generateLeagueId(matchDetails.competition);
-          const countryId = generateCountryId(matchDetails.competition);
+          // Get or create IDs using database mapping (ensures consistency)
+          const homeTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.homeTeam);
+          const awayTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.awayTeam);
+          const leagueId = await databaseStorage.getOrCreateLeagueId(matchDetails.competition);
+          const countryId = await databaseStorage.getOrCreateCountryId(matchDetails.competition);
 
           // Fetch league statistics
           const leagueStats = await scrapeLeagueStats(matchDetails.competition);
@@ -363,11 +360,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Fetch match details
           const matchDetails = await scrapeMatchDetails(match.matchUrl);
 
-          // Generate IDs
-          const homeTeamId = generateTeamId(matchDetails.homeTeam);
-          const awayTeamId = generateTeamId(matchDetails.awayTeam);
-          const leagueId = generateLeagueId(matchDetails.competition);
-          const countryId = generateCountryId(matchDetails.competition);
+          // Get or create IDs using database mapping (ensures consistency)
+          // Note: testerStorage uses databaseDb for mapping, ensuring same IDs
+          const homeTeamId = await testerStorage.getOrCreateTeamId(matchDetails.homeTeam);
+          const awayTeamId = await testerStorage.getOrCreateTeamId(matchDetails.awayTeam);
+          const leagueId = await testerStorage.getOrCreateLeagueId(matchDetails.competition);
+          const countryId = await testerStorage.getOrCreateCountryId(matchDetails.competition);
 
           // Fetch league statistics
           const leagueStats = await scrapeLeagueStats(matchDetails.competition);
