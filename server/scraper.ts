@@ -306,12 +306,32 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     const homeTeamLogo = homeTeamLogoImg.attr('src');
     const awayTeamLogo = awayTeamLogoImg.attr('src');
     
-    // Extract competition
+    // Extract competition from URL (more reliable than HTML parsing)
+    // URL format: https://sportstats365.com/football/primera-division-co/2025/compare/...
+    let competition = '';
+    let competitionLogo = '';
+    
+    const urlMatch = matchUrl.match(/\/football\/([^\/]+)/);
+    if (urlMatch && urlMatch[1]) {
+      // Convert slug to readable name
+      competition = urlMatch[1]
+        .split('-')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+    
+    // Also try to get competition logo from HTML
     const competitionLink = $('a[href*="/football/"]').filter(function() {
       return $(this).find('img[src*="logo"]').length > 0;
     }).first();
-    const competition = competitionLink.text().trim();
-    const competitionLogo = competitionLink.find('img').attr('src');
+    
+    if (competitionLink.length > 0) {
+      const linkText = competitionLink.text().trim();
+      if (linkText) {
+        competition = linkText; // Use HTML text if available (more accurate)
+      }
+      competitionLogo = competitionLink.find('img').attr('src') || '';
+    }
     
     // Extract score - try .display-4 first, fallback to first score pattern in body
     let scoreText = $('.display-4').text().trim();
