@@ -1130,8 +1130,10 @@ export function extractLeagueSlug(competitionName: string): string {
     'Liga Portugal': 'liga-portugal',
     'Netherlands Eredivisie': 'eredivisie',
     'Eredivisie': 'eredivisie',
-    'Belgium Pro League': 'jupiler-pro-league',
-    'Pro League': 'jupiler-pro-league',
+    'Belgium Pro League': '1e-klasse',
+    'Belgium Jupiler League': '1e-klasse',
+    'Jupiler League': '1e-klasse',
+    'Jupiler Pro League': '1e-klasse',
     'Brazil Serie A': 'brasileiro-serie-a',
     'Serie A Brazil': 'brasileiro-serie-a',
     'Argentina Primera Division': 'liga-profesional',
@@ -1157,6 +1159,7 @@ export function extractLeagueSlug(competitionName: string): string {
     'Liga MX': 'liga-mx',
     'MLS': 'mls',
     'Major League Soccer': 'mls',
+    'Poland Ekstraklasa': 'ekstraklasa',
   };
   
   // Check if we have a manual mapping
