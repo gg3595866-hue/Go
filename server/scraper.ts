@@ -1152,137 +1152,82 @@ export async function scrapeBasketballMatchDetails(matchUrl: string): Promise<an
       if (statsHtml) {
         const $stats = cheerio.load(statsHtml);
         
-        console.log('Basketball stats HTML length:', statsHtml.length);
-        console.log('Number of tables found:', $stats('table').length);
-        console.log('Stats HTML preview:', statsHtml.substring(0, 500));
-        
-        $stats('table').each((tableIndex, table) => {
-          const $table = $stats(table);
-          const tableText = $table.text();
-          console.log(`Table ${tableIndex} text:`, tableText.substring(0, 200));
+        $stats('.list-group-item.d-flex').each((index, item) => {
+          const $item = $stats(item);
+          const cols = $item.find('.col-4');
           
-          if (tableText.includes('Avg Points per Quarter') || tableText.includes('1st Q')) {
-            const rows = $table.find('tr');
-            rows.each((rowIndex, row) => {
-              const $row = $stats(row);
-              const cells = $row.find('td');
-              
-              if (cells.length >= 3) {
-                const homeValue = $stats(cells[0]).text().trim();
-                const label = $stats(cells[1]).text().trim();
-                const awayValue = $stats(cells[2]).text().trim();
-                
-                if (label.includes('1st Q')) {
-                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
-                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
-                  if (homePercent) statsData.avgPointsPerQuarter.home.q1Percent = parseFloat(homePercent[1]);
-                  if (awayPercent) statsData.avgPointsPerQuarter.away.q1Percent = parseFloat(awayPercent[1]);
-                } else if (label.includes('2nd Q')) {
-                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
-                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
-                  if (homePercent) statsData.avgPointsPerQuarter.home.q2Percent = parseFloat(homePercent[1]);
-                  if (awayPercent) statsData.avgPointsPerQuarter.away.q2Percent = parseFloat(awayPercent[1]);
-                } else if (label.includes('3rd Q')) {
-                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
-                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
-                  if (homePercent) statsData.avgPointsPerQuarter.home.q3Percent = parseFloat(homePercent[1]);
-                  if (awayPercent) statsData.avgPointsPerQuarter.away.q3Percent = parseFloat(awayPercent[1]);
-                } else if (label.includes('4th Q')) {
-                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
-                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
-                  if (homePercent) statsData.avgPointsPerQuarter.home.q4Percent = parseFloat(homePercent[1]);
-                  if (awayPercent) statsData.avgPointsPerQuarter.away.q4Percent = parseFloat(awayPercent[1]);
-                }
-              }
-            });
-          }
-          
-          if (tableText.includes('Quarter Stats') || tableText.includes('Won')) {
-            const rows = $table.find('tr');
-            rows.each((rowIndex, row) => {
-              const $row = $stats(row);
-              const cells = $row.find('td');
-              
-              if (cells.length >= 3) {
-                const homeValue = $stats(cells[0]).text().trim();
-                const label = $stats(cells[1]).text().trim();
-                const awayValue = $stats(cells[2]).text().trim();
-                
-                if (label.includes('Won')) {
-                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
-                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
-                  if (homePercent) statsData.quarterStats.home.wonPercent = parseFloat(homePercent[1]);
-                  if (awayPercent) statsData.quarterStats.away.wonPercent = parseFloat(awayPercent[1]);
-                } else if (label.includes('Tied')) {
-                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
-                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
-                  if (homePercent) statsData.quarterStats.home.tiedPercent = parseFloat(homePercent[1]);
-                  if (awayPercent) statsData.quarterStats.away.tiedPercent = parseFloat(awayPercent[1]);
-                } else if (label.includes('Lost')) {
-                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
-                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
-                  if (homePercent) statsData.quarterStats.home.lostPercent = parseFloat(homePercent[1]);
-                  if (awayPercent) statsData.quarterStats.away.lostPercent = parseFloat(awayPercent[1]);
-                }
-              }
-            });
-          }
-          
-          if (tableText.includes('Point Stats') || tableText.includes('Points Scored/Game')) {
-            const rows = $table.find('tr');
-            rows.each((rowIndex, row) => {
-              const $row = $stats(row);
-              const cells = $row.find('td');
-              
-              if (cells.length >= 3) {
-                const homeValue = $stats(cells[0]).text().trim();
-                const label = $stats(cells[1]).text().trim();
-                const awayValue = $stats(cells[2]).text().trim();
-                
-                if (label.includes('Points Scored/Game')) {
-                  const homePoints = parseFloat(homeValue);
-                  const awayPoints = parseFloat(awayValue);
-                  if (!isNaN(homePoints)) statsData.pointStats.home.pointsScoredPerGame = homePoints;
-                  if (!isNaN(awayPoints)) statsData.pointStats.away.pointsScoredPerGame = awayPoints;
-                } else if (label.includes('Points Received/Game')) {
-                  const homePoints = parseFloat(homeValue);
-                  const awayPoints = parseFloat(awayValue);
-                  if (!isNaN(homePoints)) statsData.pointStats.home.pointsReceivedPerGame = homePoints;
-                  if (!isNaN(awayPoints)) statsData.pointStats.away.pointsReceivedPerGame = awayPoints;
-                } else if (label.includes('Total Points/Game')) {
-                  const homePoints = parseFloat(homeValue);
-                  const awayPoints = parseFloat(awayValue);
-                  if (!isNaN(homePoints)) statsData.pointStats.home.totalPointsPerGame = homePoints;
-                  if (!isNaN(awayPoints)) statsData.pointStats.away.totalPointsPerGame = awayPoints;
-                }
-              }
-            });
-          }
-          
-          if (tableText.includes('Team Statistics') || tableText.includes('Wins')) {
-            const rows = $table.find('tr');
-            rows.each((rowIndex, row) => {
-              const $row = $stats(row);
-              const cells = $row.find('td');
-              
-              if (cells.length >= 3) {
-                const homeValue = $stats(cells[0]).text().trim();
-                const label = $stats(cells[1]).text().trim();
-                const awayValue = $stats(cells[2]).text().trim();
-                
-                if (label.includes('Wins') && !label.includes('Losses')) {
-                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
-                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
-                  if (homePercent) statsData.teamStats.home.winsPercent = parseFloat(homePercent[1]);
-                  if (awayPercent) statsData.teamStats.away.winsPercent = parseFloat(awayPercent[1]);
-                } else if (label.includes('Losses')) {
-                  const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
-                  const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
-                  if (homePercent) statsData.teamStats.home.lossesPercent = parseFloat(homePercent[1]);
-                  if (awayPercent) statsData.teamStats.away.lossesPercent = parseFloat(awayPercent[1]);
-                }
-              }
-            });
+          if (cols.length >= 3) {
+            const homeValue = $stats(cols[0]).text().trim();
+            const label = $stats(cols[1]).text().trim();
+            const awayValue = $stats(cols[2]).text().trim();
+            
+            if (label.includes('1st Q')) {
+              const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+              const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+              if (homePercent) statsData.avgPointsPerQuarter.home.q1Percent = parseFloat(homePercent[1]);
+              if (awayPercent) statsData.avgPointsPerQuarter.away.q1Percent = parseFloat(awayPercent[1]);
+            } else if (label.includes('2nd Q')) {
+              const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+              const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+              if (homePercent) statsData.avgPointsPerQuarter.home.q2Percent = parseFloat(homePercent[1]);
+              if (awayPercent) statsData.avgPointsPerQuarter.away.q2Percent = parseFloat(awayPercent[1]);
+            } else if (label.includes('3rd Q')) {
+              const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+              const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+              if (homePercent) statsData.avgPointsPerQuarter.home.q3Percent = parseFloat(homePercent[1]);
+              if (awayPercent) statsData.avgPointsPerQuarter.away.q3Percent = parseFloat(awayPercent[1]);
+            } else if (label.includes('4th Q')) {
+              const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+              const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+              if (homePercent) statsData.avgPointsPerQuarter.home.q4Percent = parseFloat(homePercent[1]);
+              if (awayPercent) statsData.avgPointsPerQuarter.away.q4Percent = parseFloat(awayPercent[1]);
+            }
+            
+            if (label.includes('Won')) {
+              const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+              const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+              if (homePercent) statsData.quarterStats.home.wonPercent = parseFloat(homePercent[1]);
+              if (awayPercent) statsData.quarterStats.away.wonPercent = parseFloat(awayPercent[1]);
+            } else if (label.includes('Tied')) {
+              const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+              const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+              if (homePercent) statsData.quarterStats.home.tiedPercent = parseFloat(homePercent[1]);
+              if (awayPercent) statsData.quarterStats.away.tiedPercent = parseFloat(awayPercent[1]);
+            } else if (label.includes('Lost')) {
+              const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+              const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+              if (homePercent) statsData.quarterStats.home.lostPercent = parseFloat(homePercent[1]);
+              if (awayPercent) statsData.quarterStats.away.lostPercent = parseFloat(awayPercent[1]);
+            }
+            
+            if (label.includes('Points Scored/Game')) {
+              const homePoints = parseFloat(homeValue);
+              const awayPoints = parseFloat(awayValue);
+              if (!isNaN(homePoints)) statsData.pointStats.home.pointsScoredPerGame = homePoints;
+              if (!isNaN(awayPoints)) statsData.pointStats.away.pointsScoredPerGame = awayPoints;
+            } else if (label.includes('Points Received/Game')) {
+              const homePoints = parseFloat(homeValue);
+              const awayPoints = parseFloat(awayValue);
+              if (!isNaN(homePoints)) statsData.pointStats.home.pointsReceivedPerGame = homePoints;
+              if (!isNaN(awayPoints)) statsData.pointStats.away.pointsReceivedPerGame = awayPoints;
+            } else if (label.includes('Total Points/Game')) {
+              const homePoints = parseFloat(homeValue);
+              const awayPoints = parseFloat(awayValue);
+              if (!isNaN(homePoints)) statsData.pointStats.home.totalPointsPerGame = homePoints;
+              if (!isNaN(awayPoints)) statsData.pointStats.away.totalPointsPerGame = awayPoints;
+            }
+            
+            if (label === 'Wins') {
+              const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+              const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+              if (homePercent) statsData.teamStats.home.winsPercent = parseFloat(homePercent[1]);
+              if (awayPercent) statsData.teamStats.away.winsPercent = parseFloat(awayPercent[1]);
+            } else if (label === 'Losses') {
+              const homePercent = homeValue.match(/(\d+\.?\d*)\s*%/);
+              const awayPercent = awayValue.match(/(\d+\.?\d*)\s*%/);
+              if (homePercent) statsData.teamStats.home.lossesPercent = parseFloat(homePercent[1]);
+              if (awayPercent) statsData.teamStats.away.lossesPercent = parseFloat(awayPercent[1]);
+            }
           }
         });
       }
