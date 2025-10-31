@@ -37,6 +37,9 @@ export interface IStorage {
   getOrCreateTeamId(teamName: string): Promise<number>;
   getOrCreateLeagueId(leagueName: string): Promise<number>;
   getOrCreateCountryId(countryName: string): Promise<number>;
+  getTeamById(id: number): Promise<Team | undefined>;
+  getLeagueById(id: number): Promise<League | undefined>;
+  getCountryById(id: number): Promise<Country | undefined>;
   
   // ML Model methods
   getAllModels(): Promise<ModelMetadata[]>;
@@ -271,6 +274,30 @@ export class DatabaseStorage implements IStorage {
       }
       throw error;
     }
+  }
+
+  async getTeamById(id: number): Promise<Team | undefined> {
+    const [team] = await this.mappingDb
+      .select()
+      .from(teams)
+      .where(eq(teams.id, id));
+    return team || undefined;
+  }
+
+  async getLeagueById(id: number): Promise<League | undefined> {
+    const [league] = await this.mappingDb
+      .select()
+      .from(leagues)
+      .where(eq(leagues.id, id));
+    return league || undefined;
+  }
+
+  async getCountryById(id: number): Promise<Country | undefined> {
+    const [country] = await this.mappingDb
+      .select()
+      .from(countries)
+      .where(eq(countries.id, id));
+    return country || undefined;
   }
 
   // ML Model methods

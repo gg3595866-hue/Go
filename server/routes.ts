@@ -73,7 +73,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/match-stats/tester", async (req, res) => {
     try {
       const stats = await testerStorage.getAllMatchStats();
-      res.json(stats);
+      
+      // Enrich stats with team names
+      const enrichedStats = await Promise.all(
+        stats.map(async (stat) => {
+          const homeTeam = await testerStorage.getTeamById(stat.homeTeamId);
+          const awayTeam = await testerStorage.getTeamById(stat.awayTeamId);
+          
+          return {
+            ...stat,
+            homeTeamName: homeTeam?.name || 'Unknown',
+            awayTeamName: awayTeam?.name || 'Unknown'
+          };
+        })
+      );
+      
+      res.json(enrichedStats);
     } catch (error) {
       console.error("Error fetching tester match stats:", error);
       res.status(500).json({ error: "Failed to fetch tester match statistics" });

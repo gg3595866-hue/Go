@@ -3,9 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Brain } from "lucide-react";
+import { Brain, Search } from "lucide-react";
+import { useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,12 +21,28 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { MatchStats, MatchPrediction } from "@shared/schema";
 
+type EnrichedMatchStats = MatchStats & {
+  homeTeamName: string;
+  awayTeamName: string;
+};
+
 export default function TesterPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [searchQuery, setSearchQuery] = useState("");
   
-  const { data: stats, isLoading } = useQuery<MatchStats[]>({
+  const { data: stats, isLoading } = useQuery<EnrichedMatchStats[]>({
     queryKey: ['/api/match-stats/tester'],
+  });
+
+  // Filter stats based on search query
+  const filteredStats = stats?.filter((stat) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      stat.homeTeamName.toLowerCase().includes(query) ||
+      stat.awayTeamName.toLowerCase().includes(query)
+    );
   });
 
   const { data: predictions } = useQuery<MatchPrediction[]>({
@@ -158,6 +176,24 @@ export default function TesterPage() {
                 </p>
               </div>
             )}
+            <div className="mt-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <Input
+                  type="text"
+                  placeholder="Search by team name..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                  data-testid="input-search-teams"
+                />
+              </div>
+              {searchQuery && filteredStats && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  Showing {filteredStats.length} of {stats?.length || 0} match(es)
+                </p>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -165,6 +201,8 @@ export default function TesterPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="min-w-[60px]">ID</TableHead>
+                    <TableHead className="min-w-[150px]">Home Team</TableHead>
+                    <TableHead className="min-w-[150px]">Away Team</TableHead>
                     <TableHead className="min-w-[100px]">Home Team ID</TableHead>
                     <TableHead className="min-w-[100px]">Away Team ID</TableHead>
                     <TableHead className="min-w-[100px]">League ID</TableHead>
@@ -217,17 +255,19 @@ export default function TesterPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {!stats || stats.length === 0 ? (
+                  {!filteredStats || filteredStats.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={50} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
-                        No data available. Add match statistics to see them here.
+                      <TableCell colSpan={52} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
+                        {searchQuery ? `No matches found for "${searchQuery}"` : "No data available. Add match statistics to see them here."}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    stats.map((stat) => {
+                    filteredStats.map((stat) => {
                       const prediction = predictions?.find(p => p.matchStatsId === stat.id);
                       return <TableRow key={stat.id} data-testid={`row-stat-${stat.id}`}>
                         <TableCell>{stat.id}</TableCell>
+                        <TableCell className="font-medium capitalize">{stat.homeTeamName}</TableCell>
+                        <TableCell className="font-medium capitalize">{stat.awayTeamName}</TableCell>
                         <TableCell>{stat.homeTeamId}</TableCell>
                         <TableCell>{stat.awayTeamId}</TableCell>
                         <TableCell>{stat.leagueId}</TableCell>
@@ -286,18 +326,9 @@ export default function TesterPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1">
-                            <div>
-                              {stat.htHomeScore !== null && stat.htAwayScore !== null 
-                                ? `HT ${stat.htHomeScore}-${stat.htAwayScore}` 
-                                : '-'}
-                            </div>
-                            {prediction && (
-                              <div className="text-xs text-primary" data-testid={`pred-ht-score-${stat.id}`}>
-                                Pred: --
-                              </div>
-                            )}
-                          </div>
+                          {stat.htHomeScore !== null && stat.htAwayScore !== null 
+                            ? `HT ${stat.htHomeScore}-${stat.htAwayScore}` 
+                            : '-'}
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1">
