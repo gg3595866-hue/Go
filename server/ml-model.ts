@@ -366,9 +366,9 @@ export async function trainModel(
   
   // Extract training metrics
   const lossHistory = history.history.loss as number[];
-  const ftAccHistory = history.history.ft_result_accuracy as number[];
+  const ftAccHistory = history.history.ft_result_acc as number[];
   const valLossHistory = history.history.val_loss as number[];
-  const valFtAccHistory = history.history.val_ft_result_accuracy as number[];
+  const valFtAccHistory = history.history.val_ft_result_acc as number[];
   
   const trainingResult: TrainingResult = {
     history: {
