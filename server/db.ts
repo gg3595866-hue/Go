@@ -88,6 +88,40 @@ databaseSqlite.exec(`
     u_o_2_5_goals INTEGER,
     created_at INTEGER DEFAULT (unixepoch())
   );
+
+  CREATE TABLE IF NOT EXISTS model_metadata (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_name TEXT NOT NULL,
+    version TEXT NOT NULL,
+    architecture TEXT NOT NULL,
+    training_accuracy REAL,
+    validation_accuracy REAL,
+    loss REAL,
+    training_date INTEGER NOT NULL,
+    total_epochs INTEGER NOT NULL,
+    total_samples INTEGER NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 0,
+    model_path TEXT,
+    created_at INTEGER DEFAULT (unixepoch())
+  );
+
+  CREATE TABLE IF NOT EXISTS match_predictions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    match_stats_id INTEGER NOT NULL,
+    model_id INTEGER NOT NULL,
+    pred_home_win_prob REAL NOT NULL,
+    pred_draw_prob REAL NOT NULL,
+    pred_away_win_prob REAL NOT NULL,
+    pred_result TEXT NOT NULL,
+    pred_home_score REAL NOT NULL,
+    pred_away_score REAL NOT NULL,
+    pred_btts_prob REAL NOT NULL,
+    pred_btts INTEGER NOT NULL,
+    pred_over_2_5_prob REAL NOT NULL,
+    pred_over_2_5 INTEGER NOT NULL,
+    confidence REAL NOT NULL,
+    created_at INTEGER DEFAULT (unixepoch())
+  );
 `);
 
 testerSqlite.exec(`
@@ -149,6 +183,24 @@ testerSqlite.exec(`
     ft_result TEXT,
     btts_yes_no INTEGER,
     u_o_2_5_goals INTEGER,
+    created_at INTEGER DEFAULT (unixepoch())
+  );
+
+  CREATE TABLE IF NOT EXISTS match_predictions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    match_stats_id INTEGER NOT NULL,
+    model_id INTEGER NOT NULL,
+    pred_home_win_prob REAL NOT NULL,
+    pred_draw_prob REAL NOT NULL,
+    pred_away_win_prob REAL NOT NULL,
+    pred_result TEXT NOT NULL,
+    pred_home_score REAL NOT NULL,
+    pred_away_score REAL NOT NULL,
+    pred_btts_prob REAL NOT NULL,
+    pred_btts INTEGER NOT NULL,
+    pred_over_2_5_prob REAL NOT NULL,
+    pred_over_2_5 INTEGER NOT NULL,
+    confidence REAL NOT NULL,
     created_at INTEGER DEFAULT (unixepoch())
   );
 `);
