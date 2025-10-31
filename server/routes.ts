@@ -175,11 +175,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/match-stats/tester/clear", async (req, res) => {
     try {
+      // Clear predictions first (they reference match_stats)
+      await testerStorage.deleteAllPredictions();
+      // Then clear match stats
       await testerStorage.deleteAllMatchStats();
       res.status(204).send();
     } catch (error) {
-      console.error("Error clearing tester match stats:", error);
-      res.status(500).json({ error: "Failed to clear tester match statistics" });
+      console.error("Error clearing tester data:", error);
+      res.status(500).json({ error: "Failed to clear tester data" });
     }
   });
 

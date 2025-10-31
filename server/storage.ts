@@ -52,6 +52,7 @@ export interface IStorage {
   createPrediction(prediction: InsertMatchPrediction): Promise<MatchPrediction>;
   getPredictionsByMatchStatsId(matchStatsId: number): Promise<MatchPrediction[]>;
   getAllPredictions(): Promise<MatchPrediction[]>;
+  deleteAllPredictions(): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -367,6 +368,16 @@ export class DatabaseStorage implements IStorage {
 
   async getAllPredictions(): Promise<MatchPrediction[]> {
     return this.db.select().from(matchPredictions).orderBy(desc(matchPredictions.createdAt));
+  }
+
+  async deleteAllPredictions(): Promise<boolean> {
+    try {
+      await this.db.delete(matchPredictions);
+      return true;
+    } catch (error) {
+      console.error('Error deleting all predictions:', error);
+      return false;
+    }
   }
 }
 
