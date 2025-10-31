@@ -187,3 +187,118 @@ export function generateCountryId(competitionName: string): number {
   // Default hash if no match found
   return Math.abs(competitionName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % 100;
 }
+
+// Extract basketball features for database upload (with target variables)
+export function extractBasketballFeaturesForDatabase(
+  basketballMatchDetails: any,
+  homeTeamId: number,
+  awayTeamId: number,
+  leagueId: number,
+  countryId: number
+): any {
+  const { pointStats, quarterStats, teamStats, score, quarterScores } = basketballMatchDetails;
+
+  // Calculate target variables from actual scores
+  const ftHomePoints = score.home ?? null;
+  const ftAwayPoints = score.away ?? null;
+
+  let ftResult: string | null = null;
+  if (ftHomePoints !== null && ftAwayPoints !== null) {
+    if (ftHomePoints > ftAwayPoints) ftResult = '1';
+    else if (ftHomePoints < ftAwayPoints) ftResult = '2';
+    else ftResult = 'X';
+  }
+
+  // Extract stats with defaults
+  const homePointsScoredPerGame = pointStats?.home?.pointsScoredPerGame ?? 0;
+  const awayPointsScoredPerGame = pointStats?.away?.pointsScoredPerGame ?? 0;
+  const homePointsReceivedPerGame = pointStats?.home?.pointsReceivedPerGame ?? 0;
+  const awayPointsReceivedPerGame = pointStats?.away?.pointsReceivedPerGame ?? 0;
+
+  // Win/Tie/Loss records based on percentages
+  const homeWinsPercent = teamStats?.home?.winsPercent ?? 50;
+  const awayWinsPercent = teamStats?.away?.winsPercent ?? 50;
+  const homeLossesPercent = teamStats?.home?.lossesPercent ?? 50;
+  const awayLossesPercent = teamStats?.away?.lossesPercent ?? 50;
+
+  // Estimate counts from percentages (assuming 10 recent games)
+  const gamesPlayed = 10;
+  const homeWon = Math.round((homeWinsPercent / 100) * gamesPlayed);
+  const awayWon = Math.round((awayWinsPercent / 100) * gamesPlayed);
+  const homeLost = Math.round((homeLossesPercent / 100) * gamesPlayed);
+  const awayLost = Math.round((awayLossesPercent / 100) * gamesPlayed);
+  
+  // Basketball typically has very few ties
+  const homeTied = gamesPlayed - homeWon - homeLost;
+  const awayTied = gamesPlayed - awayWon - awayLost;
+
+  // Average points per quarter from percentages
+  const totalAvgHome = homePointsScoredPerGame || 100;
+  const totalAvgAway = awayPointsScoredPerGame || 100;
+
+  const homeAvgPointsQ1 = totalAvgHome * (basketballMatchDetails.avgPointsPerQuarter?.home?.q1Percent ?? 25) / 100;
+  const awayAvgPointsQ1 = totalAvgAway * (basketballMatchDetails.avgPointsPerQuarter?.away?.q1Percent ?? 25) / 100;
+  const homeAvgPointsQ2 = totalAvgHome * (basketballMatchDetails.avgPointsPerQuarter?.home?.q2Percent ?? 25) / 100;
+  const awayAvgPointsQ2 = totalAvgAway * (basketballMatchDetails.avgPointsPerQuarter?.away?.q2Percent ?? 25) / 100;
+  const homeAvgPointsQ3 = totalAvgHome * (basketballMatchDetails.avgPointsPerQuarter?.home?.q3Percent ?? 25) / 100;
+  const awayAvgPointsQ3 = totalAvgAway * (basketballMatchDetails.avgPointsPerQuarter?.away?.q3Percent ?? 25) / 100;
+
+  return {
+    homeTeamId,
+    awayTeamId,
+    leagueId,
+    countryId,
+
+    // Points per game
+    homePointsScoredPerGame,
+    awayPointsScoredPerGame,
+    homePointsReceivedPerGame,
+    awayPointsReceivedPerGame,
+
+    // Win/Tie/Loss records
+    homeWon: Math.max(0, homeWon),
+    awayWon: Math.max(0, awayWon),
+    homeTied: Math.max(0, homeTied),
+    awayTied: Math.max(0, awayTied),
+    homeLost: Math.max(0, homeLost),
+    awayLost: Math.max(0, awayLost),
+
+    // Average points per quarter
+    homeAvgPointsQ1,
+    awayAvgPointsQ1,
+    homeAvgPointsQ2,
+    awayAvgPointsQ2,
+    homeAvgPointsQ3,
+    awayAvgPointsQ3,
+
+    // Target variables
+    ftHomePoints,
+    ftAwayPoints,
+    ftResult,
+  };
+}
+
+// Extract basketball features for tester upload (without target variables)
+export function extractBasketballFeaturesForTester(
+  basketballMatchDetails: any,
+  homeTeamId: number,
+  awayTeamId: number,
+  leagueId: number,
+  countryId: number
+): any {
+  const features = extractBasketballFeaturesForDatabase(
+    basketballMatchDetails,
+    homeTeamId,
+    awayTeamId,
+    leagueId,
+    countryId
+  );
+
+  // Remove target variables for tester data
+  return {
+    ...features,
+    ftHomePoints: null,
+    ftAwayPoints: null,
+    ftResult: null,
+  };
+}

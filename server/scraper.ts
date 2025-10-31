@@ -2135,3 +2135,304 @@ export async function scrapeLeagueMatches(
   }
 }
 
+/**
+ * Scrape all basketball matches for a specific league and year
+ * Similar to scrapeLeagueMatches but for basketball leagues
+ */
+export async function scrapeBasketballLeagueMatches(
+  competitionName: string,
+  year: number,
+  onProgress?: (message: string, matchCount: number) => void
+): Promise<Match[]> {
+  try {
+    const cleanedName = competitionName.replace(/\s+\d{4}\/\d{4}$/g, '').trim();
+    
+    // Get all possible slug variations
+    const slugVariations = generateSlugVariations(cleanedName);
+    
+    // Also check if we have a manual mapping or cached slug
+    const primarySlug = extractLeagueSlug(competitionName);
+    
+    // Ensure primary slug is first in the list
+    const slugsToTry = [primarySlug, ...slugVariations.filter(s => s !== primarySlug)];
+    
+    console.log(`Trying ${slugsToTry.length} URL variations for basketball "${competitionName}":`, slugsToTry);
+    
+    let successfulSlug: string | null = null;
+    let html: string | null = null;
+    
+    // Try each slug variation
+    for (const slug of slugsToTry) {
+      const seasonFormat = `${year}-${year + 1}`;
+      const baseUrl = `https://sportstats365.com/basketball/${slug}/${seasonFormat}`;
+      
+      console.log(`Trying basketball URL: ${baseUrl}`);
+      onProgress?.(`Trying ${competitionName} at ${slug}...`, 0);
+      
+      const result = await tryFetchLeaguePage(baseUrl);
+      
+      if (result.success && result.html) {
+        console.log(`✓ Success! Found basketball league at: ${baseUrl}`);
+        successfulSlug = slug;
+        html = result.html;
+        
+        // Cache this successful slug for future use
+        discoveredLeagueSlugs.set(cleanedName, slug);
+        break;
+      } else {
+        console.log(`✗ Failed: ${baseUrl} - ${result.error}`);
+      }
+    }
+    
+    if (!successfulSlug || !html) {
+      throw new Error(`Could not find valid URL for basketball ${competitionName}. Tried: ${slugsToTry.join(', ')}`);
+    }
+    
+    const seasonFormat = `${year}-${year + 1}`;
+    const baseUrl = `https://sportstats365.com/basketball/${successfulSlug}/${seasonFormat}`;
+    
+    console.log(`Starting basketball league scrape for ${competitionName} ${seasonFormat}`);
+    console.log(`Using URL: ${baseUrl}`);
+    onProgress?.(`Fetching basketball matches for ${competitionName} ${seasonFormat}...`, 0);
+    
+    const $basePage = cheerio.load(html);
+    const allMatches: Match[] = [];
+    let matchId = 0;
+    
+    // Helper function to parse basketball matches from HTML
+    const parseBasketballMatches = ($doc: cheerio.CheerioAPI): Match[] => {
+      const matches: Match[] = [];
+      let currentCompetition = competitionName;
+      
+      // Find all match items in the list
+      $doc('.list-group-item').each((_, element) => {
+        const $item = $doc(element);
+        
+        // Skip if this is a header/separator
+        if ($item.hasClass('text-muted') && $item.hasClass('border-0')) {
+          return;
+        }
+        
+        // This should be a match item
+        const matchLink = $item.find('a[href*="/compare/"]').first();
+        if (matchLink.length === 0) return;
+        
+        // Extract match URL
+        const matchUrl = matchLink.attr('href');
+        const fullMatchUrl = matchUrl ? `https://sportstats365.com${matchUrl}` : undefined;
+        
+        try {
+          // Extract time/status
+          const eventTime = $item.find('.event-time small').text().trim();
+          let time = '';
+          let status: 'FT' | 'LIVE' | 'SCHEDULED' | 'POSTPONED' = 'SCHEDULED';
+          
+          if (eventTime === 'FT' || eventTime.includes('FT')) {
+            status = 'FT';
+            time = 'FT';
+          } else if (eventTime.match(/^\d{1,2}:\d{2}$/)) {
+            time = eventTime;
+            status = 'SCHEDULED';
+          } else {
+            time = eventTime;
+          }
+          
+          // Extract teams
+          const teamSpans = matchLink.find('.event-team');
+          if (teamSpans.length < 2) return;
+          
+          const homeTeamSpan = $doc(teamSpans[0]);
+          const awayTeamSpan = $doc(teamSpans[1]);
+          
+          const homeTeamImg = homeTeamSpan.find('img');
+          const awayTeamImg = awayTeamSpan.find('img');
+          
+          const homeTeam = homeTeamImg.attr('alt')?.trim() || homeTeamSpan.text().trim();
+          const awayTeam = awayTeamImg.attr('alt')?.trim() || awayTeamSpan.text().trim();
+          const homeTeamLogo = homeTeamImg.attr('src');
+          const awayTeamLogo = awayTeamImg.attr('src');
+          
+          if (!homeTeam || !awayTeam) return;
+          
+          // Extract scores for basketball
+          const scoreDiv = $item.find('.score-list');
+          let homeScore: number | null = null;
+          let awayScore: number | null = null;
+          
+          if (scoreDiv.length > 0) {
+            const scoreText = scoreDiv.text();
+            
+            if (scoreText && !scoreText.trim().match(/^-\s*-$/)) {
+              const mainScores = scoreDiv.find('.fw-bold, .fw-strong');
+              if (mainScores.length >= 2) {
+                const homeScoreText = $doc(mainScores[0]).text().trim();
+                const awayScoreText = $doc(mainScores[1]).text().trim();
+                
+                if (homeScoreText && !isNaN(parseInt(homeScoreText))) {
+                  homeScore = parseInt(homeScoreText);
+                }
+                if (awayScoreText && !isNaN(parseInt(awayScoreText))) {
+                  awayScore = parseInt(awayScoreText);
+                }
+              }
+            }
+          }
+          
+          matches.push({
+            id: matchId++,
+            competition: currentCompetition,
+            competitionLogo: '',
+            homeTeam,
+            awayTeam,
+            homeTeamLogo,
+            awayTeamLogo,
+            homeScore,
+            awayScore,
+            time,
+            status,
+            matchUrl: fullMatchUrl,
+          });
+        } catch (error) {
+          console.warn('Failed to parse basketball match:', error);
+        }
+      });
+      
+      return matches;
+    };
+    
+    // Try to find the matches tab button
+    const matchesButton = $basePage('button[hx-get*="/matches"]').first();
+    const matchesUrl = matchesButton.attr('hx-get');
+    
+    if (!matchesUrl) {
+      console.log('No matches tab found, using base page...');
+      const initialMatches = parseBasketballMatches($basePage);
+      return initialMatches;
+    }
+    
+    const fullMatchesUrl = `https://sportstats365.com${matchesUrl}`;
+    console.log(`Found basketball matches tab: ${fullMatchesUrl}`);
+    
+    // Fetch the initial matches page
+    const matchesHtml: string = await new Promise((resolve, reject) => {
+      cloudscraper.get({
+        uri: fullMatchesUrl,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'HX-Request': 'true',
+          'HX-Current-URL': baseUrl,
+          'Referer': baseUrl,
+        },
+      }, (error: any, response: any, body: string) => {
+        if (error) {
+          console.warn(`Failed to fetch basketball matches URL:`, error.message);
+          resolve('');
+        } else {
+          resolve(body);
+        }
+      });
+    });
+    
+    if (!matchesHtml) {
+      console.log(`Failed to fetch basketball matches, using base page fallback...`);
+      const initialMatches = parseBasketballMatches($basePage);
+      allMatches.push(...initialMatches);
+      return allMatches;
+    }
+    
+    const $initial = cheerio.load(matchesHtml);
+    
+    // Find the current round and determine the range
+    let currentRound = 1;
+    let maxRound = 34; // Default for basketball leagues
+    
+    // Extract current round from header
+    const headerText = $initial('.card-header').first().text();
+    const weekMatch = headerText.match(/Week (\d+)/i) || headerText.match(/Round (\d+)/i);
+    if (weekMatch) {
+      currentRound = parseInt(weekMatch[1]);
+      console.log(`Current round from header: ${currentRound}`);
+    }
+    
+    // Find navigation buttons to determine round range
+    $initial('button[name="round"]').each((_, element) => {
+      const value = $initial(element).attr('value');
+      if (value) {
+        const roundNum = parseInt(value);
+        if (!isNaN(roundNum)) {
+          maxRound = Math.max(maxRound, roundNum);
+        }
+      }
+    });
+    
+    console.log(`Determined basketball round range: 1 to ${maxRound}`);
+    
+    // Now iterate through all rounds from 1 to maxRound
+    for (let round = 1; round <= maxRound; round++) {
+      try {
+        const separator = fullMatchesUrl.includes('?') ? '&' : '?';
+        const roundUrl = `${fullMatchesUrl}${separator}round=${round}`;
+        console.log(`Fetching basketball round ${round}/${maxRound}: ${roundUrl}`);
+        onProgress?.(`Fetching round ${round}/${maxRound}... Found ${allMatches.length} matches so far`, allMatches.length);
+        
+        const roundHtml: string = await new Promise((resolve, reject) => {
+          cloudscraper.get({
+            uri: roundUrl,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'HX-Request': 'true',
+              'HX-Current-URL': baseUrl,
+              'Referer': baseUrl,
+            },
+          }, (error: any, response: any, body: string) => {
+            if (error) {
+              console.warn(`Failed to fetch basketball round ${round}:`, error.message);
+              resolve('');
+            } else {
+              resolve(body);
+            }
+          });
+        });
+        
+        if (roundHtml) {
+          const $round = cheerio.load(roundHtml);
+          const roundMatches = parseBasketballMatches($round);
+          
+          // Avoid duplicates by checking if we've seen these teams
+          for (const match of roundMatches) {
+            const isDuplicate = allMatches.some(
+              m => m.homeTeam === match.homeTeam && 
+                   m.awayTeam === match.awayTeam &&
+                   m.homeScore === match.homeScore &&
+                   m.awayScore === match.awayScore
+            );
+            
+            if (!isDuplicate) {
+              allMatches.push(match);
+            }
+          }
+          
+          console.log(`Basketball Round ${round}: Found ${roundMatches.length} matches (${allMatches.length} total)`);
+        }
+        
+        // Add delay between requests to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 800));
+      } catch (error) {
+        console.error(`Error fetching basketball round ${round}:`, error);
+      }
+    }
+    
+    console.log(`Successfully scraped ${allMatches.length} total basketball matches for ${competitionName} ${seasonFormat}`);
+    onProgress?.(`Completed! Found ${allMatches.length} basketball matches for ${competitionName} ${seasonFormat}`, allMatches.length);
+    
+    return allMatches;
+  } catch (error) {
+    console.error(`Failed to scrape basketball league matches for ${competitionName}:`, error);
+    throw error;
+  }
+}
+
