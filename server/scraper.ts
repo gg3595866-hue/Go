@@ -1021,3 +1021,294 @@ export async function scrapeLeagueStats(competitionName: string): Promise<League
     };
   }
 }
+
+/**
+ * Extract league slug from competition name
+ * Converts "Copa Libertadores" to "copa-libertadores"
+ */
+export function extractLeagueSlug(competitionName: string): string {
+  return competitionName
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * Get available years for a specific league
+ */
+export async function getLeagueYears(competitionName: string): Promise<number[]> {
+  try {
+    const leagueSlug = extractLeagueSlug(competitionName);
+    const url = `https://sportstats365.com/football/${leagueSlug}`;
+    
+    console.log(`Fetching available years from: ${url}`);
+    
+    const html: string = await new Promise((resolve, reject) => {
+      cloudscraper.get({
+        uri: url,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      }, (error: any, response: any, body: string) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(body);
+        }
+      });
+    });
+    
+    const $ = cheerio.load(html);
+    const years: number[] = [];
+    
+    // Find all year links in the dropdown
+    $('a[href*="/' + leagueSlug + '/"]').each((_, element) => {
+      const href = $(element).attr('href');
+      if (href) {
+        const yearMatch = href.match(/\/(\d{4})$/);
+        if (yearMatch) {
+          const year = parseInt(yearMatch[1]);
+          if (year >= 2010 && year <= 2030 && !years.includes(year)) {
+            years.push(year);
+          }
+        }
+      }
+    });
+    
+    // Sort years in descending order (newest first)
+    years.sort((a, b) => b - a);
+    
+    console.log(`Found ${years.length} years for ${competitionName}:`, years);
+    return years;
+  } catch (error) {
+    console.error(`Failed to get years for ${competitionName}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Scrape all matches for a specific league and year
+ * Navigates through all pagination pages to collect complete historical data
+ */
+export async function scrapeLeagueMatches(
+  competitionName: string,
+  year: number,
+  onProgress?: (message: string, matchCount: number) => void
+): Promise<Match[]> {
+  try {
+    const leagueSlug = extractLeagueSlug(competitionName);
+    const baseUrl = `https://sportstats365.com/football/${leagueSlug}/${year}`;
+    
+    console.log(`Starting league scrape for ${competitionName} ${year}`);
+    onProgress?.(`Fetching matches for ${competitionName} ${year}...`, 0);
+    
+    // First, fetch the main page to get the initial matches
+    const html: string = await new Promise((resolve, reject) => {
+      cloudscraper.get({
+        uri: baseUrl,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      }, (error: any, response: any, body: string) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(body);
+        }
+      });
+    });
+    
+    const $ = cheerio.load(html);
+    const allMatches: Match[] = [];
+    let matchId = 0;
+    
+    // Parse matches from the main HTML
+    const parseMatches = ($doc: cheerio.CheerioAPI) => {
+      const matches: Match[] = [];
+      
+      // Find all match items in the list
+      $doc('.list-group-item').each((_, element) => {
+        const $item = $doc(element);
+        
+        // Look for date and time
+        const dateTimeElem = $item.find('small.text-muted').first();
+        if (dateTimeElem.length === 0) return;
+        
+        const dateTimeText = dateTimeElem.text().trim();
+        const dateMatch = dateTimeText.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+        const timeMatch = dateTimeText.match(/(\d{1,2}):(\d{2})/);
+        
+        if (!dateMatch) return;
+        
+        let matchDate = '';
+        let time = '';
+        
+        if (dateMatch) {
+          const month = dateMatch[1].padStart(2, '0');
+          const day = dateMatch[2].padStart(2, '0');
+          let fullYear = dateMatch[3];
+          
+          // Convert 2-digit year to 4-digit
+          if (fullYear.length === 2) {
+            fullYear = '20' + fullYear;
+          }
+          
+          matchDate = `${fullYear}-${month}-${day}`;
+        }
+        
+        if (timeMatch) {
+          time = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+        }
+        
+        // Extract teams
+        const teamLinks = $item.find('a.text-primary');
+        if (teamLinks.length < 2) return;
+        
+        const homeTeam = $doc(teamLinks[0]).text().trim();
+        const awayTeam = $doc(teamLinks[1]).text().trim();
+        
+        if (!homeTeam || !awayTeam) return;
+        
+        // Extract match URL
+        const matchUrl = $doc(teamLinks[0]).attr('href');
+        const fullMatchUrl = matchUrl ? `https://sportstats365.com${matchUrl}` : undefined;
+        
+        // Extract scores
+        const scoreText = $item.find('span').filter((_, el) => {
+          const text = $doc(el).text();
+          return /\d+\s*[:–-]\s*\d+/.test(text);
+        }).first().text().trim();
+        
+        let homeScore: number | null = null;
+        let awayScore: number | null = null;
+        let status: 'FT' | 'LIVE' | 'SCHEDULED' | 'POSTPONED' = 'SCHEDULED';
+        
+        const scoreMatch = scoreText.match(/(\d+)\s*[:–-]\s*(\d+)/);
+        if (scoreMatch) {
+          homeScore = parseInt(scoreMatch[1]);
+          awayScore = parseInt(scoreMatch[2]);
+          status = 'FT';
+        }
+        
+        // Extract odds
+        let odds;
+        const oddsTexts: string[] = [];
+        $item.find('.badge-light, small').each((_, el) => {
+          const text = $doc(el).text().trim();
+          const num = parseFloat(text);
+          if (!isNaN(num) && num > 1.0 && num < 100) {
+            oddsTexts.push(text);
+          }
+        });
+        
+        if (oddsTexts.length >= 3) {
+          const homeOdds = parseFloat(oddsTexts[0]);
+          const drawOdds = parseFloat(oddsTexts[1]);
+          const awayOdds = parseFloat(oddsTexts[2]);
+          
+          if (!isNaN(homeOdds) && !isNaN(drawOdds) && !isNaN(awayOdds)) {
+            odds = {
+              home: homeOdds,
+              draw: drawOdds,
+              away: awayOdds,
+            };
+          }
+        }
+        
+        matches.push({
+          id: `match-${matchId++}`,
+          matchUrl: fullMatchUrl,
+          homeTeam: homeTeam.replace(/\s+$/, '').replace(/\s{2,}/g, ' '),
+          awayTeam: awayTeam.replace(/\s+$/, '').replace(/\s{2,}/g, ' '),
+          homeScore,
+          awayScore,
+          homeHalfScore: null,
+          awayHalfScore: null,
+          status,
+          time: time || matchDate,
+          competition: competitionName,
+          competitionLogo: undefined,
+          odds,
+        });
+      });
+      
+      return matches;
+    };
+    
+    // Parse initial matches
+    const initialMatches = parseMatches($);
+    allMatches.push(...initialMatches);
+    
+    console.log(`Found ${initialMatches.length} matches on main page`);
+    onProgress?.(`Found ${allMatches.length} matches so far...`, allMatches.length);
+    
+    // Look for pagination buttons with hx-get attributes
+    const paginationUrls: string[] = [];
+    $('button[hx-get], a[hx-get]').each((_, element) => {
+      const hxGet = $(element).attr('hx-get');
+      if (hxGet && hxGet.includes(leagueSlug) && hxGet.includes(year.toString())) {
+        if (!paginationUrls.includes(hxGet)) {
+          paginationUrls.push(hxGet);
+        }
+      }
+    });
+    
+    console.log(`Found ${paginationUrls.length} pagination URLs`);
+    
+    // Fetch each pagination page
+    for (const paginationUrl of paginationUrls) {
+      try {
+        const fullUrl = `https://sportstats365.com${paginationUrl}`;
+        console.log(`Fetching pagination page: ${fullUrl}`);
+        
+        const pageHtml: string = await new Promise((resolve, reject) => {
+          cloudscraper.get({
+            uri: fullUrl,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'HX-Request': 'true',
+              'HX-Current-URL': baseUrl,
+              'Referer': baseUrl,
+            },
+          }, (error: any, response: any, body: string) => {
+            if (error) {
+              console.warn(`Failed to fetch ${fullUrl}:`, error.message);
+              resolve('');
+            } else {
+              resolve(body);
+            }
+          });
+        });
+        
+        if (pageHtml) {
+          const $page = cheerio.load(pageHtml);
+          const pageMatches = parseMatches($page);
+          allMatches.push(...pageMatches);
+          console.log(`Found ${pageMatches.length} matches on pagination page`);
+          onProgress?.(`Found ${allMatches.length} matches so far...`, allMatches.length);
+        }
+        
+        // Add delay between requests to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error(`Error fetching pagination page ${paginationUrl}:`, error);
+      }
+    }
+    
+    console.log(`Successfully scraped ${allMatches.length} total matches for ${competitionName} ${year}`);
+    onProgress?.(`Completed! Found ${allMatches.length} matches for ${competitionName} ${year}`, allMatches.length);
+    
+    return allMatches;
+  } catch (error) {
+    console.error(`Failed to scrape league matches for ${competitionName} ${year}:`, error);
+    throw error;
+  }
+}

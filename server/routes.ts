@@ -430,6 +430,166 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // League-Based Bulk Upload (Database only, for training data)
+  app.post("/api/bulk-upload/league", async (req, res) => {
+    const { competition, year } = req.body;
+
+    if (!competition || !year) {
+      return res.status(400).json({ error: "Competition name and year are required" });
+    }
+
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const sendEvent = (data: any) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      sendEvent({
+        status: 'starting',
+        message: `Fetching matches for ${competition} ${year}...`,
+        totalMatches: 0,
+        processed: 0,
+        stored: 0,
+      });
+
+      // Scrape all matches for the league and year
+      const { scrapeLeagueMatches } = await import('./scraper');
+      const matches = await scrapeLeagueMatches(
+        competition,
+        year,
+        (message, matchCount) => {
+          sendEvent({
+            status: 'fetching',
+            message,
+            totalMatches: matchCount,
+            processed: 0,
+            stored: 0,
+          });
+        }
+      );
+
+      sendEvent({
+        status: 'processing',
+        message: `Processing ${matches.length} matches...`,
+        totalMatches: matches.length,
+        processed: 0,
+        stored: 0,
+      });
+
+      let processed = 0;
+      let stored = 0;
+
+      // Load existing stats once at the beginning for duplicate checking
+      const existingStats = await databaseStorage.getAllMatchStats();
+      const existingKeys = new Set(
+        existingStats.map((stat) => `${stat.homeTeamId}-${stat.awayTeamId}-${stat.ftHomeScore}-${stat.ftAwayScore}`)
+      );
+
+      // Process each match
+      for (const match of matches) {
+        try {
+          sendEvent({
+            status: 'processing',
+            message: `Processing ${match.homeTeam} vs ${match.awayTeam}...`,
+            totalMatches: matches.length,
+            processed,
+            stored,
+            currentMatch: `${match.homeTeam} vs ${match.awayTeam}`,
+          });
+
+          // Only process finished matches for database
+          if (match.status !== 'FT' || !match.matchUrl) {
+            processed++;
+            continue;
+          }
+
+          // Fetch match details
+          const matchDetails = await scrapeMatchDetails(match.matchUrl);
+
+          // Get or create IDs using database mapping (ensures consistency)
+          const homeTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.homeTeam);
+          const awayTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.awayTeam);
+          const leagueId = await databaseStorage.getOrCreateLeagueId(matchDetails.competition);
+          const countryId = await databaseStorage.getOrCreateCountryId(matchDetails.competition);
+
+          // Fetch league statistics
+          const leagueStats = await scrapeLeagueStats(matchDetails.competition);
+
+          // Extract features
+          const features = extractFeaturesForDatabase(
+            matchDetails,
+            homeTeamId,
+            awayTeamId,
+            leagueId,
+            countryId,
+            leagueStats
+          );
+
+          // Check if all required data is present (scores must exist for database)
+          if (
+            features.ftHomeScore === null ||
+            features.ftAwayScore === null
+          ) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - missing scores`);
+            processed++;
+            continue;
+          }
+
+          // Check for duplicates using the pre-loaded set
+          const matchKey = `${homeTeamId}-${awayTeamId}-${features.ftHomeScore}-${features.ftAwayScore}`;
+          if (existingKeys.has(matchKey)) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - duplicate`);
+            processed++;
+            continue;
+          }
+
+          // Store in database
+          await databaseStorage.createMatchStats(features);
+          existingKeys.add(matchKey); // Add to set to prevent duplicates within this batch
+          stored++;
+          processed++;
+
+          sendEvent({
+            status: 'processing',
+            message: `Processed ${processed}/${matches.length} matches`,
+            totalMatches: matches.length,
+            processed,
+            stored,
+          });
+        } catch (error) {
+          console.error(`Error processing match ${match.homeTeam} vs ${match.awayTeam}:`, error);
+          processed++;
+        }
+      }
+
+      // Send completion event
+      sendEvent({
+        status: 'completed',
+        message: `Completed! Stored ${stored} matches for ${competition} ${year}`,
+        totalMatches: matches.length,
+        processed,
+        stored,
+      });
+
+      res.end();
+    } catch (error) {
+      console.error("Error in league bulk upload:", error);
+      sendEvent({
+        status: 'error',
+        error: `Failed to process league bulk upload: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        message: 'An error occurred during the bulk upload',
+        totalMatches: 0,
+        processed: 0,
+        stored: 0,
+      });
+      res.end();
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
