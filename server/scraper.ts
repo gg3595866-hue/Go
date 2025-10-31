@@ -884,9 +884,8 @@ export async function scrapeLeagueStats(competitionName: string): Promise<League
   }
   
   try {
-    // Use current year for stats
-    const currentYear = new Date().getFullYear();
-    const statsUrl = `https://sportstats365.com/football/${leagueSlug}/${currentYear}`;
+    // Don't use year in URL - statistics are available without it
+    const statsUrl = `https://sportstats365.com/football/${leagueSlug}`;
     
     console.log(`Scraping league stats for "${competitionName}" from: ${statsUrl}`);
     
@@ -898,6 +897,7 @@ export async function scrapeLeagueStats(competitionName: string): Promise<League
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.9',
           'HX-Request': 'true',
+          'HX-Current-URL': statsUrl,
         },
       }, (error: any, response: any, body: string) => {
         if (error) {
@@ -912,31 +912,53 @@ export async function scrapeLeagueStats(competitionName: string): Promise<League
     
     let homeWins = 0, draws = 0, awayWins = 0, under25 = 0, over25 = 0, avgGoals = 0;
     
-    // Parse the statistics from list items
-    $('.list-group-item').each((i, item) => {
-      const $item = $(item);
-      const badge = $item.find('.badge').first();
-      const badgeText = badge.text().trim();
+    // Parse statistics from page content
+    // Look for text containing the statistics in format: "H Home Wins 44.91 % D Draws 29.53 %..."
+    $('*').each((i, elem) => {
+      const text = $(elem).text().trim();
       
-      if (['H', 'D', 'A', 'U', 'O', 'G'].includes(badgeText)) {
-        // Find the h6 tag containing the value
-        const h6 = $item.find('h6').first();
-        const valueText = h6.text().trim();
-        const value = parseFloat(valueText);
+      // Look for elements that contain the statistics section
+      if (text.includes('Home Wins') && text.includes('Draws') && text.includes('Away Wins')) {
+        // Extract Home Wins
+        const homeWinsMatch = text.match(/Home Wins\s+(\d+\.?\d+)\s*%/i);
+        if (homeWinsMatch && homeWins === 0) {
+          homeWins = parseFloat(homeWinsMatch[1]);
+        }
         
-        if (!isNaN(value)) {
-          if (badgeText === 'H') homeWins = value;
-          else if (badgeText === 'D') draws = value;
-          else if (badgeText === 'A') awayWins = value;
-          else if (badgeText === 'U') under25 = value;
-          else if (badgeText === 'O') over25 = value;
-          else if (badgeText === 'G') avgGoals = value;
+        // Extract Draws
+        const drawsMatch = text.match(/Draws\s+(\d+\.?\d+)\s*%/i);
+        if (drawsMatch && draws === 0) {
+          draws = parseFloat(drawsMatch[1]);
+        }
+        
+        // Extract Away Wins
+        const awayWinsMatch = text.match(/Away Wins\s+(\d+\.?\d+)\s*%/i);
+        if (awayWinsMatch && awayWins === 0) {
+          awayWins = parseFloat(awayWinsMatch[1]);
+        }
+        
+        // Extract Under 2.5
+        const under25Match = text.match(/Under 2\.5\s+(\d+\.?\d+)\s*%/i);
+        if (under25Match && under25 === 0) {
+          under25 = parseFloat(under25Match[1]);
+        }
+        
+        // Extract Over 2.5
+        const over25Match = text.match(/Over 2\.5\s+(\d+\.?\d+)\s*%/i);
+        if (over25Match && over25 === 0) {
+          over25 = parseFloat(over25Match[1]);
+        }
+        
+        // Extract Avg Goals
+        const avgGoalsMatch = text.match(/Avg Goals\s+(\d+\.?\d+)/i);
+        if (avgGoalsMatch && avgGoals === 0) {
+          avgGoals = parseFloat(avgGoalsMatch[1]);
         }
       }
     });
     
-    // If all values are 0, the scraping failed to find data
-    if (homeWins === 0 && draws === 0 && awayWins === 0 && under25 === 0 && over25 === 0 && avgGoals === 0) {
+    // If no stats found, use defaults
+    if (under25 === 0 && over25 === 0 && avgGoals === 0) {
       console.warn(`No league stats found for ${competitionName} at ${statsUrl}, using defaults`);
       const defaultStats: LeagueStats = {
         homeWins: 45,
