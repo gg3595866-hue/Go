@@ -578,10 +578,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.end();
     } catch (error) {
       console.error("Error in league bulk upload:", error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       sendEvent({
         status: 'error',
-        error: `Failed to process league bulk upload: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        message: 'An error occurred during the bulk upload',
+        error: errorMessage,
+        message: `Failed to upload ${competition}: ${errorMessage}`,
         totalMatches: 0,
         processed: 0,
         stored: 0,

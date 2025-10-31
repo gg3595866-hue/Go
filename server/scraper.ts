@@ -1093,6 +1093,40 @@ function generateSlugVariations(competitionName: string): string[] {
     variations.push(createSlug(words[1]));
   }
   
+  // Variation 7: For numbered leagues (e.g., "2. Liga SNL"), try different combinations
+  if (cleanedName.match(/^\d+\./)) {
+    // Remove the period after the number: "2. Liga SNL" → "2-liga-snl"
+    const withoutPeriod = cleanedName.replace(/^(\d+)\./, '$1');
+    variations.push(createSlug(withoutPeriod));
+    
+    // Try just the number and last word: "2. Liga SNL" → "2-snl"
+    if (words.length > 2) {
+      const firstWord = words[0].replace('.', '');
+      const lastWord = words[words.length - 1];
+      variations.push(createSlug(`${firstWord} ${lastWord}`));
+    }
+  }
+  
+  // Variation 8: For leagues with "Bank" or middle words, try different combinations
+  // Example: "OTP Bank Liga NB1" → try "nb-i", "nb1", "otp-bank-liga", "liga-nb1"
+  if (words.length >= 3) {
+    // Try last word only: "OTP Bank Liga NB1" → "nb1"
+    variations.push(createSlug(words[words.length - 1]));
+    
+    // Try last word with "i" instead of "1": "NB1" → "nb-i"
+    const lastWord = words[words.length - 1];
+    if (lastWord.match(/\d$/)) {
+      const withI = lastWord.replace(/1$/, 'i');
+      variations.push(createSlug(withI));
+    }
+    
+    // Try without middle words: "OTP Bank Liga NB1" → "otp-liga-nb1"
+    if (words.length >= 4) {
+      const withoutMiddle = `${words[0]} ${words[words.length - 2]} ${words[words.length - 1]}`;
+      variations.push(createSlug(withoutMiddle));
+    }
+  }
+  
   // Remove duplicates and empty strings
   return Array.from(new Set(variations)).filter(v => v.length > 0);
 }
@@ -1126,6 +1160,8 @@ export function extractLeagueSlug(competitionName: string): string {
     'Bundesliga': 'bundesliga',
     'France Ligue 1': 'ligue-1',
     'Ligue 1': 'ligue-1',
+    'France Ligue 2': 'ligue-2',
+    'Ligue 2': 'ligue-2',
     'Portugal Liga Portugal': 'liga-portugal',
     'Liga Portugal': 'liga-portugal',
     'Netherlands Eredivisie': 'eredivisie',
@@ -1160,6 +1196,10 @@ export function extractLeagueSlug(competitionName: string): string {
     'MLS': 'mls',
     'Major League Soccer': 'mls',
     'Poland Ekstraklasa': 'ekstraklasa',
+    'Slovenia 2. Liga SNL': '2-snl',
+    '2. Liga SNL': '2-snl',
+    'Hungary OTP Bank Liga NB1': 'nb-i',
+    'OTP Bank Liga NB1': 'nb-i',
   };
   
   // Check if we have a manual mapping
