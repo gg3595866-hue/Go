@@ -199,6 +199,8 @@ export default function BasketballTesterPage() {
                     <TableHead className="min-w-[100px]">A Avg Q2</TableHead>
                     <TableHead className="min-w-[100px]">H Avg Q3</TableHead>
                     <TableHead className="min-w-[100px]">A Avg Q3</TableHead>
+                    <TableHead className="min-w-[100px]">H Avg Q4</TableHead>
+                    <TableHead className="min-w-[100px]">A Avg Q4</TableHead>
                     <TableHead className="min-w-[110px]">Prediction</TableHead>
                     <TableHead className="min-w-[120px]">Predicted Score</TableHead>
                     <TableHead className="min-w-[100px]">Confidence</TableHead>
@@ -207,7 +209,7 @@ export default function BasketballTesterPage() {
                 <TableBody>
                   {!filteredStats || filteredStats.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={22} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
+                      <TableCell colSpan={24} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
                         {searchQuery.trim() ? "No matches found." : "No data available. Add basketball statistics to see them here."}
                       </TableCell>
                     </TableRow>
@@ -236,6 +238,8 @@ export default function BasketballTesterPage() {
                           <TableCell>{stat.awayAvgPointsQ2.toFixed(1)}</TableCell>
                           <TableCell>{stat.homeAvgPointsQ3.toFixed(1)}</TableCell>
                           <TableCell>{stat.awayAvgPointsQ3.toFixed(1)}</TableCell>
+                          <TableCell>{stat.homeAvgPointsQ4.toFixed(1)}</TableCell>
+                          <TableCell>{stat.awayAvgPointsQ4.toFixed(1)}</TableCell>
                           <TableCell>
                             {prediction ? (
                               <span className="font-semibold">

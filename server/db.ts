@@ -183,6 +183,18 @@ databaseSqlite.exec(`
   );
 `);
 
+// Add missing columns to existing basketball_stats table if they don't exist (database.db)
+try {
+  databaseSqlite.exec(`ALTER TABLE basketball_stats ADD COLUMN home_avg_points_q4 REAL NOT NULL DEFAULT 0;`);
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  databaseSqlite.exec(`ALTER TABLE basketball_stats ADD COLUMN away_avg_points_q4 REAL NOT NULL DEFAULT 0;`);
+} catch (e) {
+  // Column already exists, ignore
+}
+
 testerSqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -306,6 +318,18 @@ testerSqlite.exec(`
     created_at INTEGER DEFAULT (unixepoch())
   );
 `);
+
+// Add missing columns to existing basketball_stats table if they don't exist (tester.db)
+try {
+  testerSqlite.exec(`ALTER TABLE basketball_stats ADD COLUMN home_avg_points_q4 REAL NOT NULL DEFAULT 0;`);
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  testerSqlite.exec(`ALTER TABLE basketball_stats ADD COLUMN away_avg_points_q4 REAL NOT NULL DEFAULT 0;`);
+} catch (e) {
+  // Column already exists, ignore
+}
 
 export const databaseDb = drizzle(databaseSqlite, { schema });
 export const testerDb = drizzle(testerSqlite, { schema });

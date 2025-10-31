@@ -158,6 +158,8 @@ export default function BasketballDatabasePage() {
                     <TableHead className="min-w-[140px]">Away Avg Pts Q2</TableHead>
                     <TableHead className="min-w-[140px]">Home Avg Pts Q3</TableHead>
                     <TableHead className="min-w-[140px]">Away Avg Pts Q3</TableHead>
+                    <TableHead className="min-w-[140px]">Home Avg Pts Q4</TableHead>
+                    <TableHead className="min-w-[140px]">Away Avg Pts Q4</TableHead>
                     <TableHead className="min-w-[120px]">FT Home Pts</TableHead>
                     <TableHead className="min-w-[120px]">FT Away Pts</TableHead>
                     <TableHead className="min-w-[100px]">FT Result</TableHead>
@@ -166,7 +168,7 @@ export default function BasketballDatabasePage() {
                 <TableBody>
                   {!stats || stats.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={24} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
+                      <TableCell colSpan={26} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
                         No data available. Add basketball statistics to see them here.
                       </TableCell>
                     </TableRow>
@@ -194,6 +196,8 @@ export default function BasketballDatabasePage() {
                         <TableCell>{stat.awayAvgPointsQ2.toFixed(1)}</TableCell>
                         <TableCell>{stat.homeAvgPointsQ3.toFixed(1)}</TableCell>
                         <TableCell>{stat.awayAvgPointsQ3.toFixed(1)}</TableCell>
+                        <TableCell>{stat.homeAvgPointsQ4.toFixed(1)}</TableCell>
+                        <TableCell>{stat.awayAvgPointsQ4.toFixed(1)}</TableCell>
                         <TableCell>{stat.ftHomePoints ?? '-'}</TableCell>
                         <TableCell>{stat.ftAwayPoints ?? '-'}</TableCell>
                         <TableCell>{stat.ftResult ?? '-'}</TableCell>
