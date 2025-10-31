@@ -590,6 +590,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test endpoint to examine league page HTML structure
+  app.get("/api/test/league-page", async (req, res) => {
+    const { competition, year } = req.query;
+
+    if (!competition || !year) {
+      return res.status(400).json({ error: "Competition name and year are required" });
+    }
+
+    try {
+      const { extractLeagueSlug } = await import('./scraper');
+      const cloudscraper = (await import('cloudscraper')).default;
+      const cheerio = await import('cheerio');
+      
+      const leagueSlug = extractLeagueSlug(competition as string);
+      const seasonFormat = `${year}-${parseInt(year as string) + 1}`;
+      const baseUrl = `https://sportstats365.com/football/${leagueSlug}/${seasonFormat}`;
+      
+      console.log(`\n=== TESTING LEAGUE PAGE ACCESS ===`);
+      console.log(`Competition: ${competition}`);
+      console.log(`Year: ${year}`);
+      console.log(`League Slug: ${leagueSlug}`);
+      console.log(`Season Format: ${seasonFormat}`);
+      console.log(`Base URL: ${baseUrl}`);
+      
+      const html: string = await new Promise((resolve, reject) => {
+        cloudscraper.get({
+          uri: baseUrl,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+        }, (error: any, response: any, body: string) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(body);
+          }
+        });
+      });
+      
+      const $ = cheerio.load(html);
+      
+      // Extract key information
+      const pageTitle = $('title').text();
+      const h1Text = $('h1').first().text();
+      const fixturesTabExists = $('a[href*="fixtures"], button[hx-target*="fixtures"]').length > 0;
+      const weekNavigationButtons = $('button[hx-get*="week"], a[hx-get*="week"]').length;
+      const hxGetUrls: string[] = [];
+      $('button[hx-get], a[hx-get]').each((_, el) => {
+        const hxGet = $(el).attr('hx-get');
+        if (hxGet) hxGetUrls.push(hxGet);
+      });
+      
+      const matchCount = $('.list-group-item a[href*="/compare/"]').length;
+      
+      console.log(`Page Title: ${pageTitle}`);
+      console.log(`H1 Text: ${h1Text}`);
+      console.log(`Fixtures Tab Exists: ${fixturesTabExists}`);
+      console.log(`Week Navigation Buttons: ${weekNavigationButtons}`);
+      console.log(`Match Items Found: ${matchCount}`);
+      console.log(`hx-get URLs found: ${hxGetUrls.length}`);
+      console.log(`First 10 hx-get URLs:`, hxGetUrls.slice(0, 10));
+      
+      return res.json({
+        success: true,
+        url: baseUrl,
+        leagueSlug,
+        seasonFormat,
+        pageInfo: {
+          title: pageTitle,
+          h1: h1Text,
+          fixturesTabExists,
+          weekNavigationButtons,
+          matchCount,
+          hxGetUrlsCount: hxGetUrls.length,
+          sampleHxGetUrls: hxGetUrls.slice(0, 20)
+        },
+        htmlPreview: html.substring(0, 3000)
+      });
+    } catch (error: any) {
+      console.error("Error testing league page:", error);
+      return res.status(500).json({
+        error: error.message,
+        stack: error.stack,
+        statusCode: error.statusCode
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

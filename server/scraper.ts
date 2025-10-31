@@ -1105,7 +1105,7 @@ export async function scrapeLeagueMatches(
 ): Promise<Match[]> {
   try {
     const leagueSlug = extractLeagueSlug(competitionName);
-    const seasonFormat = `${year}/${year + 1}`;
+    const seasonFormat = `${year}-${year + 1}`;
     const baseUrl = `https://sportstats365.com/football/${leagueSlug}/${seasonFormat}`;
     
     console.log(`Starting league scrape for ${competitionName} ${seasonFormat}`);
