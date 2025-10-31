@@ -1107,19 +1107,21 @@ export async function scrapeLeagueMatches(
     const leagueSlug = extractLeagueSlug(competitionName);
     // Convert single year to season format (e.g., 2023 -> 2023-2024)
     const seasonFormat = `${year}-${year + 1}`;
-    const baseUrl = `https://sportstats365.com/football/${leagueSlug}/${seasonFormat}`;
+    // The matches are loaded via HTMX from the /matches endpoint
+    const matchesUrl = `https://sportstats365.com/football/${leagueSlug}/${seasonFormat}/matches`;
     
     console.log(`Starting league scrape for ${competitionName} ${seasonFormat}`);
     onProgress?.(`Fetching matches for ${competitionName} ${seasonFormat}...`, 0);
     
-    // First, fetch the main page to get the initial matches
+    // Fetch the matches endpoint (loaded via HTMX on the main page)
     const html: string = await new Promise((resolve, reject) => {
       cloudscraper.get({
-        uri: baseUrl,
+        uri: matchesUrl,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.9',
+          'HX-Request': 'true',
         },
       }, (error: any, response: any, body: string) => {
         if (error) {
@@ -1308,8 +1310,8 @@ export async function scrapeLeagueMatches(
               'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
               'Accept-Language': 'en-US,en;q=0.9',
               'HX-Request': 'true',
-              'HX-Current-URL': baseUrl,
-              'Referer': baseUrl,
+              'HX-Current-URL': matchesUrl,
+              'Referer': matchesUrl,
             },
           }, (error: any, response: any, body: string) => {
             if (error) {
