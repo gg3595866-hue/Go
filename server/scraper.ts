@@ -1056,6 +1056,21 @@ export function extractLeagueSlug(competitionName: string): string {
     'Champions League': 'champions-league',
     'UEFA Europa League': 'europa-league',
     'Europa League': 'europa-league',
+    'CONMEBOL Copa Libertadores': 'copa-libertadores',
+    'Copa Libertadores': 'copa-libertadores',
+    'CONMEBOL Copa Sudamericana': 'copa-sudamericana',
+    'Copa Sudamericana': 'copa-sudamericana',
+    'CONMEBOL Copa': 'copa-libertadores',
+    'Scotland Premiership': 'scottish-premiership',
+    'Scottish Premiership': 'scottish-premiership',
+    'Turkey Super Lig': 'super-lig',
+    'Super Lig': 'super-lig',
+    'Russia Premier League': 'premier-liga',
+    'Russian Premier League': 'premier-liga',
+    'Mexico Liga MX': 'liga-mx',
+    'Liga MX': 'liga-mx',
+    'MLS': 'mls',
+    'Major League Soccer': 'mls',
   };
   
   // Check if we have a manual mapping
@@ -1302,83 +1317,95 @@ export async function scrapeLeagueMatches(
       return matches;
     };
     
-    // Look for the matches URL and week navigation URLs in the base page
+    // Find the matches URL from the base page (check both buttons and anchors)
     let matchesUrl = '';
-    const weekUrls: Set<string> = new Set();
-    
-    $basePage('a[hx-get], button[hx-get]').each((_, element) => {
+    $basePage('button[hx-get*="/matches"], a[hx-get*="/matches"]').each((_, element) => {
       const hxGet = $basePage(element).attr('hx-get');
-      if (hxGet) {
-        // Find the base matches URL (without week parameter)
-        if (hxGet.includes('/matches') && !hxGet.includes('week=') && !matchesUrl) {
-          matchesUrl = hxGet;
+      if (hxGet && hxGet.includes('/matches') && !matchesUrl) {
+        matchesUrl = hxGet;
+      }
+    });
+    
+    if (!matchesUrl) {
+      console.log(`No matches URL found, trying to parse from base page...`);
+      const initialMatches = parseMatches($basePage);
+      allMatches.push(...initialMatches);
+      console.log(`Found ${initialMatches.length} matches on base page`);
+      onProgress?.(`Found ${allMatches.length} matches...`, allMatches.length);
+      return allMatches;
+    }
+    
+    const fullMatchesUrl = matchesUrl.startsWith('http') ? matchesUrl : `https://sportstats365.com${matchesUrl}`;
+    console.log(`Found matches URL: ${fullMatchesUrl}`);
+    onProgress?.(`Loading fixtures from matches URL...`, 0);
+    
+    // Fetch the initial matches page to determine round range
+    const matchesHtml: string = await new Promise((resolve, reject) => {
+      cloudscraper.get({
+        uri: fullMatchesUrl,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'HX-Request': 'true',
+          'HX-Current-URL': baseUrl,
+        },
+      }, (error: any, response: any, body: string) => {
+        if (error) {
+          console.warn(`Failed to fetch matches URL:`, error.message);
+          resolve('');
+        } else {
+          resolve(body);
         }
-        // Find week navigation URLs
-        if (hxGet.includes('/matches') && hxGet.includes('week=')) {
-          weekUrls.add(hxGet);
+      });
+    });
+    
+    if (!matchesHtml) {
+      console.log(`Failed to fetch matches, using base page fallback...`);
+      const initialMatches = parseMatches($basePage);
+      allMatches.push(...initialMatches);
+      return allMatches;
+    }
+    
+    const $initial = cheerio.load(matchesHtml);
+    
+    // Find the current round and determine the range
+    let currentRound = 1;
+    let maxRound = 38; // Default for most leagues
+    
+    // Extract current round from header
+    const headerText = $initial('.card-header').first().text();
+    const weekMatch = headerText.match(/Week (\d+)/i);
+    if (weekMatch) {
+      currentRound = parseInt(weekMatch[1]);
+      console.log(`Current round from header: ${currentRound}`);
+    }
+    
+    // Find navigation buttons to determine round range
+    $initial('button[name="round"]').each((_, element) => {
+      const value = $initial(element).attr('value');
+      if (value) {
+        const roundNum = parseInt(value);
+        if (!isNaN(roundNum)) {
+          maxRound = Math.max(maxRound, roundNum);
         }
       }
     });
     
-    console.log(`Found matches URL: ${matchesUrl}`);
-    console.log(`Found ${weekUrls.size} week navigation URLs in base page`);
+    console.log(`Determined round range: 1 to ${maxRound}`);
     
-    // If we found a matches URL, fetch it with HX-Request to get fixtures
-    if (matchesUrl) {
-      const fullMatchesUrl = matchesUrl.startsWith('http') ? matchesUrl : `https://sportstats365.com${matchesUrl}`;
-      console.log(`Found matches URL: ${fullMatchesUrl}`);
-      onProgress?.(`Loading fixtures from matches URL...`, 0);
-      
-      const matchesHtml: string = await new Promise((resolve, reject) => {
-        cloudscraper.get({
-          uri: fullMatchesUrl,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'HX-Request': 'true',
-            'HX-Current-URL': baseUrl,
-          },
-        }, (error: any, response: any, body: string) => {
-          if (error) {
-            console.warn(`Failed to fetch matches URL:`, error.message);
-            resolve('');
-          } else {
-            resolve(body);
-          }
-        });
-      });
-      
-      if (matchesHtml) {
-        const $ = cheerio.load(matchesHtml);
-        console.log(`Loaded matches HTML, parsing...`);
-        
-        // Parse matches from the initial matches page
-        const initialMatches = parseMatches($);
-        allMatches.push(...initialMatches);
-        console.log(`Found ${initialMatches.length} matches on initial matches page`);
-        onProgress?.(`Found ${allMatches.length} matches so far...`, allMatches.length);
-      }
-    } else {
-      console.log(`No matches URL found, trying to parse from base page...`);
-      // Try parsing from base page as fallback
-      const initialMatches = parseMatches($basePage);
-      allMatches.push(...initialMatches);
-      console.log(`Found ${initialMatches.length} matches on base page`);
-      onProgress?.(`Found ${allMatches.length} matches so far...`, allMatches.length);
-    }
-    
-    // Now fetch all week-specific URLs we found in the base page
-    console.log(`Fetching ${weekUrls.size} week pages...`);
-    for (const weekUrl of Array.from(weekUrls)) {
+    // Now iterate through all rounds from 1 to maxRound
+    for (let round = 1; round <= maxRound; round++) {
       try {
-        const fullUrl = weekUrl.startsWith('http') ? weekUrl : `https://sportstats365.com${weekUrl}`;
-        console.log(`Fetching week fixtures: ${fullUrl}`);
-        onProgress?.(`Fetching week data... Found ${allMatches.length} matches so far`, allMatches.length);
+        // Properly append round parameter (use & if URL already has query params)
+        const separator = fullMatchesUrl.includes('?') ? '&' : '?';
+        const roundUrl = `${fullMatchesUrl}${separator}round=${round}`;
+        console.log(`Fetching round ${round}/${maxRound}: ${roundUrl}`);
+        onProgress?.(`Fetching round ${round}/${maxRound}... Found ${allMatches.length} matches so far`, allMatches.length);
         
-        const weekHtml: string = await new Promise((resolve, reject) => {
+        const roundHtml: string = await new Promise((resolve, reject) => {
           cloudscraper.get({
-            uri: fullUrl,
+            uri: roundUrl,
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
               'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -1389,7 +1416,7 @@ export async function scrapeLeagueMatches(
             },
           }, (error: any, response: any, body: string) => {
             if (error) {
-              console.warn(`Failed to fetch ${fullUrl}:`, error.message);
+              console.warn(`Failed to fetch round ${round}:`, error.message);
               resolve('');
             } else {
               resolve(body);
@@ -1397,12 +1424,12 @@ export async function scrapeLeagueMatches(
           });
         });
         
-        if (weekHtml) {
-          const $week = cheerio.load(weekHtml);
-          const weekMatches = parseMatches($week);
+        if (roundHtml) {
+          const $round = cheerio.load(roundHtml);
+          const roundMatches = parseMatches($round);
           
           // Avoid duplicates by checking if we've seen these teams
-          for (const match of weekMatches) {
+          for (const match of roundMatches) {
             const isDuplicate = allMatches.some(
               m => m.homeTeam === match.homeTeam && 
                    m.awayTeam === match.awayTeam &&
@@ -1415,13 +1442,13 @@ export async function scrapeLeagueMatches(
             }
           }
           
-          console.log(`Found ${weekMatches.length} matches on week page (${allMatches.length} total)`);
+          console.log(`Round ${round}: Found ${roundMatches.length} matches (${allMatches.length} total)`);
         }
         
         // Add delay between requests to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 800));
       } catch (error) {
-        console.error(`Error fetching week page ${weekUrl}:`, error);
+        console.error(`Error fetching round ${round}:`, error);
       }
     }
     
