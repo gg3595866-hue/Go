@@ -440,6 +440,8 @@ export const basketballStats = sqliteTable("basketball_stats", {
   awayAvgPointsQ2: real("away_avg_points_q2").notNull(),
   homeAvgPointsQ3: real("home_avg_points_q3").notNull(),
   awayAvgPointsQ3: real("away_avg_points_q3").notNull(),
+  homeAvgPointsQ4: real("home_avg_points_q4").notNull(),
+  awayAvgPointsQ4: real("away_avg_points_q4").notNull(),
   
   // Target variables (actual match results)
   ftHomePoints: integer("ft_home_points"),

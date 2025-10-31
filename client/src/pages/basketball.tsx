@@ -100,6 +100,7 @@ export default function BasketballPage() {
                   competition={competition}
                   competitionLogo={competitionLogo}
                   matches={matches}
+                  sport="basketball"
                 />
               ))}
             </>

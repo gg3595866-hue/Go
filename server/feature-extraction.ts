@@ -242,6 +242,8 @@ export function extractBasketballFeaturesForDatabase(
   const awayAvgPointsQ2 = totalAvgAway * (basketballMatchDetails.avgPointsPerQuarter?.away?.q2Percent ?? 25) / 100;
   const homeAvgPointsQ3 = totalAvgHome * (basketballMatchDetails.avgPointsPerQuarter?.home?.q3Percent ?? 25) / 100;
   const awayAvgPointsQ3 = totalAvgAway * (basketballMatchDetails.avgPointsPerQuarter?.away?.q3Percent ?? 25) / 100;
+  const homeAvgPointsQ4 = totalAvgHome * (basketballMatchDetails.avgPointsPerQuarter?.home?.q4Percent ?? 25) / 100;
+  const awayAvgPointsQ4 = totalAvgAway * (basketballMatchDetails.avgPointsPerQuarter?.away?.q4Percent ?? 25) / 100;
 
   return {
     homeTeamId,
@@ -270,6 +272,8 @@ export function extractBasketballFeaturesForDatabase(
     awayAvgPointsQ2,
     homeAvgPointsQ3,
     awayAvgPointsQ3,
+    homeAvgPointsQ4,
+    awayAvgPointsQ4,
 
     // Target variables
     ftHomePoints,

@@ -25,6 +25,7 @@ interface CompetitionGroupProps {
   competition: string;
   competitionLogo?: string;
   matches: Match[];
+  sport?: 'football' | 'basketball';
 }
 
 interface UploadProgress {
@@ -35,7 +36,7 @@ interface UploadProgress {
   stored: number;
 }
 
-export default function CompetitionGroup({ competition, competitionLogo, matches }: CompetitionGroupProps) {
+export default function CompetitionGroup({ competition, competitionLogo, matches, sport = 'football' }: CompetitionGroupProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedYear, setSelectedYear] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
@@ -66,7 +67,12 @@ export default function CompetitionGroup({ competition, competitionLogo, matches
     });
 
     try {
-      const response = await fetch('/api/bulk-upload/league', {
+      // Determine the correct endpoint based on sport
+      const endpoint = sport === 'basketball' 
+        ? '/api/basketball/bulk-upload/league' 
+        : '/api/bulk-upload/league';
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
