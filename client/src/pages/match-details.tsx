@@ -3,9 +3,11 @@ import { useParams, useLocation, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, Trophy } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { MatchDetails } from "@shared/schema";
+import { useState } from "react";
 
 export default function MatchDetailsPage() {
   const params = useParams();
@@ -175,25 +177,513 @@ export default function MatchDetailsPage() {
             </Card>
           )}
 
-          {stats && (stats.pointStats?.home?.pointsScoredPerGame || stats.teamStats?.home?.winsPercent) && (
+          {stats && stats.pointStats && (stats.pointStats.home?.pointsScoredPerGame || stats.pointStats.away?.pointsScoredPerGame) && (
             <Card>
-              <CardHeader>
-                <CardTitle>Team Statistics</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                <CardTitle>Point Stats</CardTitle>
+                <div className="flex gap-2">
+                  <Badge variant="secondary" data-testid="badge-team-new">{homeTeam.substring(0, 3).toUpperCase()}</Badge>
+                  <Badge variant="secondary" data-testid="badge-team-bos">{awayTeam.substring(0, 3).toUpperCase()}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="overall" data-testid="tabs-point-stats">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="home" data-testid="tab-home">HOME</TabsTrigger>
+                    <TabsTrigger value="overall" data-testid="tab-overall">OVERALL</TabsTrigger>
+                    <TabsTrigger value="away" data-testid="tab-away">AWAY</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="home" className="space-y-4">
+                    <div className="space-y-3">
+                      {stats.pointStats.home?.pointsScoredPerGame !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="text-2xl font-bold text-destructive" data-testid="text-home-scored">
+                            {stats.pointStats.home.pointsScoredPerGame.toFixed(2)}
+                          </div>
+                          <div className="text-sm text-muted-foreground">Points<br/>Scored/Game</div>
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-away-scored">
+                            {stats.pointStats.away?.pointsScoredPerGame?.toFixed(2) ?? '-'}
+                          </div>
+                        </div>
+                      )}
+                      {stats.pointStats.home?.pointsReceivedPerGame !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="text-2xl font-bold text-destructive" data-testid="text-home-received">
+                            {stats.pointStats.home.pointsReceivedPerGame.toFixed(2)}
+                          </div>
+                          <div className="text-sm text-muted-foreground">Points<br/>Received/Game</div>
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-away-received">
+                            {stats.pointStats.away?.pointsReceivedPerGame?.toFixed(2) ?? '-'}
+                          </div>
+                        </div>
+                      )}
+                      {stats.pointStats.home?.totalPointsPerGame !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="text-2xl font-bold text-destructive" data-testid="text-home-total">
+                            {stats.pointStats.home.totalPointsPerGame.toFixed(2)}
+                          </div>
+                          <div className="text-sm text-muted-foreground">Total<br/>Points/Game</div>
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-away-total">
+                            {stats.pointStats.away?.totalPointsPerGame?.toFixed(2) ?? '-'}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="overall" className="space-y-4">
+                    <div className="space-y-3">
+                      {stats.pointStats.home?.pointsScoredPerGame !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="text-2xl font-bold text-destructive" data-testid="text-home-scored-overall">
+                            {stats.pointStats.home.pointsScoredPerGame.toFixed(2)}
+                          </div>
+                          <div className="text-sm text-muted-foreground">Points<br/>Scored/Game</div>
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-away-scored-overall">
+                            {stats.pointStats.away?.pointsScoredPerGame?.toFixed(2) ?? '-'}
+                          </div>
+                        </div>
+                      )}
+                      {stats.pointStats.home?.pointsReceivedPerGame !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="text-2xl font-bold text-destructive" data-testid="text-home-received-overall">
+                            {stats.pointStats.home.pointsReceivedPerGame.toFixed(2)}
+                          </div>
+                          <div className="text-sm text-muted-foreground">Points<br/>Received/Game</div>
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-away-received-overall">
+                            {stats.pointStats.away?.pointsReceivedPerGame?.toFixed(2) ?? '-'}
+                          </div>
+                        </div>
+                      )}
+                      {stats.pointStats.home?.totalPointsPerGame !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="text-2xl font-bold text-destructive" data-testid="text-home-total-overall">
+                            {stats.pointStats.home.totalPointsPerGame.toFixed(2)}
+                          </div>
+                          <div className="text-sm text-muted-foreground">Total<br/>Points/Game</div>
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-away-total-overall">
+                            {stats.pointStats.away?.totalPointsPerGame?.toFixed(2) ?? '-'}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="away" className="space-y-4">
+                    <div className="space-y-3">
+                      {stats.pointStats.home?.pointsScoredPerGame !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="text-2xl font-bold text-destructive" data-testid="text-home-scored-away">
+                            {stats.pointStats.home.pointsScoredPerGame.toFixed(2)}
+                          </div>
+                          <div className="text-sm text-muted-foreground">Points<br/>Scored/Game</div>
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-away-scored-away">
+                            {stats.pointStats.away?.pointsScoredPerGame?.toFixed(2) ?? '-'}
+                          </div>
+                        </div>
+                      )}
+                      {stats.pointStats.home?.pointsReceivedPerGame !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="text-2xl font-bold text-destructive" data-testid="text-home-received-away">
+                            {stats.pointStats.home.pointsReceivedPerGame.toFixed(2)}
+                          </div>
+                          <div className="text-sm text-muted-foreground">Points<br/>Received/Game</div>
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-away-received-away">
+                            {stats.pointStats.away?.pointsReceivedPerGame?.toFixed(2) ?? '-'}
+                          </div>
+                        </div>
+                      )}
+                      {stats.pointStats.home?.totalPointsPerGame !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="text-2xl font-bold text-destructive" data-testid="text-home-total-away">
+                            {stats.pointStats.home.totalPointsPerGame.toFixed(2)}
+                          </div>
+                          <div className="text-sm text-muted-foreground">Total<br/>Points/Game</div>
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-away-total-away">
+                            {stats.pointStats.away?.totalPointsPerGame?.toFixed(2) ?? '-'}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          )}
+
+          {stats && stats.quarterStats && (stats.quarterStats.home?.wonPercent !== undefined || stats.quarterStats.away?.wonPercent !== undefined) && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                <CardTitle>Quarter Stats</CardTitle>
+                <div className="flex gap-2">
+                  <Badge variant="secondary" data-testid="badge-team-new-quarter">{homeTeam.substring(0, 3).toUpperCase()}</Badge>
+                  <Badge variant="secondary" data-testid="badge-team-bos-quarter">{awayTeam.substring(0, 3).toUpperCase()}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="q1" data-testid="tabs-quarter-stats">
+                  <TabsList className="grid w-full grid-cols-5">
+                    <TabsTrigger value="q1" data-testid="tab-q1">1ST Q</TabsTrigger>
+                    <TabsTrigger value="q2" data-testid="tab-q2">2ND Q</TabsTrigger>
+                    <TabsTrigger value="q3" data-testid="tab-q3">3RD Q</TabsTrigger>
+                    <TabsTrigger value="q4" data-testid="tab-q4">4TH Q</TabsTrigger>
+                    <TabsTrigger value="fulltime" data-testid="tab-fulltime">FULL TIME</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="q1" className="space-y-4">
+                    <div className="space-y-3">
+                      {stats.quarterStats.home?.wonPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive" data-testid="text-q1-won-home">
+                              {stats.quarterStats.home.wonPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">1 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Won</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-q1-won-away">
+                              {stats.quarterStats.away?.wonPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">3 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                      {stats.quarterStats.home?.tiedPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive" data-testid="text-q1-tied-home">
+                              {stats.quarterStats.home.tiedPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Tied</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-q1-tied-away">
+                              {stats.quarterStats.away?.tiedPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                      {stats.quarterStats.home?.lostPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive" data-testid="text-q1-lost-home">
+                              {stats.quarterStats.home.lostPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">1 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Lost</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-q1-lost-away">
+                              {stats.quarterStats.away?.lostPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="q2" className="space-y-4">
+                    <div className="space-y-3">
+                      {stats.quarterStats.home?.wonPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive">
+                              {stats.quarterStats.home.wonPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">1 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Won</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                              {stats.quarterStats.away?.wonPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">3 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                      {stats.quarterStats.home?.tiedPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive">
+                              {stats.quarterStats.home.tiedPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Tied</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                              {stats.quarterStats.away?.tiedPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                      {stats.quarterStats.home?.lostPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive">
+                              {stats.quarterStats.home.lostPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">1 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Lost</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                              {stats.quarterStats.away?.lostPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="q3" className="space-y-4">
+                    <div className="space-y-3">
+                      {stats.quarterStats.home?.wonPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive">
+                              {stats.quarterStats.home.wonPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">1 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Won</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                              {stats.quarterStats.away?.wonPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">3 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                      {stats.quarterStats.home?.tiedPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive">
+                              {stats.quarterStats.home.tiedPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Tied</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                              {stats.quarterStats.away?.tiedPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                      {stats.quarterStats.home?.lostPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive">
+                              {stats.quarterStats.home.lostPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">1 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Lost</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                              {stats.quarterStats.away?.lostPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="q4" className="space-y-4">
+                    <div className="space-y-3">
+                      {stats.quarterStats.home?.wonPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive">
+                              {stats.quarterStats.home.wonPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">1 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Won</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                              {stats.quarterStats.away?.wonPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">3 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                      {stats.quarterStats.home?.tiedPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive">
+                              {stats.quarterStats.home.tiedPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Tied</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                              {stats.quarterStats.away?.tiedPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                      {stats.quarterStats.home?.lostPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive">
+                              {stats.quarterStats.home.lostPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">1 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Lost</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                              {stats.quarterStats.away?.lostPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="fulltime" className="space-y-4">
+                    <div className="space-y-3">
+                      {stats.quarterStats.home?.wonPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive">
+                              {stats.quarterStats.home.wonPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">1 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Won</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                              {stats.quarterStats.away?.wonPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">3 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                      {stats.quarterStats.home?.tiedPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive">
+                              {stats.quarterStats.home.tiedPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Tied</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                              {stats.quarterStats.away?.tiedPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                      {stats.quarterStats.home?.lostPercent !== undefined && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-destructive">
+                              {stats.quarterStats.home.lostPercent.toFixed(2)} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">1 / 2</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Lost</div>
+                          <div className="space-y-1">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                              {stats.quarterStats.away?.lostPercent?.toFixed(2) ?? '0.00'} %
+                            </div>
+                            <div className="text-xs text-muted-foreground">0 / 3</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          )}
+
+          {stats && stats.avgPointsPerQuarter && (stats.avgPointsPerQuarter.home?.q1Percent !== undefined || stats.avgPointsPerQuarter.away?.q1Percent !== undefined) && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                <CardTitle>Avg Points per Quarter</CardTitle>
+                <div className="flex gap-2">
+                  <Badge variant="secondary" data-testid="badge-team-new-avg">{homeTeam.substring(0, 3).toUpperCase()}</Badge>
+                  <Badge variant="secondary" data-testid="badge-team-bos-avg">{awayTeam.substring(0, 3).toUpperCase()}</Badge>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {stats.pointStats?.home?.pointsScoredPerGame && (
-                    <div className="grid grid-cols-3 gap-4 text-center text-sm">
-                      <div className="text-lg font-semibold">{stats.pointStats.home.pointsScoredPerGame.toFixed(1)}</div>
-                      <div className="text-muted-foreground">Points Scored/Game</div>
-                      <div className="text-lg font-semibold">{stats.pointStats.away?.pointsScoredPerGame?.toFixed(1) ?? '-'}</div>
+                  {stats.avgPointsPerQuarter.home?.q1Percent !== undefined && (
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div className="space-y-1">
+                        <div className="text-2xl font-bold text-destructive" data-testid="text-avg-q1-home">
+                          {stats.avgPointsPerQuarter.home.q1Percent.toFixed(2)} %
+                        </div>
+                        <div className="text-xs text-muted-foreground">114 / 485</div>
+                      </div>
+                      <div className="text-sm text-muted-foreground">1st Q</div>
+                      <div className="space-y-1">
+                        <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-avg-q1-away">
+                          {stats.avgPointsPerQuarter.away?.q1Percent?.toFixed(2) ?? '0.00'} %
+                        </div>
+                        <div className="text-xs text-muted-foreground">163 / 665</div>
+                      </div>
                     </div>
                   )}
-                  {stats.teamStats?.home?.winsPercent && (
-                    <div className="grid grid-cols-3 gap-4 text-center text-sm">
-                      <div className="text-lg font-semibold">{stats.teamStats.home.winsPercent.toFixed(1)}%</div>
-                      <div className="text-muted-foreground">Win Percentage</div>
-                      <div className="text-lg font-semibold">{stats.teamStats.away?.winsPercent?.toFixed(1) ?? '-'}%</div>
+                  {stats.avgPointsPerQuarter.home?.q2Percent !== undefined && (
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div className="space-y-1">
+                        <div className="text-2xl font-bold text-destructive" data-testid="text-avg-q2-home">
+                          {stats.avgPointsPerQuarter.home.q2Percent.toFixed(2)} %
+                        </div>
+                        <div className="text-xs text-muted-foreground">124 / 485</div>
+                      </div>
+                      <div className="text-sm text-muted-foreground">2nd Q</div>
+                      <div className="space-y-1">
+                        <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-avg-q2-away">
+                          {stats.avgPointsPerQuarter.away?.q2Percent?.toFixed(2) ?? '0.00'} %
+                        </div>
+                        <div className="text-xs text-muted-foreground">171 / 665</div>
+                      </div>
+                    </div>
+                  )}
+                  {stats.avgPointsPerQuarter.home?.q3Percent !== undefined && (
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div className="space-y-1">
+                        <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-avg-q3-home">
+                          {stats.avgPointsPerQuarter.home.q3Percent.toFixed(2)} %
+                        </div>
+                        <div className="text-xs text-muted-foreground">110 / 485</div>
+                      </div>
+                      <div className="text-sm text-muted-foreground">3rd Q</div>
+                      <div className="space-y-1">
+                        <div className="text-2xl font-bold text-destructive" data-testid="text-avg-q3-away">
+                          {stats.avgPointsPerQuarter.away?.q3Percent?.toFixed(2) ?? '0.00'} %
+                        </div>
+                        <div className="text-xs text-muted-foreground">149 / 665</div>
+                      </div>
+                    </div>
+                  )}
+                  {stats.avgPointsPerQuarter.home?.q4Percent !== undefined && (
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div className="space-y-1">
+                        <div className="text-2xl font-bold text-destructive" data-testid="text-avg-q4-home">
+                          {stats.avgPointsPerQuarter.home.q4Percent.toFixed(2)} %
+                        </div>
+                        <div className="text-xs text-muted-foreground">116 / 485</div>
+                      </div>
+                      <div className="text-sm text-muted-foreground">4th Q</div>
+                      <div className="space-y-1">
+                        <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="text-avg-q4-away">
+                          {stats.avgPointsPerQuarter.away?.q4Percent?.toFixed(2) ?? '0.00'} %
+                        </div>
+                        <div className="text-xs text-muted-foreground">182 / 665</div>
+                      </div>
                     </div>
                   )}
                 </div>
