@@ -1057,29 +1057,44 @@ function generateSlugVariations(competitionName: string): string[] {
   // Variation 1: Full name as-is
   variations.push(createSlug(cleanedName));
   
-  // Variation 2: Remove country prefix (e.g., "England Championship" → "championship")
-  const withoutCountry = cleanedName.replace(/^(England|Spain|Italy|Germany|France|Portugal|Netherlands|Belgium|Brazil|Argentina|Turkey|Scotland|Russia|Mexico|USA)\s+/i, '');
-  if (withoutCountry !== cleanedName) {
-    variations.push(createSlug(withoutCountry));
+  // Variation 2: Always try without first word (usually country name)
+  // Examples: "Poland Ekstraklasa" → "ekstraklasa", "England Championship" → "championship"
+  const words = cleanedName.split(/\s+/);
+  if (words.length > 1) {
+    const withoutFirstWord = words.slice(1).join(' ');
+    variations.push(createSlug(withoutFirstWord));
   }
   
-  // Variation 3: Remove common suffixes
+  // Variation 3: Try without last word (common suffixes like League, Liga, etc.)
+  if (words.length > 1) {
+    const withoutLastWord = words.slice(0, -1).join(' ');
+    variations.push(createSlug(withoutLastWord));
+  }
+  
+  // Variation 4: Remove common suffixes more aggressively
   const withoutSuffix = cleanedName
-    .replace(/\s+(league|liga|division|championship|premiership)$/i, '')
+    .replace(/\s+(league|liga|division|championship|premiership|cup|serie|superliga|bundesliga)$/i, '')
     .trim();
   if (withoutSuffix !== cleanedName && withoutSuffix.length > 0) {
     variations.push(createSlug(withoutSuffix));
   }
   
-  // Variation 4: For Turkish leagues, try with -tr suffix
+  // Variation 5: For Turkish leagues, try with -tr suffix
   if (cleanedName.toLowerCase().includes('turkey') || cleanedName.toLowerCase().includes('turkish')) {
     const turkishVariation = createSlug(cleanedName.replace(/^turkey\s+/i, '').replace(/^turkish\s+/i, ''));
     variations.push(turkishVariation + '-tr');
     variations.push('super-league-tr'); // Common Turkish league slug
   }
   
-  // Remove duplicates
-  return Array.from(new Set(variations));
+  // Variation 6: For multi-word leagues, try just the main word
+  // Example: "La Liga" → "la-liga" and "liga"
+  if (words.length === 2) {
+    variations.push(createSlug(words[0]));
+    variations.push(createSlug(words[1]));
+  }
+  
+  // Remove duplicates and empty strings
+  return Array.from(new Set(variations)).filter(v => v.length > 0);
 }
 
 // Cache for discovered league slugs to avoid repeated URL checking
