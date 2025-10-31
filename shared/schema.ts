@@ -17,6 +17,47 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+// Entity Mapping Tables - These ensure consistent IDs across database and tester
+export const teams = sqliteTable("teams", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+export const leagues = sqliteTable("leagues", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+export const countries = sqliteTable("countries", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+export const insertTeamSchema = createInsertSchema(teams).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertLeagueSchema = createInsertSchema(leagues).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCountrySchema = createInsertSchema(countries).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type Team = typeof teams.$inferSelect;
+export type League = typeof leagues.$inferSelect;
+export type Country = typeof countries.$inferSelect;
+export type InsertTeam = z.infer<typeof insertTeamSchema>;
+export type InsertLeague = z.infer<typeof insertLeagueSchema>;
+export type InsertCountry = z.infer<typeof insertCountrySchema>;
+
 // Match Statistics Table for Database and Tester tabs
 export const matchStats = sqliteTable("match_stats", {
   id: integer("id").primaryKey({ autoIncrement: true }),
