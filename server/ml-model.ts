@@ -43,6 +43,10 @@ export interface PredictionResult {
     homeScore: number;
     awayScore: number;
   };
+  htScores: {
+    homeScore: number;
+    awayScore: number;
+  };
   btts: {
     probability: number;
     predicted: boolean;
@@ -135,6 +139,7 @@ export function prepareCategoricalInputs(stats: MatchStats) {
 export function prepareLabels(stats: MatchStats) {
   // Validate that all required labels exist
   if (!stats.ftResult || stats.ftHomeScore === null || stats.ftAwayScore === null ||
+      stats.htHomeScore === null || stats.htAwayScore === null ||
       stats.bttsYesNo === null || stats.uO25Goals === null) {
     throw new Error(`Match ${stats.id} is missing required label data. Only completed matches can be used for training.`);
   }
@@ -155,6 +160,8 @@ export function prepareLabels(stats: MatchStats) {
     ftResult: ftResultOneHot,
     ftHomeScore: stats.ftHomeScore,
     ftAwayScore: stats.ftAwayScore,
+    htHomeScore: stats.htHomeScore,
+    htAwayScore: stats.htAwayScore,
     btts: stats.bttsYesNo,
     over25: stats.uO25Goals,
   };
@@ -240,6 +247,12 @@ export function buildModel(config: ModelArchitectureConfig): tf.LayersModel {
     name: 'ft_scores'
   }).apply(hidden) as tf.SymbolicTensor;
   
+  const htScoresOutput = tf.layers.dense({
+    units: 2,
+    activation: 'relu',
+    name: 'ht_scores'
+  }).apply(hidden) as tf.SymbolicTensor;
+  
   const bttsOutput = tf.layers.dense({
     units: 1,
     activation: 'sigmoid',
@@ -255,7 +268,7 @@ export function buildModel(config: ModelArchitectureConfig): tf.LayersModel {
   // Create model
   const model = tf.model({
     inputs: [homeTeamInput, awayTeamInput, leagueInput, countryInput, numericalInput],
-    outputs: [ftResultOutput, ftScoresOutput, bttsOutput, over25Output]
+    outputs: [ftResultOutput, ftScoresOutput, htScoresOutput, bttsOutput, over25Output]
   });
   
   return model;
@@ -279,6 +292,7 @@ export async function trainModel(
   const numericalFeatures: number[][] = [];
   const ftResults: number[][] = [];
   const ftScores: number[][] = [];
+  const htScores: number[][] = [];
   const bttsLabels: number[][] = [];
   const over25Labels: number[][] = [];
   
@@ -296,6 +310,7 @@ export async function trainModel(
       numericalFeatures.push(nums);
       ftResults.push(labels.ftResult);
       ftScores.push([labels.ftHomeScore, labels.ftAwayScore]);
+      htScores.push([labels.htHomeScore, labels.htAwayScore]);
       bttsLabels.push([labels.btts]);
       over25Labels.push([labels.over25]);
     } catch (error) {
@@ -324,6 +339,7 @@ export async function trainModel(
   const ys = {
     ft_result: tf.tensor2d(ftResults),
     ft_scores: tf.tensor2d(ftScores),
+    ht_scores: tf.tensor2d(htScores),
     btts: tf.tensor2d(bttsLabels),
     over_25: tf.tensor2d(over25Labels)
   };
@@ -337,6 +353,7 @@ export async function trainModel(
     loss: {
       ft_result: 'categoricalCrossentropy',
       ft_scores: 'meanSquaredError',
+      ht_scores: 'meanSquaredError',
       btts: 'binaryCrossentropy',
       over_25: 'binaryCrossentropy'
     },
@@ -418,9 +435,10 @@ export async function predict(
   
   // Extract prediction values
   const ftResultProbs = await predictions[0].data();
-  const scoresData = await predictions[1].data();
-  const bttsProb = await predictions[2].data();
-  const over25Prob = await predictions[3].data();
+  const ftScoresData = await predictions[1].data();
+  const htScoresData = await predictions[2].data();
+  const bttsProb = await predictions[3].data();
+  const over25Prob = await predictions[4].data();
   
   // Clean up tensors
   Object.values(xs).forEach(tensor => tensor.dispose());
@@ -448,8 +466,12 @@ export async function predict(
       predicted: predictedResult
     },
     scores: {
-      homeScore: Math.round(scoresData[0]),
-      awayScore: Math.round(scoresData[1])
+      homeScore: Math.round(ftScoresData[0]),
+      awayScore: Math.round(ftScoresData[1])
+    },
+    htScores: {
+      homeScore: Math.round(htScoresData[0]),
+      awayScore: Math.round(htScoresData[1])
     },
     btts: {
       probability: bttsProb[0],
