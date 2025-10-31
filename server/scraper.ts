@@ -1023,12 +1023,79 @@ export async function scrapeLeagueStats(competitionName: string): Promise<League
 }
 
 /**
- * Extract league slug from competition name
- * Converts "Copa Libertadores" or "Spain La Liga 2025/2026" to "copa-libertadores" or "la-liga"
+ * Normalize text by converting accented characters to their base form
+ */
+function normalizeText(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
+    .replace(/ü/g, 'u')
+    .replace(/ö/g, 'o')
+    .replace(/ä/g, 'a')
+    .replace(/ß/g, 'ss')
+    .replace(/ñ/g, 'n')
+    .replace(/ç/g, 'c');
+}
+
+/**
+ * Generate possible URL slug variations for a league name
+ */
+function generateSlugVariations(competitionName: string): string[] {
+  const cleanedName = competitionName.replace(/\s+\d{4}\/\d{4}$/g, '').trim();
+  const variations: string[] = [];
+  
+  // Helper to create slug from text
+  const createSlug = (text: string) => {
+    return normalizeText(text)
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  };
+  
+  // Variation 1: Full name as-is
+  variations.push(createSlug(cleanedName));
+  
+  // Variation 2: Remove country prefix (e.g., "England Championship" → "championship")
+  const withoutCountry = cleanedName.replace(/^(England|Spain|Italy|Germany|France|Portugal|Netherlands|Belgium|Brazil|Argentina|Turkey|Scotland|Russia|Mexico|USA)\s+/i, '');
+  if (withoutCountry !== cleanedName) {
+    variations.push(createSlug(withoutCountry));
+  }
+  
+  // Variation 3: Remove common suffixes
+  const withoutSuffix = cleanedName
+    .replace(/\s+(league|liga|division|championship|premiership)$/i, '')
+    .trim();
+  if (withoutSuffix !== cleanedName && withoutSuffix.length > 0) {
+    variations.push(createSlug(withoutSuffix));
+  }
+  
+  // Variation 4: For Turkish leagues, try with -tr suffix
+  if (cleanedName.toLowerCase().includes('turkey') || cleanedName.toLowerCase().includes('turkish')) {
+    const turkishVariation = createSlug(cleanedName.replace(/^turkey\s+/i, '').replace(/^turkish\s+/i, ''));
+    variations.push(turkishVariation + '-tr');
+    variations.push('super-league-tr'); // Common Turkish league slug
+  }
+  
+  // Remove duplicates
+  return Array.from(new Set(variations));
+}
+
+// Cache for discovered league slugs to avoid repeated URL checking
+const discoveredLeagueSlugs = new Map<string, string>();
+
+/**
+ * Extract league slug from competition name with robust URL discovery
+ * Tries multiple URL patterns and returns the one that works
  */
 export function extractLeagueSlug(competitionName: string): string {
-  // Remove season suffix (e.g., "2024/2025", "2025/2026") from competition name
-  let cleanedName = competitionName.replace(/\s+\d{4}\/\d{4}$/g, '').trim();
+  const cleanedName = competitionName.replace(/\s+\d{4}\/\d{4}$/g, '').trim();
+  
+  // Check cache first
+  if (discoveredLeagueSlugs.has(cleanedName)) {
+    return discoveredLeagueSlugs.get(cleanedName)!;
+  }
   
   // Manual mappings for leagues that don't follow the simple pattern
   const leagueSlugMap: Record<string, string> = {
@@ -1036,6 +1103,8 @@ export function extractLeagueSlug(competitionName: string): string {
     'La Liga': 'la-liga',
     'England Premier League': 'premier-league',
     'Premier League': 'premier-league',
+    'England Championship': 'championship',
+    'Championship': 'championship',
     'Italy Serie A': 'serie-a',
     'Serie A': 'serie-a',
     'Germany Bundesliga': 'bundesliga',
@@ -1063,8 +1132,10 @@ export function extractLeagueSlug(competitionName: string): string {
     'CONMEBOL Copa': 'copa-libertadores',
     'Scotland Premiership': 'scottish-premiership',
     'Scottish Premiership': 'scottish-premiership',
-    'Turkey Super Lig': 'super-lig',
-    'Super Lig': 'super-lig',
+    'Turkey Super Lig': 'super-league-tr',
+    'Turkey Süper Lig': 'super-league-tr',
+    'Super Lig': 'super-league-tr',
+    'Süper Lig': 'super-league-tr',
     'Russia Premier League': 'premier-liga',
     'Russian Premier League': 'premier-liga',
     'Mexico Liga MX': 'liga-mx',
@@ -1075,16 +1146,18 @@ export function extractLeagueSlug(competitionName: string): string {
   
   // Check if we have a manual mapping
   if (leagueSlugMap[cleanedName]) {
-    return leagueSlugMap[cleanedName];
+    const slug = leagueSlugMap[cleanedName];
+    discoveredLeagueSlugs.set(cleanedName, slug);
+    return slug;
   }
   
-  // Default: convert to slug format
-  return cleanedName
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
+  // Generate variations and return the first one (will be validated in scrapeLeagueMatches)
+  const variations = generateSlugVariations(cleanedName);
+  const primarySlug = variations[0];
+  
+  console.log(`Generated slug variations for "${cleanedName}":`, variations);
+  
+  return primarySlug;
 }
 
 /**
@@ -1143,8 +1216,47 @@ export async function getLeagueYears(competitionName: string): Promise<number[]>
 }
 
 /**
+ * Try to fetch a URL and return the HTML if successful
+ */
+async function tryFetchLeaguePage(url: string): Promise<{ success: boolean; html?: string; error?: any }> {
+  try {
+    const html: string = await new Promise((resolve, reject) => {
+      cloudscraper.get({
+        uri: url,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      }, (error: any, response: any, body: string) => {
+        if (error) {
+          reject(error);
+        } else if (response && response.statusCode && response.statusCode !== 200) {
+          reject(new Error(`HTTP ${response.statusCode}`));
+        } else {
+          resolve(body);
+        }
+      });
+    });
+    
+    // Check if the page has match data (validate it's a real league page)
+    const $ = cheerio.load(html);
+    const hasMatches = $('.list-group-item').length > 0 || $('table').length > 0;
+    
+    if (!hasMatches) {
+      return { success: false, error: 'No match data found on page' };
+    }
+    
+    return { success: true, html };
+  } catch (error) {
+    return { success: false, error };
+  }
+}
+
+/**
  * Scrape all matches for a specific league and year
  * Navigates through all weeks in the FIXTURES tab to collect complete match data
+ * Tries multiple URL variations to find the correct league page
  */
 export async function scrapeLeagueMatches(
   competitionName: string,
@@ -1152,7 +1264,18 @@ export async function scrapeLeagueMatches(
   onProgress?: (message: string, matchCount: number) => void
 ): Promise<Match[]> {
   try {
-    const leagueSlug = extractLeagueSlug(competitionName);
+    const cleanedName = competitionName.replace(/\s+\d{4}\/\d{4}$/g, '').trim();
+    
+    // Get all possible slug variations
+    const slugVariations = generateSlugVariations(cleanedName);
+    
+    // Also check if we have a manual mapping or cached slug
+    const primarySlug = extractLeagueSlug(competitionName);
+    
+    // Ensure primary slug is first in the list
+    const slugsToTry = [primarySlug, ...slugVariations.filter(s => s !== primarySlug)];
+    
+    console.log(`Trying ${slugsToTry.length} URL variations for "${competitionName}":`, slugsToTry);
     
     // Determine if this league uses single year or season format
     const singleYearLeagues = [
@@ -1163,34 +1286,44 @@ export async function scrapeLeagueMatches(
       'mls'
     ];
     
-    const useSingleYear = singleYearLeagues.includes(leagueSlug);
+    let successfulSlug: string | null = null;
+    let html: string | null = null;
+    
+    // Try each slug variation
+    for (const slug of slugsToTry) {
+      const useSingleYear = singleYearLeagues.includes(slug);
+      const seasonFormat = useSingleYear ? `${year}` : `${year}-${year + 1}`;
+      const baseUrl = `https://sportstats365.com/football/${slug}/${seasonFormat}`;
+      
+      console.log(`Trying URL: ${baseUrl}`);
+      onProgress?.(`Trying ${competitionName} at ${slug}...`, 0);
+      
+      const result = await tryFetchLeaguePage(baseUrl);
+      
+      if (result.success && result.html) {
+        console.log(`✓ Success! Found league at: ${baseUrl}`);
+        successfulSlug = slug;
+        html = result.html;
+        
+        // Cache this successful slug for future use
+        discoveredLeagueSlugs.set(cleanedName, slug);
+        break;
+      } else {
+        console.log(`✗ Failed: ${baseUrl} - ${result.error}`);
+      }
+    }
+    
+    if (!successfulSlug || !html) {
+      throw new Error(`Could not find valid URL for ${competitionName}. Tried: ${slugsToTry.join(', ')}`);
+    }
+    
+    const useSingleYear = singleYearLeagues.includes(successfulSlug);
     const seasonFormat = useSingleYear ? `${year}` : `${year}-${year + 1}`;
-    const baseUrl = `https://sportstats365.com/football/${leagueSlug}/${seasonFormat}`;
+    const baseUrl = `https://sportstats365.com/football/${successfulSlug}/${seasonFormat}`;
     
     console.log(`Starting league scrape for ${competitionName} ${seasonFormat}`);
-    console.log(`Base URL: ${baseUrl}`);
+    console.log(`Using URL: ${baseUrl}`);
     onProgress?.(`Fetching matches for ${competitionName} ${seasonFormat}...`, 0);
-    
-    // Fetch the main league page (without HX-Request to get full page, not partial)
-    const html: string = await new Promise((resolve, reject) => {
-      console.log(`Fetching base page: ${baseUrl}`);
-      cloudscraper.get({
-        uri: baseUrl,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-      }, (error: any, response: any, body: string) => {
-        if (error) {
-          console.error(`Failed to fetch base page: ${error.message}`);
-          reject(error);
-        } else {
-          console.log(`Successfully fetched base page (${body.length} chars)`);
-          resolve(body);
-        }
-      });
-    });
     
     const $basePage = cheerio.load(html);
     const allMatches: Match[] = [];
