@@ -208,10 +208,8 @@ export default function TesterPage() {
                     <TableHead className="min-w-[140px]">League Under 2.5</TableHead>
                     <TableHead className="min-w-[140px]">League Over 2.5</TableHead>
                     <TableHead className="min-w-[140px]">League Avg Goals</TableHead>
-                    <TableHead className="min-w-[120px]">FT Home Score</TableHead>
-                    <TableHead className="min-w-[120px]">FT Away Score</TableHead>
-                    <TableHead className="min-w-[120px]">HT Home Score</TableHead>
-                    <TableHead className="min-w-[120px]">HT Away Score</TableHead>
+                    <TableHead className="min-w-[120px]">Full Time Score</TableHead>
+                    <TableHead className="min-w-[120px]">Half Time Score</TableHead>
                     <TableHead className="min-w-[100px]">FT Result</TableHead>
                     <TableHead className="min-w-[100px]">BTTS</TableHead>
                     <TableHead className="min-w-[120px]">Over 2.5</TableHead>
@@ -221,7 +219,7 @@ export default function TesterPage() {
                 <TableBody>
                   {!stats || stats.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={52} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
+                      <TableCell colSpan={50} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
                         No data available. Add match statistics to see them here.
                       </TableCell>
                     </TableRow>
@@ -275,26 +273,32 @@ export default function TesterPage() {
                         <TableCell>{stat.leagueAvgGoals?.toFixed(2)}</TableCell>
                         <TableCell>
                           <div className="space-y-1">
-                            <div>{stat.ftHomeScore ?? '-'}</div>
+                            <div>
+                              {stat.ftHomeScore !== null && stat.ftAwayScore !== null 
+                                ? `FT ${stat.ftHomeScore}-${stat.ftAwayScore}` 
+                                : '-'}
+                            </div>
                             {prediction && (
-                              <div className="text-xs text-primary" data-testid={`pred-home-score-${stat.id}`}>
-                                Pred: {prediction.predHomeScore}
+                              <div className="text-xs text-primary" data-testid={`pred-ft-score-${stat.id}`}>
+                                Pred: {prediction.predHomeScore}-{prediction.predAwayScore}
                               </div>
                             )}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1">
-                            <div>{stat.ftAwayScore ?? '-'}</div>
+                            <div>
+                              {stat.htHomeScore !== null && stat.htAwayScore !== null 
+                                ? `HT ${stat.htHomeScore}-${stat.htAwayScore}` 
+                                : '-'}
+                            </div>
                             {prediction && (
-                              <div className="text-xs text-primary" data-testid={`pred-away-score-${stat.id}`}>
-                                Pred: {prediction.predAwayScore}
+                              <div className="text-xs text-primary" data-testid={`pred-ht-score-${stat.id}`}>
+                                Pred: --
                               </div>
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>{stat.htHomeScore ?? '-'}</TableCell>
-                        <TableCell>{stat.htAwayScore ?? '-'}</TableCell>
                         <TableCell>
                           <div className="space-y-1">
                             <div>{stat.ftResult ?? '-'}</div>
