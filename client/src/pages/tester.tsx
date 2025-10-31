@@ -215,17 +215,13 @@ export default function TesterPage() {
                     <TableHead className="min-w-[100px]">FT Result</TableHead>
                     <TableHead className="min-w-[100px]">BTTS</TableHead>
                     <TableHead className="min-w-[120px]">Over 2.5</TableHead>
-                    <TableHead className="min-w-[120px] bg-primary/5">Pred Result</TableHead>
-                    <TableHead className="min-w-[120px] bg-primary/5">Pred Score</TableHead>
-                    <TableHead className="min-w-[100px] bg-primary/5">Pred BTTS</TableHead>
-                    <TableHead className="min-w-[120px] bg-primary/5">Pred O/U 2.5</TableHead>
                     <TableHead className="min-w-[100px] bg-primary/5">Confidence</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {!stats || stats.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={56} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
+                      <TableCell colSpan={52} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
                         No data available. Add match statistics to see them here.
                       </TableCell>
                     </TableRow>
@@ -277,24 +273,57 @@ export default function TesterPage() {
                         <TableCell>{(stat.leagueUnder25 * 100).toFixed(1)}%</TableCell>
                         <TableCell>{(stat.leagueOver25 * 100).toFixed(1)}%</TableCell>
                         <TableCell>{stat.leagueAvgGoals?.toFixed(2)}</TableCell>
-                        <TableCell>{stat.ftHomeScore ?? '-'}</TableCell>
-                        <TableCell>{stat.ftAwayScore ?? '-'}</TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div>{stat.ftHomeScore ?? '-'}</div>
+                            {prediction && (
+                              <div className="text-xs text-primary" data-testid={`pred-home-score-${stat.id}`}>
+                                Pred: {prediction.predHomeScore}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div>{stat.ftAwayScore ?? '-'}</div>
+                            {prediction && (
+                              <div className="text-xs text-primary" data-testid={`pred-away-score-${stat.id}`}>
+                                Pred: {prediction.predAwayScore}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>{stat.htHomeScore ?? '-'}</TableCell>
                         <TableCell>{stat.htAwayScore ?? '-'}</TableCell>
-                        <TableCell>{stat.ftResult ?? '-'}</TableCell>
-                        <TableCell>{stat.bttsYesNo === 1 ? 'Yes' : stat.bttsYesNo === 0 ? 'No' : '-'}</TableCell>
-                        <TableCell>{stat.uO25Goals === 1 ? 'Over' : stat.uO25Goals === 0 ? 'Under' : '-'}</TableCell>
-                        <TableCell className="bg-primary/5 font-medium" data-testid={`pred-result-${stat.id}`}>
-                          {prediction ? prediction.predResult : '-'}
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div>{stat.ftResult ?? '-'}</div>
+                            {prediction && (
+                              <div className="text-xs text-primary font-medium" data-testid={`pred-result-${stat.id}`}>
+                                Pred: {prediction.predResult}
+                              </div>
+                            )}
+                          </div>
                         </TableCell>
-                        <TableCell className="bg-primary/5" data-testid={`pred-score-${stat.id}`}>
-                          {prediction ? `${prediction.predHomeScore}-${prediction.predAwayScore}` : '-'}
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div>{stat.bttsYesNo === 1 ? 'Yes' : stat.bttsYesNo === 0 ? 'No' : '-'}</div>
+                            {prediction && (
+                              <div className="text-xs text-primary" data-testid={`pred-btts-${stat.id}`}>
+                                Pred: {prediction.predBtts ? 'Yes' : 'No'}
+                              </div>
+                            )}
+                          </div>
                         </TableCell>
-                        <TableCell className="bg-primary/5" data-testid={`pred-btts-${stat.id}`}>
-                          {prediction ? (prediction.predBtts ? 'Yes' : 'No') : '-'}
-                        </TableCell>
-                        <TableCell className="bg-primary/5" data-testid={`pred-over-${stat.id}`}>
-                          {prediction ? (prediction.predOver25 ? 'Over' : 'Under') : '-'}
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div>{stat.uO25Goals === 1 ? 'Over' : stat.uO25Goals === 0 ? 'Under' : '-'}</div>
+                            {prediction && (
+                              <div className="text-xs text-primary" data-testid={`pred-over-${stat.id}`}>
+                                Pred: {prediction.predOver25 ? 'Over' : 'Under'}
+                              </div>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="bg-primary/5" data-testid={`pred-confidence-${stat.id}`}>
                           {prediction ? `${(prediction.confidence * 100).toFixed(0)}%` : '-'}
