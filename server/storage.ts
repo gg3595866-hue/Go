@@ -43,6 +43,7 @@ export interface IStorage {
   getActiveModel(): Promise<ModelMetadata | undefined>;
   createModel(model: InsertModelMetadata): Promise<ModelMetadata>;
   setActiveModel(id: number): Promise<boolean>;
+  deleteAllModels(): Promise<boolean>;
   
   // Prediction methods
   createPrediction(prediction: InsertMatchPrediction): Promise<MatchPrediction>;
@@ -308,6 +309,16 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     return result.length > 0;
+  }
+
+  async deleteAllModels(): Promise<boolean> {
+    try {
+      await this.db.delete(modelMetadata);
+      return true;
+    } catch (error) {
+      console.error('Error deleting all models:', error);
+      return false;
+    }
   }
 
   // Prediction methods
