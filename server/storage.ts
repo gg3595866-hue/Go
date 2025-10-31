@@ -106,8 +106,11 @@ export class DatabaseStorage implements IStorage {
   // Entity ID mapping methods - ensures consistent IDs across database and tester
   // These use mappingDb to ensure IDs are shared between database and tester
   async getOrCreateTeamId(teamName: string): Promise<number> {
-    // Normalize team name (trim and handle case)
-    const normalizedName = teamName.trim();
+    // Normalize team name (lowercase, trim, and collapse multiple spaces)
+    const normalizedName = teamName
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
     
     // Try to find existing team in mapping database
     const [existingTeam] = await this.mappingDb
@@ -120,17 +123,33 @@ export class DatabaseStorage implements IStorage {
     }
     
     // Create new team in mapping database
-    const [newTeam] = await this.mappingDb
-      .insert(teams)
-      .values({ name: normalizedName })
-      .returning();
-    
-    return newTeam.id;
+    try {
+      const [newTeam] = await this.mappingDb
+        .insert(teams)
+        .values({ name: normalizedName })
+        .returning();
+      
+      return newTeam.id;
+    } catch (error) {
+      // Handle race condition: if another request created the team concurrently
+      const [existingTeam] = await this.mappingDb
+        .select()
+        .from(teams)
+        .where(eq(teams.name, normalizedName));
+      
+      if (existingTeam) {
+        return existingTeam.id;
+      }
+      throw error;
+    }
   }
 
   async getOrCreateLeagueId(leagueName: string): Promise<number> {
-    // Normalize league name (trim and handle case)
-    const normalizedName = leagueName.trim();
+    // Normalize league name (lowercase, trim, and collapse multiple spaces)
+    const normalizedName = leagueName
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
     
     // Try to find existing league in mapping database
     const [existingLeague] = await this.mappingDb
@@ -143,40 +162,53 @@ export class DatabaseStorage implements IStorage {
     }
     
     // Create new league in mapping database
-    const [newLeague] = await this.mappingDb
-      .insert(leagues)
-      .values({ name: normalizedName })
-      .returning();
-    
-    return newLeague.id;
+    try {
+      const [newLeague] = await this.mappingDb
+        .insert(leagues)
+        .values({ name: normalizedName })
+        .returning();
+      
+      return newLeague.id;
+    } catch (error) {
+      // Handle race condition: if another request created the league concurrently
+      const [existingLeague] = await this.mappingDb
+        .select()
+        .from(leagues)
+        .where(eq(leagues.name, normalizedName));
+      
+      if (existingLeague) {
+        return existingLeague.id;
+      }
+      throw error;
+    }
   }
 
   async getOrCreateCountryId(competitionName: string): Promise<number> {
     // Extract country from competition name using common patterns
     const countryMap: Record<string, string> = {
-      'spain': 'Spain',
-      'england': 'England',
-      'germany': 'Germany',
-      'italy': 'Italy',
-      'france': 'France',
-      'portugal': 'Portugal',
-      'netherlands': 'Netherlands',
-      'belgium': 'Belgium',
-      'scotland': 'Scotland',
-      'turkey': 'Turkey',
-      'brazil': 'Brazil',
-      'argentina': 'Argentina',
-      'mexico': 'Mexico',
-      'usa': 'USA',
-      'united states': 'USA',
-      'european': 'Europe',
-      'uefa': 'Europe',
-      'champions league': 'Europe',
-      'europa league': 'Europe',
+      'spain': 'spain',
+      'england': 'england',
+      'germany': 'germany',
+      'italy': 'italy',
+      'france': 'france',
+      'portugal': 'portugal',
+      'netherlands': 'netherlands',
+      'belgium': 'belgium',
+      'scotland': 'scotland',
+      'turkey': 'turkey',
+      'brazil': 'brazil',
+      'argentina': 'argentina',
+      'mexico': 'mexico',
+      'usa': 'usa',
+      'united states': 'usa',
+      'european': 'europe',
+      'uefa': 'europe',
+      'champions league': 'europe',
+      'europa league': 'europe',
     };
     
-    const lowerComp = competitionName.toLowerCase();
-    let countryName = 'Unknown';
+    const lowerComp = competitionName.toLowerCase().trim();
+    let countryName = 'unknown';
     
     // Try to match a known country
     for (const [key, value] of Object.entries(countryMap)) {
@@ -186,9 +218,9 @@ export class DatabaseStorage implements IStorage {
       }
     }
     
-    // If no match found, use the competition name itself as country
-    if (countryName === 'Unknown') {
-      countryName = competitionName.trim();
+    // If no match found, use the normalized competition name as country
+    if (countryName === 'unknown') {
+      countryName = lowerComp.replace(/\s+/g, ' ');
     }
     
     // Try to find existing country in mapping database
@@ -202,12 +234,25 @@ export class DatabaseStorage implements IStorage {
     }
     
     // Create new country in mapping database
-    const [newCountry] = await this.mappingDb
-      .insert(countries)
-      .values({ name: countryName })
-      .returning();
-    
-    return newCountry.id;
+    try {
+      const [newCountry] = await this.mappingDb
+        .insert(countries)
+        .values({ name: countryName })
+        .returning();
+      
+      return newCountry.id;
+    } catch (error) {
+      // Handle race condition: if another request created the country concurrently
+      const [existingCountry] = await this.mappingDb
+        .select()
+        .from(countries)
+        .where(eq(countries.name, countryName));
+      
+      if (existingCountry) {
+        return existingCountry.id;
+      }
+      throw error;
+    }
   }
 }
 
