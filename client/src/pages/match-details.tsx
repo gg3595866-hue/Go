@@ -11,11 +11,14 @@ export default function MatchDetailsPage() {
   const params = useParams();
   const [, setLocation] = useLocation();
   const matchUrl = decodeURIComponent(params.url || "");
+  
+  const isBasketball = matchUrl.includes('/basketball/');
+  const apiEndpoint = isBasketball ? '/api/basketball/match-details' : '/api/match-details';
 
-  const { data: matchDetails, isLoading, error } = useQuery<MatchDetails>({
-    queryKey: ['/api/match-details', matchUrl],
+  const { data: matchDetails, isLoading, error } = useQuery<any>({
+    queryKey: [apiEndpoint, matchUrl],
     queryFn: async () => {
-      const response = await apiRequest('POST', '/api/match-details', { matchUrl });
+      const response = await apiRequest('POST', apiEndpoint, { matchUrl });
       return await response.json();
     },
     enabled: !!matchUrl,
@@ -40,7 +43,7 @@ export default function MatchDetailsPage() {
     return (
       <div className="min-h-screen bg-background p-4">
         <div className="max-w-6xl mx-auto">
-          <Link href="/">
+          <Link href={isBasketball ? "/basketball" : "/"}>
             <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6" data-testid="button-back">
               <ArrowLeft className="w-4 h-4" />
               Back to Fixtures
@@ -51,6 +54,150 @@ export default function MatchDetailsPage() {
               <p className="text-destructive">Failed to load match details</p>
             </CardContent>
           </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (isBasketball) {
+    const { homeTeam, awayTeam, homeTeamLogo, awayTeamLogo, homeScore, awayScore, status, quarterScores, homeForm, awayForm, stats } = matchDetails;
+    
+    const FormBadge = ({ result }: { result: 'W' | 'L' }) => {
+      const variants = {
+        W: 'bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30',
+        L: 'bg-destructive/20 text-destructive border-destructive/30',
+      };
+      return (
+        <Badge variant="outline" className={`${variants[result]} text-xs font-bold`} data-testid={`badge-form-${result}`}>
+          {result}
+        </Badge>
+      );
+    };
+
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="border-b bg-card">
+          <div className="max-w-6xl mx-auto p-4">
+            <Link href="/basketball">
+              <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4" data-testid="button-back">
+                <ArrowLeft className="w-4 h-4" />
+                Back to Basketball Fixtures
+              </button>
+            </Link>
+
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-4">
+              <div className="flex flex-col items-center gap-3 flex-1">
+                {homeTeamLogo ? (
+                  <img src={homeTeamLogo} alt={homeTeam} className="w-20 h-20 object-contain" data-testid="img-home-team-logo" />
+                ) : (
+                  <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center">
+                    <span className="text-2xl font-bold text-muted-foreground">
+                      {homeTeam.substring(0, 2).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                <h1 className="text-2xl md:text-3xl font-bold text-center" data-testid="text-home-team">{homeTeam}</h1>
+                {homeForm && homeForm.length > 0 && (
+                  <div className="flex gap-1">
+                    {homeForm.map((result, i) => (
+                      <FormBadge key={i} result={result as 'W' | 'L'} />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col items-center gap-2">
+                <Badge variant={status === 'FT' ? 'secondary' : 'destructive'} data-testid="badge-match-status">
+                  {status}
+                </Badge>
+                <div className="text-5xl font-bold tabular-nums flex items-center gap-4" data-testid="text-final-score">
+                  <span>{homeScore ?? '-'}</span>
+                  <span className="text-muted-foreground">:</span>
+                  <span>{awayScore ?? '-'}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col items-center gap-3 flex-1">
+                {awayTeamLogo ? (
+                  <img src={awayTeamLogo} alt={awayTeam} className="w-20 h-20 object-contain" data-testid="img-away-team-logo" />
+                ) : (
+                  <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center">
+                    <span className="text-2xl font-bold text-muted-foreground">
+                      {awayTeam.substring(0, 2).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                <h1 className="text-2xl md:text-3xl font-bold text-center" data-testid="text-away-team">{awayTeam}</h1>
+                {awayForm && awayForm.length > 0 && (
+                  <div className="flex gap-1">
+                    {awayForm.map((result, i) => (
+                      <FormBadge key={i} result={result as 'W' | 'L'} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-6xl mx-auto p-4 space-y-6">
+          {quarterScores && (quarterScores.q1.home !== null || quarterScores.q2.home !== null) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Quarter Scores</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-4 gap-4 text-center">
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-2">Q1</div>
+                    <div className="text-lg font-bold">{quarterScores.q1.home ?? '-'}</div>
+                    <div className="text-lg font-bold text-muted-foreground">{quarterScores.q1.away ?? '-'}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-2">Q2</div>
+                    <div className="text-lg font-bold">{quarterScores.q2.home ?? '-'}</div>
+                    <div className="text-lg font-bold text-muted-foreground">{quarterScores.q2.away ?? '-'}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-2">Q3</div>
+                    <div className="text-lg font-bold">{quarterScores.q3.home ?? '-'}</div>
+                    <div className="text-lg font-bold text-muted-foreground">{quarterScores.q3.away ?? '-'}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-2">Q4</div>
+                    <div className="text-lg font-bold">{quarterScores.q4.home ?? '-'}</div>
+                    <div className="text-lg font-bold text-muted-foreground">{quarterScores.q4.away ?? '-'}</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {stats && (stats.pointStats?.home?.pointsScoredPerGame || stats.teamStats?.home?.winsPercent) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Team Statistics</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {stats.pointStats?.home?.pointsScoredPerGame && (
+                    <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                      <div className="text-lg font-semibold">{stats.pointStats.home.pointsScoredPerGame.toFixed(1)}</div>
+                      <div className="text-muted-foreground">Points Scored/Game</div>
+                      <div className="text-lg font-semibold">{stats.pointStats.away?.pointsScoredPerGame?.toFixed(1) ?? '-'}</div>
+                    </div>
+                  )}
+                  {stats.teamStats?.home?.winsPercent && (
+                    <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                      <div className="text-lg font-semibold">{stats.teamStats.home.winsPercent.toFixed(1)}%</div>
+                      <div className="text-muted-foreground">Win Percentage</div>
+                      <div className="text-lg font-semibold">{stats.teamStats.away?.winsPercent?.toFixed(1) ?? '-'}%</div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     );

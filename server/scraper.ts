@@ -1044,28 +1044,34 @@ export async function scrapeBasketballMatchDetails(matchUrl: string): Promise<an
     
     const $ = cheerio.load(html);
     
-    const teamHeaders = $('.text-center h2');
+    const teamHeaders = $('h2.team-compare a');
     const homeTeam = $(teamHeaders[0]).text().trim();
     const awayTeam = $(teamHeaders[1]).text().trim();
     
-    const homeTeamLogoImg = $(teamHeaders[0]).parent().find('img').first();
-    const awayTeamLogoImg = $(teamHeaders[1]).parent().find('img').first();
-    const homeTeamLogo = homeTeamLogoImg.attr('src');
-    const awayTeamLogo = awayTeamLogoImg.attr('src');
+    const homeTeamLogoLink = $('a[href*="/teams/"]').filter(function() {
+      return $(this).find('img').length > 0;
+    }).first();
+    const awayTeamLogoLink = $('a[href*="/teams/"]').filter(function() {
+      return $(this).find('img').length > 0;
+    }).last();
     
-    const scoreElements = $('.display-4');
+    const homeTeamLogo = homeTeamLogoLink.find('img').attr('src');
+    const awayTeamLogo = awayTeamLogoLink.find('img').attr('src');
+    
+    const scoreElement = $('.badge.badge-primary').first();
+    const scoreText = scoreElement.text().trim();
+    const scoreMatch = scoreText.match(/(\d+)\s*:\s*(\d+)/);
     let homeScore: number | null = null;
     let awayScore: number | null = null;
     
-    if (scoreElements.length >= 2) {
-      const homeScoreText = $(scoreElements[0]).text().trim();
-      const awayScoreText = $(scoreElements[1]).text().trim();
-      homeScore = parseInt(homeScoreText) || null;
-      awayScore = parseInt(awayScoreText) || null;
+    if (scoreMatch) {
+      homeScore = parseInt(scoreMatch[1]) || null;
+      awayScore = parseInt(scoreMatch[2]) || null;
     }
     
-    const statusElement = $('.badge').first();
-    const status = statusElement.text().trim() || 'SCHEDULED';
+    const statusElement = $('.text-center.mb-2.small.text-secondary-emphasis').first();
+    let status = statusElement.text().trim() || 'SCHEDULED';
+    status = status.replace(/\s+/g, ' ').trim();
     
     const quarterScores: any = {
       q1: { home: null, away: null },
@@ -1074,28 +1080,35 @@ export async function scrapeBasketballMatchDetails(matchUrl: string): Promise<an
       q4: { home: null, away: null }
     };
     
-    const quarterHeaders = $('th:contains("Q1"), th:contains("Q2"), th:contains("Q3"), th:contains("Q4")');
-    const quarterRows = $('tr').filter(function() {
-      return $(this).find('td').length > 0 && 
-             $(this).closest('table').find('th:contains("Q1")').length > 0;
-    });
+    const quarterContainer = $('.text-center.small.text-muted').filter(function() {
+      return $(this).text().includes('Q1') && $(this).text().includes('Q2');
+    }).first();
     
-    if (quarterRows.length >= 2) {
-      const homeRow = $(quarterRows[0]);
-      const awayRow = $(quarterRows[1]);
+    if (quarterContainer.length > 0) {
+      const htmlText = quarterContainer.html() || '';
       
-      const homeQuarters = homeRow.find('td');
-      const awayQuarters = awayRow.find('td');
+      const q1Match = htmlText.match(/>Q1<\/span><br>(\d+)<br>(?:<strong>)?(\d+)/);
+      if (q1Match) {
+        quarterScores.q1.home = parseInt(q1Match[1]) || null;
+        quarterScores.q1.away = parseInt(q1Match[2]) || null;
+      }
       
-      if (homeQuarters.length >= 4 && awayQuarters.length >= 4) {
-        quarterScores.q1.home = parseInt($(homeQuarters[0]).text().trim()) || null;
-        quarterScores.q1.away = parseInt($(awayQuarters[0]).text().trim()) || null;
-        quarterScores.q2.home = parseInt($(homeQuarters[1]).text().trim()) || null;
-        quarterScores.q2.away = parseInt($(awayQuarters[1]).text().trim()) || null;
-        quarterScores.q3.home = parseInt($(homeQuarters[2]).text().trim()) || null;
-        quarterScores.q3.away = parseInt($(awayQuarters[2]).text().trim()) || null;
-        quarterScores.q4.home = parseInt($(homeQuarters[3]).text().trim()) || null;
-        quarterScores.q4.away = parseInt($(awayQuarters[3]).text().trim()) || null;
+      const q2Match = htmlText.match(/>Q2<\/span><br>(?:<strong>)?(\d+)(?:<\/strong>)?<br>(\d+)/);
+      if (q2Match) {
+        quarterScores.q2.home = parseInt(q2Match[1]) || null;
+        quarterScores.q2.away = parseInt(q2Match[2]) || null;
+      }
+      
+      const q3Match = htmlText.match(/>Q3<\/span><br>(\d+)<br>(?:<strong>)?(\d+)/);
+      if (q3Match) {
+        quarterScores.q3.home = parseInt(q3Match[1]) || null;
+        quarterScores.q3.away = parseInt(q3Match[2]) || null;
+      }
+      
+      const q4Match = htmlText.match(/>Q4<\/span><br>(?:<strong>)?(\d+)(?:<\/strong>)?<br>(\d+)/);
+      if (q4Match) {
+        quarterScores.q4.home = parseInt(q4Match[1]) || null;
+        quarterScores.q4.away = parseInt(q4Match[2]) || null;
       }
     }
     
