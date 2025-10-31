@@ -153,7 +153,7 @@ export default function BasketballProcessingPage() {
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold mb-6" data-testid="text-page-title">Basketball Processing</h1>
-        
+
         <div className="space-y-6">
           <Card>
             <CardHeader>

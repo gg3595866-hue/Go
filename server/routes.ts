@@ -1421,6 +1421,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const sendEvent = (data: any) => {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
+      // Force flush to ensure real-time updates
       if (typeof (res as any).flush === 'function') {
         (res as any).flush();
       }
@@ -1563,6 +1564,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const sendEvent = (data: any) => {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
+      // Force flush to ensure real-time updates
       if (typeof (res as any).flush === 'function') {
         (res as any).flush();
       }
