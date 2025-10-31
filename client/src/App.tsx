@@ -11,6 +11,7 @@ import TrainingPage from "@/pages/training";
 import ProcessingPage from "@/pages/processing";
 import BasketballDatabasePage from "@/pages/basketball-database";
 import BasketballTesterPage from "@/pages/basketball-tester";
+import BasketballTrainingPage from "@/pages/basketball-training";
 import BasketballProcessingPage from "@/pages/basketball-processing";
 import MatchDetailsPage from "@/pages/match-details";
 import NotFound from "@/pages/not-found";
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/basketball" component={BasketballPage} />
       <Route path="/basketball/database" component={BasketballDatabasePage} />
       <Route path="/basketball/tester" component={BasketballTesterPage} />
+      <Route path="/basketball/training" component={BasketballTrainingPage} />
       <Route path="/basketball/processing" component={BasketballProcessingPage} />
       <Route path="/match/:url" component={MatchDetailsPage} />
       <Route component={NotFound} />
@@ -57,6 +59,7 @@ function NavigationTabs() {
     { name: "Fixtures", path: "/basketball" },
     { name: "Database", path: "/basketball/database" },
     { name: "Tester", path: "/basketball/tester" },
+    { name: "Training", path: "/basketball/training" },
     { name: "Processing", path: "/basketball/processing" },
   ];
   
