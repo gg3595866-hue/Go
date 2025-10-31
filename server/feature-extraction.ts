@@ -204,9 +204,10 @@ export function extractBasketballFeaturesForDatabase(
 
   let ftResult: string | null = null;
   if (ftHomePoints !== null && ftAwayPoints !== null) {
-    if (ftHomePoints > ftAwayPoints) ftResult = '1';
-    else if (ftHomePoints < ftAwayPoints) ftResult = '2';
-    else ftResult = 'X';
+    if (ftHomePoints > ftAwayPoints) ftResult = 'H';
+    else if (ftHomePoints < ftAwayPoints) ftResult = 'A';
+    // Basketball rarely has ties, but if it does, we'll skip it for training
+    else ftResult = null;
   }
 
   // Extract stats with defaults
