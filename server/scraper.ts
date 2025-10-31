@@ -1096,7 +1096,7 @@ export async function getLeagueYears(competitionName: string): Promise<number[]>
 
 /**
  * Scrape all matches for a specific league and year
- * Navigates through all pagination pages to collect complete historical data
+ * Navigates through all weeks in the FIXTURES tab to collect complete match data
  */
 export async function scrapeLeagueMatches(
   competitionName: string,
@@ -1105,23 +1105,21 @@ export async function scrapeLeagueMatches(
 ): Promise<Match[]> {
   try {
     const leagueSlug = extractLeagueSlug(competitionName);
-    // Convert single year to season format (e.g., 2023 -> 2023-2024)
-    const seasonFormat = `${year}-${year + 1}`;
-    // The matches are loaded via HTMX from the /matches endpoint
-    const matchesUrl = `https://sportstats365.com/football/${leagueSlug}/${seasonFormat}/matches`;
+    const seasonFormat = `${year}/${year + 1}`;
+    const baseUrl = `https://sportstats365.com/football/${leagueSlug}/${seasonFormat}`;
     
     console.log(`Starting league scrape for ${competitionName} ${seasonFormat}`);
+    console.log(`Base URL: ${baseUrl}`);
     onProgress?.(`Fetching matches for ${competitionName} ${seasonFormat}...`, 0);
     
-    // Fetch the matches endpoint (loaded via HTMX on the main page)
+    // Fetch the main league page
     const html: string = await new Promise((resolve, reject) => {
       cloudscraper.get({
-        uri: matchesUrl,
+        uri: baseUrl,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.9',
-          'HX-Request': 'true',
         },
       }, (error: any, response: any, body: string) => {
         if (error) {
@@ -1136,7 +1134,7 @@ export async function scrapeLeagueMatches(
     const allMatches: Match[] = [];
     let matchId = 0;
     
-    // Parse matches from the main HTML
+    // Parse matches from HTML
     const parseMatches = ($doc: cheerio.CheerioAPI) => {
       const matches: Match[] = [];
       
@@ -1276,33 +1274,34 @@ export async function scrapeLeagueMatches(
       return matches;
     };
     
-    // Parse initial matches
+    // Parse matches from the initial page
     const initialMatches = parseMatches($);
     allMatches.push(...initialMatches);
-    
-    console.log(`Found ${initialMatches.length} matches on main page`);
+    console.log(`Found ${initialMatches.length} matches on initial page`);
     onProgress?.(`Found ${allMatches.length} matches so far...`, allMatches.length);
     
-    // Look for pagination buttons with hx-get attributes
-    const paginationUrls: string[] = [];
+    // Find all week navigation buttons (hx-get attributes for week navigation)
+    const weekUrls: Set<string> = new Set();
     $('button[hx-get], a[hx-get]').each((_, element) => {
       const hxGet = $(element).attr('hx-get');
-      if (hxGet && hxGet.includes(leagueSlug) && hxGet.includes(seasonFormat)) {
-        if (!paginationUrls.includes(hxGet)) {
-          paginationUrls.push(hxGet);
+      if (hxGet) {
+        // Look for URLs that contain fixtures/week navigation patterns
+        if (hxGet.includes('/fixtures') || hxGet.includes('/week') || hxGet.match(/\d+$/)) {
+          weekUrls.add(hxGet);
         }
       }
     });
     
-    console.log(`Found ${paginationUrls.length} pagination URLs`);
+    console.log(`Found ${weekUrls.size} week navigation URLs`);
     
-    // Fetch each pagination page
-    for (const paginationUrl of paginationUrls) {
+    // Fetch each week's fixtures
+    for (const weekUrl of Array.from(weekUrls)) {
       try {
-        const fullUrl = `https://sportstats365.com${paginationUrl}`;
-        console.log(`Fetching pagination page: ${fullUrl}`);
+        const fullUrl = weekUrl.startsWith('http') ? weekUrl : `https://sportstats365.com${weekUrl}`;
+        console.log(`Fetching week fixtures: ${fullUrl}`);
+        onProgress?.(`Fetching week data... Found ${allMatches.length} matches so far`, allMatches.length);
         
-        const pageHtml: string = await new Promise((resolve, reject) => {
+        const weekHtml: string = await new Promise((resolve, reject) => {
           cloudscraper.get({
             uri: fullUrl,
             headers: {
@@ -1310,8 +1309,8 @@ export async function scrapeLeagueMatches(
               'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
               'Accept-Language': 'en-US,en;q=0.9',
               'HX-Request': 'true',
-              'HX-Current-URL': matchesUrl,
-              'Referer': matchesUrl,
+              'HX-Current-URL': baseUrl,
+              'Referer': baseUrl,
             },
           }, (error: any, response: any, body: string) => {
             if (error) {
@@ -1323,18 +1322,31 @@ export async function scrapeLeagueMatches(
           });
         });
         
-        if (pageHtml) {
-          const $page = cheerio.load(pageHtml);
-          const pageMatches = parseMatches($page);
-          allMatches.push(...pageMatches);
-          console.log(`Found ${pageMatches.length} matches on pagination page`);
-          onProgress?.(`Found ${allMatches.length} matches so far...`, allMatches.length);
+        if (weekHtml) {
+          const $week = cheerio.load(weekHtml);
+          const weekMatches = parseMatches($week);
+          
+          // Avoid duplicates by checking if we've seen these teams
+          for (const match of weekMatches) {
+            const isDuplicate = allMatches.some(
+              m => m.homeTeam === match.homeTeam && 
+                   m.awayTeam === match.awayTeam &&
+                   m.homeScore === match.homeScore &&
+                   m.awayScore === match.awayScore
+            );
+            
+            if (!isDuplicate) {
+              allMatches.push(match);
+            }
+          }
+          
+          console.log(`Found ${weekMatches.length} matches on week page (${allMatches.length} total)`);
         }
         
         // Add delay between requests to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
-        console.error(`Error fetching pagination page ${paginationUrl}:`, error);
+        console.error(`Error fetching week page ${weekUrl}:`, error);
       }
     }
     
