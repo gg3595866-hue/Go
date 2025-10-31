@@ -151,6 +151,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/match-stats/database/clear", async (req, res) => {
+    try {
+      await databaseStorage.deleteAllMatchStats();
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error clearing database match stats:", error);
+      res.status(500).json({ error: "Failed to clear database match statistics" });
+    }
+  });
+
+  app.delete("/api/match-stats/tester/clear", async (req, res) => {
+    try {
+      await testerStorage.deleteAllMatchStats();
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error clearing tester match stats:", error);
+      res.status(500).json({ error: "Failed to clear tester match statistics" });
+    }
+  });
+
   // Bulk Upload Routes with Server-Sent Events
   app.post("/api/bulk-upload/database", async (req, res) => {
     const { date } = req.body;

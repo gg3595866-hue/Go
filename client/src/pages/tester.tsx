@@ -1,12 +1,42 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import type { MatchStats } from "@shared/schema";
 
 export default function TesterPage() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
   const { data: stats, isLoading } = useQuery<MatchStats[]>({
     queryKey: ['/api/match-stats/tester'],
+  });
+
+  const clearData = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/match-stats/tester/clear', {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to clear data');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/match-stats/tester'] });
+      toast({
+        title: "Success",
+        description: "All tester statistics have been cleared.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to clear tester statistics.",
+        variant: "destructive",
+      });
+    },
   });
 
   if (isLoading) {
@@ -34,7 +64,17 @@ export default function TesterPage() {
         
         <Card>
           <CardHeader>
-            <CardTitle>Match Statistics Tester</CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle>Match Statistics Tester</CardTitle>
+              <Button 
+                variant="destructive" 
+                onClick={() => clearData.mutate()}
+                disabled={clearData.isPending || !stats || stats.length === 0}
+                data-testid="button-clear-tester"
+              >
+                Clear Data
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">

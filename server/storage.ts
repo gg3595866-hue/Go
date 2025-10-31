@@ -73,6 +73,11 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return result.length > 0;
   }
+
+  async deleteAllMatchStats(): Promise<boolean> {
+    await this.db.delete(matchStats);
+    return true;
+  }
 }
 
 export const databaseStorage = new DatabaseStorage(databaseDb);
