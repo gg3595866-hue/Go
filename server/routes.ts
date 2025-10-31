@@ -1416,9 +1416,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
 
     const sendEvent = (data: any) => {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
+      if (typeof (res as any).flush === 'function') {
+        (res as any).flush();
+      }
     };
 
     try {
@@ -1553,9 +1558,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
 
     const sendEvent = (data: any) => {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
+      if (typeof (res as any).flush === 'function') {
+        (res as any).flush();
+      }
     };
 
     try {
