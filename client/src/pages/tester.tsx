@@ -326,9 +326,18 @@ export default function TesterPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {stat.htHomeScore !== null && stat.htAwayScore !== null 
-                            ? `HT ${stat.htHomeScore}-${stat.htAwayScore}` 
-                            : '-'}
+                          <div className="space-y-1">
+                            <div>
+                              {stat.htHomeScore !== null && stat.htAwayScore !== null 
+                                ? `HT ${stat.htHomeScore}-${stat.htAwayScore}` 
+                                : '-'}
+                            </div>
+                            {prediction && (
+                              <div className="text-xs text-primary" data-testid={`pred-ht-score-${stat.id}`}>
+                                Pred: {prediction.predHtHomeScore}-{prediction.predHtAwayScore}
+                              </div>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1">
