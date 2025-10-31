@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { scrapeFixtures, scrapeMatchDetails } from "./scraper";
-import { storage } from "./storage";
+import { storage, databaseStorage, testerStorage } from "./storage";
 import { insertMatchStatsSchema } from "@shared/schema";
 import {
   extractFeaturesForDatabase,
@@ -60,6 +60,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching match stats:", error);
       res.status(500).json({ error: "Failed to fetch match statistics" });
+    }
+  });
+
+  app.get("/api/match-stats/database", async (req, res) => {
+    try {
+      const stats = await databaseStorage.getAllMatchStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching database match stats:", error);
+      res.status(500).json({ error: "Failed to fetch database match statistics" });
+    }
+  });
+
+  app.get("/api/match-stats/tester", async (req, res) => {
+    try {
+      const stats = await testerStorage.getAllMatchStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching tester match stats:", error);
+      res.status(500).json({ error: "Failed to fetch tester match statistics" });
     }
   });
 
@@ -164,7 +184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let stored = 0;
 
       // Load existing stats once at the beginning for duplicate checking
-      const existingStats = await storage.getAllMatchStats();
+      const existingStats = await databaseStorage.getAllMatchStats();
       const existingKeys = new Set(
         existingStats.map((stat) => `${stat.homeTeamId}-${stat.awayTeamId}-${stat.ftHomeScore}-${stat.ftAwayScore}`)
       );
@@ -204,14 +224,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             countryId
           );
 
-          // Check if all required data is present
+          // Check if all required data is present (scores must exist for database)
           if (
             features.ftHomeScore === null ||
-            features.ftAwayScore === null ||
-            features.homeTeamFormOverallL5 === 0 ||
-            features.awayTeamFormOverallL5 === 0
+            features.ftAwayScore === null
           ) {
-            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - incomplete data`);
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - missing scores`);
             processed++;
             continue;
           }
@@ -225,7 +243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           // Store in database
-          await storage.createMatchStats(features);
+          await databaseStorage.createMatchStats(features);
           existingKeys.add(matchKey); // Add to set to prevent duplicates within this batch
           stored++;
           processed++;
@@ -295,6 +313,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let processed = 0;
       let loaded = 0;
 
+      // Load existing stats once at the beginning for duplicate checking
+      const existingStats = await testerStorage.getAllMatchStats();
+      const existingKeys = new Set(
+        existingStats.map((stat) => `${stat.homeTeamId}-${stat.awayTeamId}`)
+      );
+
       // Process each match
       for (const match of matches) {
         try {
@@ -330,34 +354,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             countryId
           );
 
-          // Check if required statistical data is present
-          if (
-            features.homeTeamFormOverallL5 === 0 ||
-            features.awayTeamFormOverallL5 === 0
-          ) {
-            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - incomplete data`);
-            processed++;
-            continue;
-          }
+          // For tester data, we don't need to validate form (0 is acceptable)
 
-          // Check for duplicates
-          const existingStats = await storage.getAllMatchStats();
-          const isDuplicate = existingStats.some(
-            (stat) =>
-              stat.homeTeamId === homeTeamId &&
-              stat.awayTeamId === awayTeamId &&
-              stat.ftHomeScore === null &&
-              stat.ftAwayScore === null
-          );
-
-          if (isDuplicate) {
+          // Check for duplicates using the pre-loaded set
+          const matchKey = `${homeTeamId}-${awayTeamId}`;
+          if (existingKeys.has(matchKey)) {
             console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - duplicate`);
             processed++;
             continue;
           }
 
-          // Store in database
-          await storage.createMatchStats(features);
+          // Store in tester database
+          await testerStorage.createMatchStats(features);
+          existingKeys.add(matchKey); // Add to set to prevent duplicates within this batch
           loaded++;
           processed++;
 

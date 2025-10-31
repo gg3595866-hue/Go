@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, real, serial } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey().default(sql`(lower(hex(randomblob(16))))`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
 });
@@ -18,8 +18,8 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
 // Match Statistics Table for Database and Tester tabs
-export const matchStats = pgTable("match_stats", {
-  id: serial("id").primaryKey(),
+export const matchStats = sqliteTable("match_stats", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   
   // Team IDs
   homeTeamId: integer("home_team_id").notNull(),
@@ -91,7 +91,7 @@ export const matchStats = pgTable("match_stats", {
   bttsYesNo: integer("btts_yes_no"),
   uO25Goals: integer("u_o_2_5_goals"),
   
-  createdAt: timestamp("created_at").defaultNow(),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
 export const insertMatchStatsSchema = createInsertSchema(matchStats).omit({

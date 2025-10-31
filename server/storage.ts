@@ -1,6 +1,7 @@
 import { users, matchStats, type User, type InsertUser, type MatchStats, type InsertMatchStats } from "@shared/schema";
-import { db } from "./db";
+import { databaseDb, testerDb } from "./db";
 import { eq, desc } from "drizzle-orm";
+import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -15,18 +16,24 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private db: BetterSQLite3Database<typeof import("@shared/schema")>;
+
+  constructor(db: BetterSQLite3Database<typeof import("@shared/schema")>) {
+    this.db = db;
+  }
+
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+    const [user] = await this.db.select().from(users).where(eq(users.id, id));
     return user || undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+    const [user] = await this.db.select().from(users).where(eq(users.username, username));
     return user || undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db
+    const [user] = await this.db
       .insert(users)
       .values(insertUser)
       .returning();
@@ -34,16 +41,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllMatchStats(): Promise<MatchStats[]> {
-    return db.select().from(matchStats).orderBy(desc(matchStats.createdAt));
+    return this.db.select().from(matchStats).orderBy(desc(matchStats.createdAt));
   }
 
   async getMatchStatsById(id: number): Promise<MatchStats | undefined> {
-    const [stats] = await db.select().from(matchStats).where(eq(matchStats.id, id));
+    const [stats] = await this.db.select().from(matchStats).where(eq(matchStats.id, id));
     return stats || undefined;
   }
 
   async createMatchStats(stats: InsertMatchStats): Promise<MatchStats> {
-    const [created] = await db
+    const [created] = await this.db
       .insert(matchStats)
       .values(stats)
       .returning();
@@ -51,7 +58,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateMatchStats(id: number, stats: Partial<InsertMatchStats>): Promise<MatchStats | undefined> {
-    const [updated] = await db
+    const [updated] = await this.db
       .update(matchStats)
       .set(stats)
       .where(eq(matchStats.id, id))
@@ -60,7 +67,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteMatchStats(id: number): Promise<boolean> {
-    const result = await db
+    const result = await this.db
       .delete(matchStats)
       .where(eq(matchStats.id, id))
       .returning();
@@ -68,4 +75,7 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export const storage = new DatabaseStorage();
+export const databaseStorage = new DatabaseStorage(databaseDb);
+export const testerStorage = new DatabaseStorage(testerDb);
+
+export const storage = databaseStorage;

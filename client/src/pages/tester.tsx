@@ -6,7 +6,7 @@ import type { MatchStats } from "@shared/schema";
 
 export default function TesterPage() {
   const { data: stats, isLoading } = useQuery<MatchStats[]>({
-    queryKey: ['/api/match-stats'],
+    queryKey: ['/api/match-stats/tester'],
   });
 
   if (isLoading) {
