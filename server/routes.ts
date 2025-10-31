@@ -245,12 +245,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             leagueStats
           );
 
-          // Check if all required data is present (scores must exist for database)
+          // Check if all required data is present (scores and complete features must exist for database)
           if (
             features.ftHomeScore === null ||
-            features.ftAwayScore === null
+            features.ftAwayScore === null ||
+            features.htHomeScore === null ||
+            features.htAwayScore === null ||
+            features.ftResult === null
           ) {
-            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - missing scores`);
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - missing scores or incomplete features`);
             processed++;
             continue;
           }
@@ -529,12 +532,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             leagueStats
           );
 
-          // Check if all required data is present (scores must exist for database)
+          // Check if all required data is present (scores and complete features must exist for database)
           if (
             features.ftHomeScore === null ||
-            features.ftAwayScore === null
+            features.ftAwayScore === null ||
+            features.htHomeScore === null ||
+            features.htAwayScore === null ||
+            features.ftResult === null
           ) {
-            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - missing scores`);
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - missing scores or incomplete features`);
             processed++;
             continue;
           }
