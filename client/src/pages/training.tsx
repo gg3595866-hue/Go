@@ -7,7 +7,18 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Brain, CheckCircle2, XCircle, TrendingUp } from "lucide-react";
+import { Brain, CheckCircle2, XCircle, TrendingUp, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import type { ModelMetadata } from "@shared/schema";
 
 export default function TrainingPage() {
@@ -75,6 +86,30 @@ export default function TrainingPage() {
     onError: (error: Error) => {
       toast({
         title: "Activation Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete all models mutation
+  const deleteAllMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/ml/models', {
+        method: 'DELETE',
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Models Deleted",
+        description: "All saved models have been deleted successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/ml/models'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ml/models/active'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Deletion Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -223,8 +258,44 @@ export default function TrainingPage() {
         {/* Model History */}
         <Card>
           <CardHeader>
-            <CardTitle>Model History</CardTitle>
-            <CardDescription>Trained models and their performance</CardDescription>
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle>Model History</CardTitle>
+                <CardDescription>Trained models and their performance</CardDescription>
+              </div>
+              {models.length > 0 && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={deleteAllMutation.isPending}
+                      data-testid="button-delete-all-models"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete All
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete All Models?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete all {models.length} saved model(s). This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => deleteAllMutation.mutate()}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Delete All Models
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {modelsLoading ? (
