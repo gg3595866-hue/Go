@@ -489,8 +489,8 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     
     // Extract team names and logos
     const teamHeaders = $('.text-center h2');
-    const homeTeam = $(teamHeaders[0]).text().trim();
-    const awayTeam = $(teamHeaders[1]).text().trim();
+    const homeTeam = cleanTeamName($(teamHeaders[0]).text());
+    const awayTeam = cleanTeamName($(teamHeaders[1]).text());
     
     const homeTeamLogoImg = $(teamHeaders[0]).parent().find('img').first();
     const awayTeamLogoImg = $(teamHeaders[1]).parent().find('img').first();
@@ -1070,8 +1070,8 @@ export async function scrapeBasketballMatchDetails(matchUrl: string): Promise<an
       .replace(/^./, (str) => str.toUpperCase());  // Capitalize first letter
     
     const teamHeaders = $('h2.team-compare a');
-    const homeTeam = $(teamHeaders[0]).text().trim();
-    const awayTeam = $(teamHeaders[1]).text().trim();
+    const homeTeam = cleanTeamName($(teamHeaders[0]).text());
+    const awayTeam = cleanTeamName($(teamHeaders[1]).text());
     
     const homeTeamLogoLink = $('a[href*="/teams/"]').filter(function() {
       return $(this).find('img').length > 0;
