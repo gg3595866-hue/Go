@@ -8,11 +8,18 @@ function cleanTeamName(name: string): string {
   
   return name
     .trim()
-    .replace(/\s+logo\s*$/i, '') // Remove trailing "logo" (case insensitive)
-    .replace(/\s+emblem\s*$/i, '') // Remove trailing "emblem"
-    .replace(/\s+badge\s*$/i, '') // Remove trailing "badge"
-    .replace(/\s+crest\s*$/i, '') // Remove trailing "crest"
-    .replace(/\s{2,}/g, ' ') // Collapse multiple spaces
+    // Remove "logo" followed by optional year/numbers (e.g., "Logo 2022", "logo 2024")
+    .replace(/\s+logo\s*(\d{4})?/gi, '')
+    // Remove "images" followed by optional numbers in parentheses (e.g., "images (76)")
+    .replace(/\s+images?\s*(\(\d+\))?/gi, '')
+    // Remove other common artifacts at the end
+    .replace(/\s+emblem\s*$/i, '')
+    .replace(/\s+badge\s*$/i, '')
+    .replace(/\s+crest\s*$/i, '')
+    // Remove trailing/leading numbers in parentheses if they appear alone (e.g., "(76)")
+    .replace(/\s*\(\d+\)\s*$/, '')
+    // Collapse multiple spaces
+    .replace(/\s{2,}/g, ' ')
     .trim();
 }
 
