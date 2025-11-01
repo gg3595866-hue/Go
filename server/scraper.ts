@@ -2,6 +2,20 @@ import cloudscraper from 'cloudscraper';
 import * as cheerio from 'cheerio';
 import { type Match, type MatchDetails } from '@shared/schema';
 
+// Helper function to clean team names by removing artifacts like "logo", extra spaces, etc.
+function cleanTeamName(name: string): string {
+  if (!name) return '';
+  
+  return name
+    .trim()
+    .replace(/\s+logo\s*$/i, '') // Remove trailing "logo" (case insensitive)
+    .replace(/\s+emblem\s*$/i, '') // Remove trailing "emblem"
+    .replace(/\s+badge\s*$/i, '') // Remove trailing "badge"
+    .replace(/\s+crest\s*$/i, '') // Remove trailing "crest"
+    .replace(/\s{2,}/g, ' ') // Collapse multiple spaces
+    .trim();
+}
+
 export async function scrapeFixtures(date: Date): Promise<Match[]> {
   try {
     const year = date.getFullYear();
@@ -93,8 +107,9 @@ export async function scrapeFixtures(date: Date): Promise<Match[]> {
         const homeTeamImg = homeTeamSpan.find('img');
         const awayTeamImg = awayTeamSpan.find('img');
         
-        const homeTeam = homeTeamImg.attr('alt')?.trim() || homeTeamSpan.text().trim();
-        const awayTeam = awayTeamImg.attr('alt')?.trim() || awayTeamSpan.text().trim();
+        // Clean team names to remove "logo" and other artifacts
+        const homeTeam = cleanTeamName(homeTeamImg.attr('alt') || homeTeamSpan.text());
+        const awayTeam = cleanTeamName(awayTeamImg.attr('alt') || awayTeamSpan.text());
         const homeTeamLogo = homeTeamImg.attr('src');
         const awayTeamLogo = awayTeamImg.attr('src');
         
@@ -274,8 +289,9 @@ export async function scrapeBasketballFixtures(date: Date): Promise<Match[]> {
         const homeTeamImg = homeTeamSpan.find('img');
         const awayTeamImg = awayTeamSpan.find('img');
         
-        const homeTeam = homeTeamImg.attr('alt')?.trim() || homeTeamSpan.text().trim();
-        const awayTeam = awayTeamImg.attr('alt')?.trim() || awayTeamSpan.text().trim();
+        // Clean team names to remove "logo" and other artifacts
+        const homeTeam = cleanTeamName(homeTeamImg.attr('alt') || homeTeamSpan.text());
+        const awayTeam = cleanTeamName(awayTeamImg.attr('alt') || awayTeamSpan.text());
         const homeTeamLogo = homeTeamImg.attr('src');
         const awayTeamLogo = awayTeamImg.attr('src');
         
