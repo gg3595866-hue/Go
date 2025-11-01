@@ -81,9 +81,10 @@ export default function BasketballTesterPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/basketball-stats/tester'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/basketball/ml/predictions'] });
       toast({
         title: "Success",
-        description: "All basketball tester statistics have been cleared.",
+        description: "All basketball tester statistics and predictions have been cleared.",
       });
     },
     onError: () => {

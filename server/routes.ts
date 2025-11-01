@@ -1025,6 +1025,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/basketball-stats/database/clear", async (req, res) => {
     try {
       await databaseStorage.deleteAllBasketballStats();
+      await testerStorage.deleteAllBasketballPredictions();
       res.json({ success: true, message: 'Basketball database cleared successfully' });
     } catch (error) {
       console.error('Error clearing basketball database:', error);

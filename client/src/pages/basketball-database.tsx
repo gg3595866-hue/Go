@@ -61,9 +61,10 @@ export default function BasketballDatabasePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/basketball-stats/database'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/basketball/ml/predictions'] });
       toast({
         title: "Success",
-        description: "All basketball database statistics have been cleared.",
+        description: "All basketball database statistics and predictions have been cleared.",
       });
     },
     onError: () => {
