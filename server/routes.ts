@@ -1221,6 +1221,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Regenerate normalization files for all models
+  app.post("/api/basketball/ml/models/regenerate-normalization", async (req, res) => {
+    try {
+      console.log('Regenerating normalization files for all basketball models...');
+      
+      const basketballStatsArray = await databaseStorage.getAllBasketballStats();
+      const validMatches = basketballStatsArray.filter(stats => 
+        stats.ftResult && stats.ftHomePoints !== null && stats.ftAwayPoints !== null
+      );
+      
+      if (validMatches.length === 0) {
+        return res.status(400).json({
+          error: 'No valid basketball stats found',
+          message: 'Need completed matches to compute normalization stats'
+        });
+      }
+      
+      const { computeNormalizationStats } = await import('./ml-model-basketball');
+      const normalizationStats = computeNormalizationStats(validMatches);
+      
+      const models = await databaseStorage.getAllBasketballModels();
+      const fs = await import('fs/promises');
+      let regeneratedCount = 0;
+      
+      for (const model of models) {
+        if (!model.modelPath) continue;
+        
+        try {
+          const normalizationPath = `${model.modelPath}/normalization.json`;
+          await fs.writeFile(
+            normalizationPath,
+            JSON.stringify(normalizationStats, null, 2)
+          );
+          console.log(`Regenerated normalization file for model ${model.id}: ${normalizationPath}`);
+          regeneratedCount++;
+        } catch (error) {
+          console.error(`Failed to regenerate normalization for model ${model.id}:`, error);
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Regenerated normalization files for ${regeneratedCount}/${models.length} models`,
+        regeneratedCount,
+        totalModels: models.length
+      });
+      
+    } catch (error) {
+      console.error('Error regenerating normalization files:', error);
+      res.status(500).json({
+        error: 'Failed to regenerate normalization files',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Basketball Prediction endpoint
   app.post("/api/basketball/ml/predict", async (req, res) => {
     try {

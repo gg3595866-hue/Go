@@ -450,12 +450,23 @@ export async function saveBasketballModel(
   normalizationStats: BasketballNormalizationStats
 ): Promise<void> {
   const fs = await import('fs/promises');
-  await fs.mkdir(path, { recursive: true });
-  await model.save(`file://${path}`);
-  await fs.writeFile(
-    `${path}/normalization.json`,
-    JSON.stringify(normalizationStats, null, 2)
-  );
+  try {
+    await fs.mkdir(path, { recursive: true });
+    console.log(`Created directory: ${path}`);
+    
+    await model.save(`file://${path}`);
+    console.log(`Saved model to: ${path}/model.json`);
+    
+    const normalizationJson = JSON.stringify(normalizationStats, null, 2);
+    await fs.writeFile(
+      `${path}/normalization.json`,
+      normalizationJson
+    );
+    console.log(`Saved normalization stats to: ${path}/normalization.json`);
+  } catch (error) {
+    console.error(`Error saving basketball model to ${path}:`, error);
+    throw error;
+  }
 }
 
 export async function loadBasketballModel(path: string): Promise<{
