@@ -1226,20 +1226,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log('Regenerating normalization files for all basketball models...');
       
-      const basketballStatsArray = await databaseStorage.getAllBasketballStats();
-      const validMatches = basketballStatsArray.filter(stats => 
-        stats.ftResult && stats.ftHomePoints !== null && stats.ftAwayPoints !== null
+      // Try database data first, filter to reasonable values
+      const databaseMatches = await databaseStorage.getAllBasketballStats();
+      const validDatabaseMatches = databaseMatches.filter(stats => 
+        stats.ftResult && 
+        stats.ftHomePoints !== null && 
+        stats.ftAwayPoints !== null &&
+        stats.homePointsScoredPerGame > 0 && 
+        stats.homePointsScoredPerGame < 200 &&
+        stats.awayPointsScoredPerGame > 0 && 
+        stats.awayPointsScoredPerGame < 200
       );
+      
+      // Fall back to tester data
+      const testerMatches = await testerStorage.getAllBasketballStats();
+      const validTesterMatches = testerMatches.filter(stats => 
+        stats.ftResult && 
+        stats.ftHomePoints !== null && 
+        stats.ftAwayPoints !== null
+      );
+      
+      const validMatches = validDatabaseMatches.length > 0 ? validDatabaseMatches : validTesterMatches;
       
       if (validMatches.length === 0) {
         return res.status(400).json({
           error: 'No valid basketball stats found',
-          message: 'Need completed matches to compute normalization stats'
+          message: 'Need completed matches with reasonable stats to compute normalization'
         });
       }
       
       const { computeNormalizationStats } = await import('./ml-model-basketball');
       const normalizationStats = computeNormalizationStats(validMatches);
+      
+      console.log('Computed normalization stats:', {
+        homePoints: normalizationStats.targets.homePoints,
+        awayPoints: normalizationStats.targets.awayPoints,
+        numericalFeaturesMinMax: {
+          homePointsScoredMin: normalizationStats.numericalFeatures.min[0],
+          homePointsScoredMax: normalizationStats.numericalFeatures.max[0]
+        },
+        validMatchesUsed: validMatches.length
+      });
       
       const models = await databaseStorage.getAllBasketballModels();
       const fs = await import('fs/promises');
@@ -1263,9 +1290,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({
         success: true,
-        message: `Regenerated normalization files for ${regeneratedCount}/${models.length} models`,
+        message: `Regenerated normalization files for ${regeneratedCount}/${models.length} models using ${validMatches.length} matches`,
         regeneratedCount,
-        totalModels: models.length
+        totalModels: models.length,
+        validMatches: validMatches.length
       });
       
     } catch (error) {
