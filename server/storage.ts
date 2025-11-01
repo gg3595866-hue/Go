@@ -196,12 +196,65 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getOrCreateLeagueId(leagueName: string): Promise<number> {
-    // Normalize league name (lowercase, trim, and collapse multiple spaces)
-    const normalizedName = leagueName
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, ' ');
+  async getOrCreateLeagueId(competitionName: string): Promise<number> {
+    // Extract country from competition name to ensure unique league names
+    const countryMap: Record<string, string> = {
+      'spain': 'spain',
+      'england': 'england',
+      'germany': 'germany',
+      'italy': 'italy',
+      'france': 'france',
+      'portugal': 'portugal',
+      'netherlands': 'netherlands',
+      'belgium': 'belgium',
+      'scotland': 'scotland',
+      'turkey': 'turkey',
+      'brazil': 'brazil',
+      'argentina': 'argentina',
+      'mexico': 'mexico',
+      'usa': 'usa',
+      'united states': 'usa',
+      'canada': 'canada',
+      'egypt': 'egypt',
+      'ukraine': 'ukraine',
+      'israel': 'israel',
+      'european': 'europe',
+      'uefa': 'europe',
+      'champions league': 'europe',
+      'europa league': 'europe',
+      'conference league': 'europe',
+    };
+    
+    const lowerComp = competitionName.toLowerCase().trim().replace(/\s+/g, ' ');
+    let countryPrefix = '';
+    
+    // Try to match a known country
+    for (const [key, value] of Object.entries(countryMap)) {
+      if (lowerComp.includes(key)) {
+        countryPrefix = value;
+        break;
+      }
+    }
+    
+    // Normalize the league name to always include country prefix
+    // This ensures "Premier League" from different countries get different IDs
+    let normalizedName: string;
+    
+    if (countryPrefix) {
+      // Check if the competition name already starts with the country
+      const countryPrefixPattern = new RegExp(`^${countryPrefix}\\s*[-:]?\\s*`, 'i');
+      if (countryPrefixPattern.test(lowerComp)) {
+        // Already has country prefix, just normalize
+        normalizedName = lowerComp;
+      } else {
+        // Add country prefix
+        normalizedName = `${countryPrefix} - ${lowerComp}`;
+      }
+    } else {
+      // No known country found, use the competition name as-is
+      // This preserves uniqueness for unknown competitions
+      normalizedName = lowerComp;
+    }
     
     // Try to find existing league in mapping database
     const [existingLeague] = await this.mappingDb
