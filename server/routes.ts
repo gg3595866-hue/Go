@@ -1125,14 +1125,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         learningRate
       };
       
-      const { model, result } = await trainBasketballModel(
+      const { model, result, normalizationStats } = await trainBasketballModel(
         basketballStatsArray,
         trainingConfig,
         archConfig
       );
       
       const modelPath = `./basketball-models/model_${Date.now()}`;
-      await saveBasketballModel(model, modelPath);
+      await saveBasketballModel(model, modelPath, normalizationStats);
       
       const modelMetadata = await databaseStorage.createBasketballModel({
         modelName: 'Basketball Predictor',
@@ -1236,7 +1236,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const { loadBasketballModel, predictBasketball } = await import('./ml-model-basketball');
-      const model = await loadBasketballModel(activeModel.modelPath);
+      const { model, normalizationStats } = await loadBasketballModel(activeModel.modelPath);
       
       const testerMatches = await testerStorage.getAllBasketballStats();
       
@@ -1253,7 +1253,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       for (const match of testerMatches) {
         try {
-          const prediction = await predictBasketball(model, match);
+          const prediction = await predictBasketball(model, match, normalizationStats);
           
           const savedPrediction = await testerStorage.createBasketballPrediction({
             basketballStatsId: match.id,

@@ -1,6 +1,17 @@
 import * as tf from '@tensorflow/tfjs-node';
 import type { BasketballStats } from '@shared/schema';
 
+export interface BasketballNormalizationStats {
+  numericalFeatures: {
+    min: number[];
+    max: number[];
+  };
+  targets: {
+    homePoints: { min: number; max: number };
+    awayPoints: { min: number; max: number };
+  };
+}
+
 export interface BasketballTrainingConfig {
   epochs: number;
   batchSize: number;
@@ -64,6 +75,73 @@ export function prepareBasketballNumericalFeatures(stats: BasketballStats): numb
     stats.homeAvgPointsQ3,
     stats.awayAvgPointsQ3,
   ];
+}
+
+export function computeNormalizationStats(
+  matchStatsArray: BasketballStats[]
+): BasketballNormalizationStats {
+  const numericalFeaturesArray: number[][] = [];
+  const homePointsArray: number[] = [];
+  const awayPointsArray: number[] = [];
+
+  for (const stats of matchStatsArray) {
+    numericalFeaturesArray.push(prepareBasketballNumericalFeatures(stats));
+    if (stats.ftHomePoints !== null) homePointsArray.push(stats.ftHomePoints);
+    if (stats.ftAwayPoints !== null) awayPointsArray.push(stats.ftAwayPoints);
+  }
+
+  const numFeatures = numericalFeaturesArray[0].length;
+  const min: number[] = [];
+  const max: number[] = [];
+
+  for (let i = 0; i < numFeatures; i++) {
+    const values = numericalFeaturesArray.map(features => features[i]);
+    min.push(Math.min(...values));
+    max.push(Math.max(...values));
+  }
+
+  return {
+    numericalFeatures: { min, max },
+    targets: {
+      homePoints: {
+        min: Math.min(...homePointsArray),
+        max: Math.max(...homePointsArray),
+      },
+      awayPoints: {
+        min: Math.min(...awayPointsArray),
+        max: Math.max(...awayPointsArray),
+      },
+    },
+  };
+}
+
+export function normalizeFeatures(
+  features: number[],
+  stats: BasketballNormalizationStats
+): number[] {
+  return features.map((value, i) => {
+    const min = stats.numericalFeatures.min[i];
+    const max = stats.numericalFeatures.max[i];
+    if (max === min) return 0.5;
+    return Math.max(0, Math.min(1, (value - min) / (max - min)));
+  });
+}
+
+export function normalizeTarget(
+  value: number,
+  min: number,
+  max: number
+): number {
+  if (max === min) return 0.5;
+  return Math.max(0, Math.min(1, (value - min) / (max - min)));
+}
+
+export function denormalizeTarget(
+  normalizedValue: number,
+  min: number,
+  max: number
+): number {
+  return normalizedValue * (max - min) + min;
 }
 
 export function prepareBasketballCategoricalInputs(stats: BasketballStats) {
@@ -185,7 +263,7 @@ export async function trainBasketballModel(
   matchStatsArray: BasketballStats[],
   trainingConfig: BasketballTrainingConfig,
   archConfig: BasketballModelArchitectureConfig
-): Promise<{ model: tf.LayersModel; result: BasketballTrainingResult }> {
+): Promise<{ model: tf.LayersModel; result: BasketballTrainingResult; normalizationStats: BasketballNormalizationStats }> {
   const validMatches = matchStatsArray.filter(stats => {
     try {
       prepareBasketballLabels(stats);
@@ -199,6 +277,8 @@ export async function trainBasketballModel(
     throw new Error('No valid matches found for training. All matches must have complete result data.');
   }
 
+  const normalizationStats = computeNormalizationStats(validMatches);
+
   const homeTeamIds: number[] = [];
   const awayTeamIds: number[] = [];
   const leagueIds: number[] = [];
@@ -211,16 +291,21 @@ export async function trainBasketballModel(
   for (const stats of validMatches) {
     const categorical = prepareBasketballCategoricalInputs(stats);
     const numerical = prepareBasketballNumericalFeatures(stats);
+    const normalizedNumerical = normalizeFeatures(numerical, normalizationStats);
     const labels = prepareBasketballLabels(stats);
 
     homeTeamIds.push(categorical.homeTeamId);
     awayTeamIds.push(categorical.awayTeamId);
     leagueIds.push(categorical.leagueId);
     countryIds.push(categorical.countryId);
-    numericalFeatures.push(numerical);
+    numericalFeatures.push(normalizedNumerical);
     winnerLabels.push(labels.ftResult);
-    homePointsLabels.push(labels.ftHomePoints);
-    awayPointsLabels.push(labels.ftAwayPoints);
+    homePointsLabels.push(
+      normalizeTarget(labels.ftHomePoints, normalizationStats.targets.homePoints.min, normalizationStats.targets.homePoints.max)
+    );
+    awayPointsLabels.push(
+      normalizeTarget(labels.ftAwayPoints, normalizationStats.targets.awayPoints.min, normalizationStats.targets.awayPoints.max)
+    );
   }
 
   const homeTeamIdsTensor = tf.tensor2d(homeTeamIds, [homeTeamIds.length, 1], 'int32');
@@ -287,21 +372,23 @@ export async function trainBasketballModel(
     },
   };
 
-  return { model, result: trainingResult };
+  return { model, result: trainingResult, normalizationStats };
 }
 
 export async function predictBasketball(
   model: tf.LayersModel,
-  stats: BasketballStats
+  stats: BasketballStats,
+  normalizationStats: BasketballNormalizationStats
 ): Promise<BasketballPredictionResult> {
   const categorical = prepareBasketballCategoricalInputs(stats);
   const numerical = prepareBasketballNumericalFeatures(stats);
+  const normalizedNumerical = normalizeFeatures(numerical, normalizationStats);
 
   const homeTeamIdTensor = tf.tensor2d([categorical.homeTeamId], [1, 1], 'int32');
   const awayTeamIdTensor = tf.tensor2d([categorical.awayTeamId], [1, 1], 'int32');
   const leagueIdTensor = tf.tensor2d([categorical.leagueId], [1, 1], 'int32');
   const countryIdTensor = tf.tensor2d([categorical.countryId], [1, 1], 'int32');
-  const numericalTensor = tf.tensor2d([numerical], [1, 16]);
+  const numericalTensor = tf.tensor2d([normalizedNumerical], [1, 16]);
 
   const predictions = model.predict([
     homeTeamIdTensor,
@@ -314,8 +401,8 @@ export async function predictBasketball(
   const [winnerPred, homePointsPred, awayPointsPred] = predictions;
 
   const winnerProbs = await winnerPred.data();
-  const homePoints = (await homePointsPred.data())[0];
-  const awayPoints = (await awayPointsPred.data())[0];
+  const normalizedHomePoints = (await homePointsPred.data())[0];
+  const normalizedAwayPoints = (await awayPointsPred.data())[0];
 
   homeTeamIdTensor.dispose();
   awayTeamIdTensor.dispose();
@@ -332,6 +419,17 @@ export async function predictBasketball(
   const predicted = homeWinProb > awayWinProb ? 'H' : 'A';
   const confidence = Math.max(homeWinProb, awayWinProb);
 
+  const homePoints = denormalizeTarget(
+    normalizedHomePoints,
+    normalizationStats.targets.homePoints.min,
+    normalizationStats.targets.homePoints.max
+  );
+  const awayPoints = denormalizeTarget(
+    normalizedAwayPoints,
+    normalizationStats.targets.awayPoints.min,
+    normalizationStats.targets.awayPoints.max
+  );
+
   return {
     winner: {
       home: homeWinProb,
@@ -339,19 +437,34 @@ export async function predictBasketball(
       predicted,
     },
     points: {
-      homePoints: Math.max(0, homePoints),
-      awayPoints: Math.max(0, awayPoints),
+      homePoints: Math.max(0, Math.round(homePoints)),
+      awayPoints: Math.max(0, Math.round(awayPoints)),
     },
     confidence,
   };
 }
 
-export async function saveBasketballModel(model: tf.LayersModel, path: string): Promise<void> {
+export async function saveBasketballModel(
+  model: tf.LayersModel,
+  path: string,
+  normalizationStats: BasketballNormalizationStats
+): Promise<void> {
   const fs = await import('fs/promises');
   await fs.mkdir(path, { recursive: true });
   await model.save(`file://${path}`);
+  await fs.writeFile(
+    `${path}/normalization.json`,
+    JSON.stringify(normalizationStats, null, 2)
+  );
 }
 
-export async function loadBasketballModel(path: string): Promise<tf.LayersModel> {
-  return await tf.loadLayersModel(`file://${path}/model.json`);
+export async function loadBasketballModel(path: string): Promise<{
+  model: tf.LayersModel;
+  normalizationStats: BasketballNormalizationStats;
+}> {
+  const model = await tf.loadLayersModel(`file://${path}/model.json`);
+  const fs = await import('fs/promises');
+  const normalizationJson = await fs.readFile(`${path}/normalization.json`, 'utf-8');
+  const normalizationStats: BasketballNormalizationStats = JSON.parse(normalizationJson);
+  return { model, normalizationStats };
 }
