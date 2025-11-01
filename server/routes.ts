@@ -1167,6 +1167,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all basketball models
+  app.get("/api/basketball/ml/models", async (req, res) => {
+    try {
+      const models = await databaseStorage.getAllBasketballModels();
+      res.json(models);
+    } catch (error) {
+      console.error('Error fetching basketball models:', error);
+      res.status(500).json({ error: 'Failed to fetch basketball models' });
+    }
+  });
+
+  // Get active basketball model
+  app.get("/api/basketball/ml/models/active", async (req, res) => {
+    try {
+      const model = await databaseStorage.getActiveBasketballModel();
+      if (!model) {
+        return res.status(404).json({ error: 'No active basketball model found' });
+      }
+      res.json(model);
+    } catch (error) {
+      console.error('Error fetching active basketball model:', error);
+      res.status(500).json({ error: 'Failed to fetch active basketball model' });
+    }
+  });
+
+  // Set active basketball model
+  app.post("/api/basketball/ml/models/:id/activate", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await databaseStorage.setActiveBasketballModel(parseInt(id));
+      if (!success) {
+        return res.status(404).json({ error: 'Basketball model not found' });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error activating basketball model:', error);
+      res.status(500).json({ error: 'Failed to activate basketball model' });
+    }
+  });
+
+  // Delete all basketball models
+  app.delete("/api/basketball/ml/models", async (req, res) => {
+    try {
+      const success = await databaseStorage.deleteAllBasketballModels();
+      if (!success) {
+        return res.status(500).json({ error: 'Failed to delete basketball models' });
+      }
+      res.json({ success: true, message: 'All basketball models deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting all basketball models:', error);
+      res.status(500).json({ error: 'Failed to delete basketball models' });
+    }
+  });
+
   // Basketball Prediction endpoint
   app.post("/api/basketball/ml/predict", async (req, res) => {
     try {
