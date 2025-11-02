@@ -907,6 +907,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Feature Importance Analysis for Football
+  app.post("/api/ml/analyze-features", async (req, res) => {
+    try {
+      console.log('Starting feature importance analysis...');
+      
+      // Get active model
+      const activeModel = await databaseStorage.getActiveModel();
+      if (!activeModel) {
+        return res.status(404).json({
+          error: 'No active model found',
+          message: 'Please train a model first'
+        });
+      }
+
+      // Load the model
+      const { loadModel } = await import('./ml-model');
+      const model = await loadModel(activeModel.modelPath!);
+      
+      // Get validation data (use 20% of database for analysis)
+      const allMatches = await databaseStorage.getAllMatchStats();
+      const validMatches = allMatches.filter(m => 
+        m.ftResult && m.ftHomeScore !== null && m.ftAwayScore !== null
+      );
+      
+      if (validMatches.length < 50) {
+        return res.status(400).json({
+          error: 'Insufficient data',
+          message: 'At least 50 completed matches required for analysis'
+        });
+      }
+
+      // Use last 20% as validation set for analysis
+      const validationSize = Math.floor(validMatches.length * 0.2);
+      const validationData = validMatches.slice(-validationSize);
+      
+      // Run feature importance analysis
+      const { computePermutationImportance, printFeatureImportanceReport } = await import('./feature-importance');
+      const report = await computePermutationImportance(model, validationData, 3);
+      
+      // Print report to console
+      printFeatureImportanceReport(report);
+      
+      res.json({
+        success: true,
+        report
+      });
+      
+    } catch (error) {
+      console.error('Error analyzing features:', error);
+      res.status(500).json({
+        error: 'Failed to analyze features',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Feature Importance Analysis for Basketball
+  app.post("/api/basketball/ml/analyze-features", async (req, res) => {
+    try {
+      console.log('Starting basketball feature importance analysis...');
+      
+      // Get active basketball model
+      const activeModel = await databaseStorage.getActiveBasketballModel();
+      if (!activeModel) {
+        return res.status(404).json({
+          error: 'No active basketball model found',
+          message: 'Please train a basketball model first'
+        });
+      }
+
+      // Load the model
+      const { loadBasketballModel } = await import('./ml-model-basketball');
+      const modelData = await loadBasketballModel(activeModel.modelPath!);
+      
+      // Get validation data
+      const allMatches = await databaseStorage.getAllBasketballStats();
+      const validMatches = allMatches.filter(m => 
+        m.ftResult && m.ftHomePoints !== null && m.ftAwayPoints !== null
+      );
+      
+      if (validMatches.length < 50) {
+        return res.status(400).json({
+          error: 'Insufficient data',
+          message: 'At least 50 completed basketball games required for analysis'
+        });
+      }
+
+      const validationSize = Math.floor(validMatches.length * 0.2);
+      const validationData = validMatches.slice(-validationSize);
+      
+      // Run feature importance analysis
+      const { 
+        computeBasketballPermutationImportance, 
+        printBasketballFeatureImportanceReport 
+      } = await import('./feature-importance-basketball');
+      const report = await computeBasketballPermutationImportance(modelData.model, validationData, 3);
+      
+      // Print report to console
+      printBasketballFeatureImportanceReport(report);
+      
+      res.json({
+        success: true,
+        report
+      });
+      
+    } catch (error) {
+      console.error('Error analyzing basketball features:', error);
+      res.status(500).json({
+        error: 'Failed to analyze basketball features',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Get all predictions
   app.get("/api/ml/predictions", async (req, res) => {
     try {
