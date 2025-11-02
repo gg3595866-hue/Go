@@ -211,6 +211,20 @@ try {
   // Column already exists, ignore
 }
 
+// Add half-time score prediction columns to match_predictions table
+try {
+  databaseSqlite.exec(`ALTER TABLE match_predictions ADD COLUMN pred_ht_home_score REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added pred_ht_home_score column to match_predictions table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_predictions ADD COLUMN pred_ht_away_score REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added pred_ht_away_score column to match_predictions table');
+} catch (e) {
+  // Column already exists, ignore
+}
+
 testerSqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -343,6 +357,36 @@ try {
 }
 try {
   testerSqlite.exec(`ALTER TABLE basketball_stats ADD COLUMN away_avg_points_q4 REAL NOT NULL DEFAULT 0;`);
+} catch (e) {
+  // Column already exists, ignore
+}
+
+// Add matchDate column to match_stats table in tester database for time-aware splitting
+try {
+  testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN match_date INTEGER NOT NULL DEFAULT (unixepoch());`);
+  console.log('✅ Added match_date column to tester match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+
+// Add matchDate column to basketball_stats table in tester database for time-aware splitting
+try {
+  testerSqlite.exec(`ALTER TABLE basketball_stats ADD COLUMN match_date INTEGER NOT NULL DEFAULT (unixepoch());`);
+  console.log('✅ Added match_date column to tester basketball_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+
+// Add half-time score prediction columns to tester match_predictions table
+try {
+  testerSqlite.exec(`ALTER TABLE match_predictions ADD COLUMN pred_ht_home_score REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added pred_ht_home_score column to tester match_predictions table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  testerSqlite.exec(`ALTER TABLE match_predictions ADD COLUMN pred_ht_away_score REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added pred_ht_away_score column to tester match_predictions table');
 } catch (e) {
   // Column already exists, ignore
 }
