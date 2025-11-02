@@ -195,6 +195,22 @@ try {
   // Column already exists, ignore
 }
 
+// Add matchDate column to match_stats table for time-aware splitting
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN match_date INTEGER NOT NULL DEFAULT (unixepoch());`);
+  console.log('✅ Added match_date column to match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+
+// Add matchDate column to basketball_stats table for time-aware splitting
+try {
+  databaseSqlite.exec(`ALTER TABLE basketball_stats ADD COLUMN match_date INTEGER NOT NULL DEFAULT (unixepoch());`);
+  console.log('✅ Added match_date column to basketball_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+
 testerSqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
