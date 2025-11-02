@@ -123,6 +123,9 @@ export const matchStats = sqliteTable("match_stats", {
   leagueOver25: real("league_over_2_5").notNull(),
   leagueAvgGoals: real("league_avg_goals").notNull(),
   
+  // Match date for time-aware splitting
+  matchDate: integer("match_date", { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  
   // Target variables (actual match results)
   ftHomeScore: integer("ft_home_score"),
   ftAwayScore: integer("ft_away_score"),
@@ -442,6 +445,9 @@ export const basketballStats = sqliteTable("basketball_stats", {
   awayAvgPointsQ3: real("away_avg_points_q3").notNull(),
   homeAvgPointsQ4: real("home_avg_points_q4").notNull(),
   awayAvgPointsQ4: real("away_avg_points_q4").notNull(),
+  
+  // Match date for time-aware splitting
+  matchDate: integer("match_date", { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   
   // Target variables (actual match results)
   ftHomePoints: integer("ft_home_points"),

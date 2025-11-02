@@ -259,11 +259,35 @@ export function buildBasketballModel(config: BasketballModelArchitectureConfig):
   return model;
 }
 
+/**
+ * Time-aware split for basketball matches
+ */
+function timeAwareBasketballSplit<T extends { matchDate: Date }>(
+  data: T[],
+  validationSplit: number = 0.2
+): { train: T[]; validation: T[] } {
+  const sorted = [...data].sort((a, b) => a.matchDate.getTime() - b.matchDate.getTime());
+  const splitIndex = Math.floor(sorted.length * (1 - validationSplit));
+  
+  const train = sorted.slice(0, splitIndex);
+  const validation = sorted.slice(splitIndex);
+  
+  console.log(`Basketball time-aware split: ${train.length} training, ${validation.length} validation`);
+  if (train.length > 0 && validation.length > 0) {
+    console.log(`Training: ${train[0].matchDate.toISOString().split('T')[0]} to ${train[train.length-1].matchDate.toISOString().split('T')[0]}`);
+    console.log(`Validation: ${validation[0].matchDate.toISOString().split('T')[0]} to ${validation[validation.length-1].matchDate.toISOString().split('T')[0]}`);
+  }
+  
+  return { train, validation };
+}
+
 export async function trainBasketballModel(
   matchStatsArray: BasketballStats[],
   trainingConfig: BasketballTrainingConfig,
   archConfig: BasketballModelArchitectureConfig
 ): Promise<{ model: tf.LayersModel; result: BasketballTrainingResult; normalizationStats: BasketballNormalizationStats }> {
+  console.log(`\n🏀 Training basketball model with ${matchStatsArray.length} samples...`);
+  
   const validMatches = matchStatsArray.filter(stats => {
     try {
       prepareBasketballLabels(stats);
@@ -276,46 +300,111 @@ export async function trainBasketballModel(
   if (validMatches.length === 0) {
     throw new Error('No valid matches found for training. All matches must have complete result data.');
   }
+  
+  console.log(`✅ ${validMatches.length} valid matches`);
 
-  const normalizationStats = computeNormalizationStats(validMatches);
+  // ⚡ TIME-AWARE SPLIT: older matches for training, newer for validation
+  const { train: trainMatches, validation: valMatches } = timeAwareBasketballSplit(validMatches, trainingConfig.validationSplit);
+  
+  if (trainMatches.length < 50 || valMatches.length < 10) {
+    throw new Error(`Time-aware split resulted in insufficient data: ${trainMatches.length} training, ${valMatches.length} validation. Need at least 50 training and 10 validation samples.`);
+  }
+  
+  // ⚠️ CRITICAL: Compute normalization stats ONLY from training data to prevent data leakage
+  const normalizationStats = computeNormalizationStats(trainMatches);
 
-  const homeTeamIds: number[] = [];
-  const awayTeamIds: number[] = [];
-  const leagueIds: number[] = [];
-  const countryIds: number[] = [];
-  const numericalFeatures: number[][] = [];
-  const winnerLabels: number[][] = [];
-  const homePointsLabels: number[] = [];
-  const awayPointsLabels: number[] = [];
+  // Prepare training data
+  const trainData = {
+    homeTeamIds: [] as number[],
+    awayTeamIds: [] as number[],
+    leagueIds: [] as number[],
+    countryIds: [] as number[],
+    numericalFeatures: [] as number[][],
+    winnerLabels: [] as number[][],
+    homePointsLabels: [] as number[],
+    awayPointsLabels: [] as number[]
+  };
 
-  for (const stats of validMatches) {
+  for (const stats of trainMatches) {
     const categorical = prepareBasketballCategoricalInputs(stats);
     const numerical = prepareBasketballNumericalFeatures(stats);
     const normalizedNumerical = normalizeFeatures(numerical, normalizationStats);
     const labels = prepareBasketballLabels(stats);
 
-    homeTeamIds.push(categorical.homeTeamId);
-    awayTeamIds.push(categorical.awayTeamId);
-    leagueIds.push(categorical.leagueId);
-    countryIds.push(categorical.countryId);
-    numericalFeatures.push(normalizedNumerical);
-    winnerLabels.push(labels.ftResult);
-    homePointsLabels.push(
+    trainData.homeTeamIds.push(categorical.homeTeamId);
+    trainData.awayTeamIds.push(categorical.awayTeamId);
+    trainData.leagueIds.push(categorical.leagueId);
+    trainData.countryIds.push(categorical.countryId);
+    trainData.numericalFeatures.push(normalizedNumerical);
+    trainData.winnerLabels.push(labels.ftResult);
+    trainData.homePointsLabels.push(
       normalizeTarget(labels.ftHomePoints, normalizationStats.targets.homePoints.min, normalizationStats.targets.homePoints.max)
     );
-    awayPointsLabels.push(
+    trainData.awayPointsLabels.push(
+      normalizeTarget(labels.ftAwayPoints, normalizationStats.targets.awayPoints.min, normalizationStats.targets.awayPoints.max)
+    );
+  }
+  
+  // Prepare validation data
+  const valData = {
+    homeTeamIds: [] as number[],
+    awayTeamIds: [] as number[],
+    leagueIds: [] as number[],
+    countryIds: [] as number[],
+    numericalFeatures: [] as number[][],
+    winnerLabels: [] as number[][],
+    homePointsLabels: [] as number[],
+    awayPointsLabels: [] as number[]
+  };
+
+  for (const stats of valMatches) {
+    const categorical = prepareBasketballCategoricalInputs(stats);
+    const numerical = prepareBasketballNumericalFeatures(stats);
+    const normalizedNumerical = normalizeFeatures(numerical, normalizationStats);
+    const labels = prepareBasketballLabels(stats);
+
+    valData.homeTeamIds.push(categorical.homeTeamId);
+    valData.awayTeamIds.push(categorical.awayTeamId);
+    valData.leagueIds.push(categorical.leagueId);
+    valData.countryIds.push(categorical.countryId);
+    valData.numericalFeatures.push(normalizedNumerical);
+    valData.winnerLabels.push(labels.ftResult);
+    valData.homePointsLabels.push(
+      normalizeTarget(labels.ftHomePoints, normalizationStats.targets.homePoints.min, normalizationStats.targets.homePoints.max)
+    );
+    valData.awayPointsLabels.push(
       normalizeTarget(labels.ftAwayPoints, normalizationStats.targets.awayPoints.min, normalizationStats.targets.awayPoints.max)
     );
   }
 
-  const homeTeamIdsTensor = tf.tensor2d(homeTeamIds, [homeTeamIds.length, 1], 'int32');
-  const awayTeamIdsTensor = tf.tensor2d(awayTeamIds, [awayTeamIds.length, 1], 'int32');
-  const leagueIdsTensor = tf.tensor2d(leagueIds, [leagueIds.length, 1], 'int32');
-  const countryIdsTensor = tf.tensor2d(countryIds, [countryIds.length, 1], 'int32');
-  const numericalTensor = tf.tensor2d(numericalFeatures);
-  const winnerLabelsTensor = tf.tensor2d(winnerLabels);
-  const homePointsLabelsTensor = tf.tensor2d(homePointsLabels, [homePointsLabels.length, 1]);
-  const awayPointsLabelsTensor = tf.tensor2d(awayPointsLabels, [awayPointsLabels.length, 1]);
+  // Create tensors
+  const trainXs = [
+    tf.tensor2d(trainData.homeTeamIds, [trainData.homeTeamIds.length, 1], 'int32'),
+    tf.tensor2d(trainData.awayTeamIds, [trainData.awayTeamIds.length, 1], 'int32'),
+    tf.tensor2d(trainData.leagueIds, [trainData.leagueIds.length, 1], 'int32'),
+    tf.tensor2d(trainData.countryIds, [trainData.countryIds.length, 1], 'int32'),
+    tf.tensor2d(trainData.numericalFeatures)
+  ];
+  
+  const trainYs = [
+    tf.tensor2d(trainData.winnerLabels),
+    tf.tensor2d(trainData.homePointsLabels, [trainData.homePointsLabels.length, 1]),
+    tf.tensor2d(trainData.awayPointsLabels, [trainData.awayPointsLabels.length, 1])
+  ];
+  
+  const valXs = [
+    tf.tensor2d(valData.homeTeamIds, [valData.homeTeamIds.length, 1], 'int32'),
+    tf.tensor2d(valData.awayTeamIds, [valData.awayTeamIds.length, 1], 'int32'),
+    tf.tensor2d(valData.leagueIds, [valData.leagueIds.length, 1], 'int32'),
+    tf.tensor2d(valData.countryIds, [valData.countryIds.length, 1], 'int32'),
+    tf.tensor2d(valData.numericalFeatures)
+  ];
+  
+  const valYs = [
+    tf.tensor2d(valData.winnerLabels),
+    tf.tensor2d(valData.homePointsLabels, [valData.homePointsLabels.length, 1]),
+    tf.tensor2d(valData.awayPointsLabels, [valData.awayPointsLabels.length, 1])
+  ];
 
   const model = buildBasketballModel(archConfig);
 
@@ -333,30 +422,46 @@ export async function trainBasketballModel(
     },
   });
 
+  console.log(`\n🎯 Training with NO random shuffle - chronological split ensures no data leakage\n`);
+
   const history = await model.fit(
-    [homeTeamIdsTensor, awayTeamIdsTensor, leagueIdsTensor, countryIdsTensor, numericalTensor],
-    [winnerLabelsTensor, homePointsLabelsTensor, awayPointsLabelsTensor],
+    trainXs,
+    trainYs,
     {
       epochs: trainingConfig.epochs,
       batchSize: trainingConfig.batchSize,
-      validationSplit: trainingConfig.validationSplit,
+      validationData: [valXs, valYs],
+      shuffle: false, // ⚠️ NO SHUFFLE
       verbose: 1,
       callbacks: {
         onEpochEnd: (epoch, logs) => {
-          console.log(`Epoch ${epoch + 1}: loss = ${logs?.loss?.toFixed(4)}, winner_output_accuracy = ${logs?.winner_output_accuracy?.toFixed(4)}`);
+          const trainAcc = (logs?.winner_output_acc || 0) * 100;
+          const valAcc = (logs?.val_winner_output_acc || 0) * 100;
+          const gap = trainAcc - valAcc;
+          console.log(
+            `Epoch ${epoch + 1}/${trainingConfig.epochs}: ` +
+            `train_acc=${trainAcc.toFixed(1)}%, val_acc=${valAcc.toFixed(1)}%, ` +
+            `gap=${gap.toFixed(1)}% ${gap > 20 ? '⚠️ MEMORIZING!' : gap > 10 ? '⚠️' : '✅'}`
+          );
         },
       },
     }
   );
 
-  homeTeamIdsTensor.dispose();
-  awayTeamIdsTensor.dispose();
-  leagueIdsTensor.dispose();
-  countryIdsTensor.dispose();
-  numericalTensor.dispose();
-  winnerLabelsTensor.dispose();
-  homePointsLabelsTensor.dispose();
-  awayPointsLabelsTensor.dispose();
+  // Clean up tensors
+  trainXs.forEach(t => t.dispose());
+  trainYs.forEach(t => t.dispose());
+  valXs.forEach(t => t.dispose());
+  valYs.forEach(t => t.dispose());
+
+  const finalTrainAcc = (history.history.winner_output_acc as number[]).slice(-1)[0];
+  const finalValAcc = (history.history.val_winner_output_acc as number[]).slice(-1)[0];
+  const generalizationGap = (finalTrainAcc - finalValAcc) * 100;
+  
+  console.log(`\n📊 Final Results:`);
+  console.log(`   Training Accuracy: ${(finalTrainAcc * 100).toFixed(1)}%`);
+  console.log(`   Validation Accuracy: ${(finalValAcc * 100).toFixed(1)}%`);
+  console.log(`   Generalization Gap: ${generalizationGap.toFixed(1)}% ${generalizationGap > 20 ? '⚠️ HIGH' : generalizationGap > 10 ? '⚠️ MODERATE' : '✅ GOOD'}`);
 
   const trainingResult: BasketballTrainingResult = {
     history: {
@@ -366,8 +471,8 @@ export async function trainBasketballModel(
       valAccuracy: history.history.val_winner_output_acc as number[],
     },
     finalMetrics: {
-      trainingAccuracy: (history.history.winner_output_acc as number[]).slice(-1)[0],
-      validationAccuracy: (history.history.val_winner_output_acc as number[]).slice(-1)[0],
+      trainingAccuracy: finalTrainAcc,
+      validationAccuracy: finalValAcc,
       loss: (history.history.loss as number[]).slice(-1)[0],
     },
   };

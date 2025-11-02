@@ -275,76 +275,165 @@ export function buildModel(config: ModelArchitectureConfig): tf.LayersModel {
 }
 
 /**
- * Train the model on match statistics data
+ * Perform time-aware split: older matches for training, newer matches for validation
+ * This prevents data leakage by ensuring the model never sees "future" information during training
+ */
+function timeAwareSplit<T extends { matchDate: Date }>(
+  data: T[],
+  validationSplit: number = 0.2
+): { train: T[]; validation: T[] } {
+  // Sort by matchDate (oldest to newest)
+  const sorted = [...data].sort((a, b) => a.matchDate.getTime() - b.matchDate.getTime());
+  
+  // Calculate split index
+  const splitIndex = Math.floor(sorted.length * (1 - validationSplit));
+  
+  // Split: train on older matches, validate on newer matches
+  const train = sorted.slice(0, splitIndex);
+  const validation = sorted.slice(splitIndex);
+  
+  console.log(`Time-aware split: ${train.length} training samples (oldest), ${validation.length} validation samples (newest)`);
+  if (train.length > 0 && validation.length > 0) {
+    console.log(`Training date range: ${train[0].matchDate.toISOString().split('T')[0]} to ${train[train.length-1].matchDate.toISOString().split('T')[0]}`);
+    console.log(`Validation date range: ${validation[0].matchDate.toISOString().split('T')[0]} to ${validation[validation.length-1].matchDate.toISOString().split('T')[0]}`);
+  }
+  
+  return { train, validation };
+}
+
+/**
+ * Train the model on match statistics data with time-aware splitting
  */
 export async function trainModel(
   matchStatsArray: MatchStats[],
   config: TrainingConfig,
   archConfig: ModelArchitectureConfig
 ): Promise<{ model: tf.LayersModel; result: TrainingResult }> {
-  console.log(`Training model with ${matchStatsArray.length} samples...`);
+  console.log(`\n🔄 Training model with ${matchStatsArray.length} samples...`);
   
-  // Prepare data and filter out matches without complete labels
-  const homeTeamIds: number[] = [];
-  const awayTeamIds: number[] = [];
-  const leagueIds: number[] = [];
-  const countryIds: number[] = [];
-  const numericalFeatures: number[][] = [];
-  const ftResults: number[][] = [];
-  const ftScores: number[][] = [];
-  const htScores: number[][] = [];
-  const bttsLabels: number[][] = [];
-  const over25Labels: number[][] = [];
-  
+  // Filter matches with complete data first
+  const validMatches: MatchStats[] = [];
   let skipped = 0;
+  
   for (const stats of matchStatsArray) {
     try {
-      const cats = prepareCategoricalInputs(stats);
-      const nums = prepareNumericalFeatures(stats);
-      const labels = prepareLabels(stats);
-      
-      homeTeamIds.push(cats.homeTeamId);
-      awayTeamIds.push(cats.awayTeamId);
-      leagueIds.push(cats.leagueId);
-      countryIds.push(cats.countryId);
-      numericalFeatures.push(nums);
-      ftResults.push(labels.ftResult);
-      ftScores.push([labels.ftHomeScore, labels.ftAwayScore]);
-      htScores.push([labels.htHomeScore, labels.htAwayScore]);
-      bttsLabels.push([labels.btts]);
-      over25Labels.push([labels.over25]);
+      prepareLabels(stats); // This will throw if data is incomplete
+      validMatches.push(stats);
     } catch (error) {
-      // Skip matches with incomplete data
       skipped++;
-      console.log(`Skipping match ${stats.id}: ${error instanceof Error ? error.message : 'Invalid data'}`);
     }
   }
   
-  const validSamples = homeTeamIds.length;
-  console.log(`Using ${validSamples} valid samples for training (skipped ${skipped} incomplete matches)`);
+  console.log(`✅ ${validMatches.length} valid matches, ❌ ${skipped} skipped (incomplete data)`);
   
-  if (validSamples < 100) {
-    throw new Error(`Insufficient training data. Need at least 100 completed matches, found only ${validSamples}.`);
+  if (validMatches.length < 100) {
+    throw new Error(`Insufficient training data. Need at least 100 completed matches, found only ${validMatches.length}.`);
   }
   
-  // Create tensors
-  const xs = {
-    home_team_id: tf.tensor2d(homeTeamIds.map(id => [id]), [homeTeamIds.length, 1], 'int32'),
-    away_team_id: tf.tensor2d(awayTeamIds.map(id => [id]), [awayTeamIds.length, 1], 'int32'),
-    league_id: tf.tensor2d(leagueIds.map(id => [id]), [leagueIds.length, 1], 'int32'),
-    country_id: tf.tensor2d(countryIds.map(id => [id]), [countryIds.length, 1], 'int32'),
-    numerical_features: tf.tensor2d(numericalFeatures, [numericalFeatures.length, 39])
+  // ⚡ TIME-AWARE SPLIT: Train on old matches, validate on new matches
+  const { train: trainMatches, validation: valMatches } = timeAwareSplit(validMatches, config.validationSplit);
+  
+  if (trainMatches.length < 50 || valMatches.length < 10) {
+    throw new Error(`Time-aware split resulted in insufficient data: ${trainMatches.length} training, ${valMatches.length} validation. Need at least 50 training and 10 validation samples.`);
+  }
+  
+  // Prepare training data
+  const trainData = {
+    homeTeamIds: [] as number[],
+    awayTeamIds: [] as number[],
+    leagueIds: [] as number[],
+    countryIds: [] as number[],
+    numericalFeatures: [] as number[][],
+    ftResults: [] as number[][],
+    ftScores: [] as number[][],
+    htScores: [] as number[][],
+    bttsLabels: [] as number[][],
+    over25Labels: [] as number[][]
   };
   
-  const ys = {
-    ft_result: tf.tensor2d(ftResults),
-    ft_scores: tf.tensor2d(ftScores),
-    ht_scores: tf.tensor2d(htScores),
-    btts: tf.tensor2d(bttsLabels),
-    over_25: tf.tensor2d(over25Labels)
+  for (const stats of trainMatches) {
+    const cats = prepareCategoricalInputs(stats);
+    const nums = prepareNumericalFeatures(stats);
+    const labels = prepareLabels(stats);
+    
+    trainData.homeTeamIds.push(cats.homeTeamId);
+    trainData.awayTeamIds.push(cats.awayTeamId);
+    trainData.leagueIds.push(cats.leagueId);
+    trainData.countryIds.push(cats.countryId);
+    trainData.numericalFeatures.push(nums);
+    trainData.ftResults.push(labels.ftResult);
+    trainData.ftScores.push([labels.ftHomeScore, labels.ftAwayScore]);
+    trainData.htScores.push([labels.htHomeScore, labels.htAwayScore]);
+    trainData.bttsLabels.push([labels.btts]);
+    trainData.over25Labels.push([labels.over25]);
+  }
+  
+  // Prepare validation data
+  const valData = {
+    homeTeamIds: [] as number[],
+    awayTeamIds: [] as number[],
+    leagueIds: [] as number[],
+    countryIds: [] as number[],
+    numericalFeatures: [] as number[][],
+    ftResults: [] as number[][],
+    ftScores: [] as number[][],
+    htScores: [] as number[][],
+    bttsLabels: [] as number[][],
+    over25Labels: [] as number[][]
   };
   
-  // Build model
+  for (const stats of valMatches) {
+    const cats = prepareCategoricalInputs(stats);
+    const nums = prepareNumericalFeatures(stats);
+    const labels = prepareLabels(stats);
+    
+    valData.homeTeamIds.push(cats.homeTeamId);
+    valData.awayTeamIds.push(cats.awayTeamId);
+    valData.leagueIds.push(cats.leagueId);
+    valData.countryIds.push(cats.countryId);
+    valData.numericalFeatures.push(nums);
+    valData.ftResults.push(labels.ftResult);
+    valData.ftScores.push([labels.ftHomeScore, labels.ftAwayScore]);
+    valData.htScores.push([labels.htHomeScore, labels.htAwayScore]);
+    valData.bttsLabels.push([labels.btts]);
+    valData.over25Labels.push([labels.over25]);
+  }
+  
+  // Create training tensors
+  const trainXs = {
+    home_team_id: tf.tensor2d(trainData.homeTeamIds.map(id => [id]), [trainData.homeTeamIds.length, 1], 'int32'),
+    away_team_id: tf.tensor2d(trainData.awayTeamIds.map(id => [id]), [trainData.awayTeamIds.length, 1], 'int32'),
+    league_id: tf.tensor2d(trainData.leagueIds.map(id => [id]), [trainData.leagueIds.length, 1], 'int32'),
+    country_id: tf.tensor2d(trainData.countryIds.map(id => [id]), [trainData.countryIds.length, 1], 'int32'),
+    numerical_features: tf.tensor2d(trainData.numericalFeatures, [trainData.numericalFeatures.length, 39])
+  };
+  
+  const trainYs = {
+    ft_result: tf.tensor2d(trainData.ftResults),
+    ft_scores: tf.tensor2d(trainData.ftScores),
+    ht_scores: tf.tensor2d(trainData.htScores),
+    btts: tf.tensor2d(trainData.bttsLabels),
+    over_25: tf.tensor2d(trainData.over25Labels)
+  };
+  
+  // Create validation tensors
+  const valXs = {
+    home_team_id: tf.tensor2d(valData.homeTeamIds.map(id => [id]), [valData.homeTeamIds.length, 1], 'int32'),
+    away_team_id: tf.tensor2d(valData.awayTeamIds.map(id => [id]), [valData.awayTeamIds.length, 1], 'int32'),
+    league_id: tf.tensor2d(valData.leagueIds.map(id => [id]), [valData.leagueIds.length, 1], 'int32'),
+    country_id: tf.tensor2d(valData.countryIds.map(id => [id]), [valData.countryIds.length, 1], 'int32'),
+    numerical_features: tf.tensor2d(valData.numericalFeatures, [valData.numericalFeatures.length, 39])
+  };
+  
+  const valYs = {
+    ft_result: tf.tensor2d(valData.ftResults),
+    ft_scores: tf.tensor2d(valData.ftScores),
+    ht_scores: tf.tensor2d(valData.htScores),
+    btts: tf.tensor2d(valData.bttsLabels),
+    over_25: tf.tensor2d(valData.over25Labels)
+  };
+  
+  // Build model with reduced embeddings
   const model = buildModel(archConfig);
   
   // Compile model
@@ -364,28 +453,51 @@ export async function trainModel(
     }
   });
   
-  // Train model
-  const history = await model.fit(xs, ys, {
+  console.log(`\n🎯 Training with NO random shuffle - chronological split ensures no data leakage\n`);
+  
+  // Train model with time-aware validation data (NO SHUFFLE, NO BUILT-IN VALIDATION SPLIT)
+  const history = await model.fit(trainXs, trainYs, {
     epochs: config.epochs,
     batchSize: config.batchSize,
-    validationSplit: config.validationSplit,
-    shuffle: true,
+    validationData: [
+      [valXs.home_team_id, valXs.away_team_id, valXs.league_id, valXs.country_id, valXs.numerical_features],
+      [valYs.ft_result, valYs.ft_scores, valYs.ht_scores, valYs.btts, valYs.over_25]
+    ],
+    shuffle: false, // ⚠️ NO SHUFFLE to maintain time order
     callbacks: {
       onEpochEnd: (epoch, logs) => {
-        console.log(`Epoch ${epoch + 1}/${config.epochs}: loss=${logs?.loss?.toFixed(4)}, val_loss=${logs?.val_loss?.toFixed(4)}`);
+        const trainAcc = (logs?.ft_result_acc || 0) * 100;
+        const valAcc = (logs?.val_ft_result_acc || 0) * 100;
+        const gap = trainAcc - valAcc;
+        console.log(
+          `Epoch ${epoch + 1}/${config.epochs}: ` +
+          `train_acc=${trainAcc.toFixed(1)}%, val_acc=${valAcc.toFixed(1)}%, ` +
+          `gap=${gap.toFixed(1)}% ${gap > 20 ? '⚠️ MEMORIZING!' : gap > 10 ? '⚠️' : '✅'}`
+        );
       }
     }
   });
   
   // Clean up tensors
-  Object.values(xs).forEach(tensor => tensor.dispose());
-  Object.values(ys).forEach(tensor => tensor.dispose());
+  Object.values(trainXs).forEach(tensor => tensor.dispose());
+  Object.values(trainYs).forEach(tensor => tensor.dispose());
+  Object.values(valXs).forEach(tensor => tensor.dispose());
+  Object.values(valYs).forEach(tensor => tensor.dispose());
   
   // Extract training metrics
   const lossHistory = history.history.loss as number[];
   const ftAccHistory = history.history.ft_result_acc as number[];
   const valLossHistory = history.history.val_loss as number[];
   const valFtAccHistory = history.history.val_ft_result_acc as number[];
+  
+  const finalTrainAcc = ftAccHistory[ftAccHistory.length - 1] || 0;
+  const finalValAcc = valFtAccHistory[valFtAccHistory.length - 1] || 0;
+  const generalizationGap = (finalTrainAcc - finalValAcc) * 100;
+  
+  console.log(`\n📊 Final Results:`);
+  console.log(`   Training Accuracy: ${(finalTrainAcc * 100).toFixed(1)}%`);
+  console.log(`   Validation Accuracy: ${(finalValAcc * 100).toFixed(1)}%`);
+  console.log(`   Generalization Gap: ${generalizationGap.toFixed(1)}% ${generalizationGap > 20 ? '⚠️ HIGH - Model is memorizing!' : generalizationGap > 10 ? '⚠️ MODERATE' : '✅ GOOD'}`);
   
   const trainingResult: TrainingResult = {
     history: {
@@ -395,8 +507,8 @@ export async function trainModel(
       valAccuracy: valFtAccHistory,
     },
     finalMetrics: {
-      trainingAccuracy: ftAccHistory[ftAccHistory.length - 1] || 0,
-      validationAccuracy: valFtAccHistory[valFtAccHistory.length - 1] || 0,
+      trainingAccuracy: finalTrainAcc,
+      validationAccuracy: finalValAcc,
       loss: valLossHistory[valLossHistory.length - 1] || 0,
     }
   };
