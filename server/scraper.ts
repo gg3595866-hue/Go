@@ -1609,6 +1609,7 @@ function normalizeText(text: string): string {
 
 /**
  * Generate possible URL slug variations for a league name
+ * CONSERVATIVE APPROACH: Prioritize keeping context (country names) to avoid wrong matches
  */
 function generateSlugVariations(competitionName: string): string[] {
   const cleanedName = competitionName.replace(/\s+\d{4}\/\d{4}$/g, '').trim();
@@ -1624,81 +1625,76 @@ function generateSlugVariations(competitionName: string): string[] {
       .replace(/^-|-$/g, '');
   };
   
-  // Variation 1: Full name as-is
+  const words = cleanedName.split(/\s+/);
+  
+  // Variation 1: ALWAYS TRY Full name as-is (MOST CONSERVATIVE)
   variations.push(createSlug(cleanedName));
   
-  // Variation 2: Always try without first word (usually country name)
-  // Examples: "Poland Ekstraklasa" → "ekstraklasa", "England Championship" → "championship"
-  const words = cleanedName.split(/\s+/);
-  if (words.length > 1) {
-    const withoutFirstWord = words.slice(1).join(' ');
-    variations.push(createSlug(withoutFirstWord));
+  // Variation 2: Remove only common league suffixes but KEEP country names
+  // This is more conservative - we only remove generic words
+  const commonSuffixes = ['league', 'liga', 'division', 'championship', 'premiership', 'cup'];
+  for (const suffix of commonSuffixes) {
+    if (cleanedName.toLowerCase().endsWith(suffix)) {
+      const withoutSuffix = cleanedName
+        .replace(new RegExp(`\\s+${suffix}$`, 'i'), '')
+        .trim();
+      if (withoutSuffix.length > 0) {
+        variations.push(createSlug(withoutSuffix));
+      }
+    }
   }
   
-  // Variation 3: Try without last word (common suffixes like League, Liga, etc.)
-  if (words.length > 1) {
-    const withoutLastWord = words.slice(0, -1).join(' ');
-    variations.push(createSlug(withoutLastWord));
-  }
-  
-  // Variation 4: Remove common suffixes more aggressively
-  const withoutSuffix = cleanedName
-    .replace(/\s+(league|liga|division|championship|premiership|cup|serie|superliga|bundesliga)$/i, '')
-    .trim();
-  if (withoutSuffix !== cleanedName && withoutSuffix.length > 0) {
-    variations.push(createSlug(withoutSuffix));
-  }
-  
-  // Variation 5: For Turkish leagues, try with -tr suffix
-  if (cleanedName.toLowerCase().includes('turkey') || cleanedName.toLowerCase().includes('turkish')) {
-    const turkishVariation = createSlug(cleanedName.replace(/^turkey\s+/i, '').replace(/^turkish\s+/i, ''));
-    variations.push(turkishVariation + '-tr');
-    variations.push('super-league-tr'); // Common Turkish league slug
-  }
-  
-  // Variation 6: For multi-word leagues, try just the main word
-  // Example: "La Liga" → "la-liga" and "liga"
-  if (words.length === 2) {
-    variations.push(createSlug(words[0]));
-    variations.push(createSlug(words[1]));
-  }
-  
-  // Variation 7: For numbered leagues (e.g., "2. Liga SNL"), try different combinations
+  // Variation 3: For numbered leagues (e.g., "2. Liga SNL"), try without period
   if (cleanedName.match(/^\d+\./)) {
-    // Remove the period after the number: "2. Liga SNL" → "2-liga-snl"
     const withoutPeriod = cleanedName.replace(/^(\d+)\./, '$1');
     variations.push(createSlug(withoutPeriod));
     
-    // Try just the number and last word: "2. Liga SNL" → "2-snl"
-    if (words.length > 2) {
+    // Only if 3+ words, try number + last word: "2. Liga SNL" → "2-snl"
+    if (words.length >= 3) {
       const firstWord = words[0].replace('.', '');
       const lastWord = words[words.length - 1];
       variations.push(createSlug(`${firstWord} ${lastWord}`));
+      variations.push(createSlug(`${firstWord}-${lastWord}`));
     }
   }
   
-  // Variation 8: For leagues with "Bank" or middle words, try different combinations
-  // Example: "OTP Bank Liga NB1" → try "nb-i", "nb1", "otp-bank-liga", "liga-nb1"
-  if (words.length >= 3) {
-    // Try last word only: "OTP Bank Liga NB1" → "nb1"
-    variations.push(createSlug(words[words.length - 1]));
-    
-    // Try last word with "i" instead of "1": "NB1" → "nb-i"
-    const lastWord = words[words.length - 1];
-    if (lastWord.match(/\d$/)) {
-      const withI = lastWord.replace(/1$/, 'i');
-      variations.push(createSlug(withI));
-    }
-    
-    // Try without middle words: "OTP Bank Liga NB1" → "otp-liga-nb1"
-    if (words.length >= 4) {
-      const withoutMiddle = `${words[0]} ${words[words.length - 2]} ${words[words.length - 1]}`;
-      variations.push(createSlug(withoutMiddle));
-    }
+  // Variation 4: For special cases with "1" → "i" conversion (e.g., NB1 → NB-I)
+  const lastWord = words[words.length - 1];
+  if (lastWord.match(/1$/i) && words.length >= 2) {
+    const withI = lastWord.replace(/1$/i, 'i');
+    variations.push(createSlug(withI));
+    // Keep country: "Hungary NB1" → "hungary-nb-i"
+    variations.push(createSlug(`${words[0]} ${withI}`));
   }
   
-  // Remove duplicates and empty strings
-  return Array.from(new Set(variations)).filter(v => v.length > 0);
+  // Variation 5: ONLY for 2-word leagues, try removing first word IF it's likely a country
+  // This is more targeted than before
+  const likelyCountryPrefixes = [
+    'spain', 'england', 'germany', 'italy', 'france', 'portugal', 'netherlands', 
+    'belgium', 'scotland', 'turkey', 'poland', 'russia', 'ukraine', 'czech',
+    'greece', 'denmark', 'sweden', 'norway', 'austria', 'switzerland', 'croatia',
+    'serbia', 'hungary', 'romania', 'bulgaria', 'brazil', 'argentina', 'colombia',
+    'chile', 'uruguay', 'ecuador', 'paraguay', 'peru', 'mexico', 'usa', 'united',
+    'canada', 'saudi', 'uae', 'qatar', 'japan', 'south', 'china', 'australia',
+    'egypt', 'morocco', 'slovenia', 'slovakia', 'israel', 'ireland', 'wales', 'northern'
+  ];
+  
+  if (words.length === 2 && likelyCountryPrefixes.includes(words[0].toLowerCase())) {
+    variations.push(createSlug(words[1]));
+  }
+  
+  // Variation 6: For Turkish leagues specifically
+  if (cleanedName.toLowerCase().includes('turkey') || cleanedName.toLowerCase().includes('turkish')) {
+    const withoutTurkey = cleanedName.replace(/^turkey\s+/i, '').replace(/^turkish\s+/i, '');
+    variations.push(createSlug(withoutTurkey) + '-tr');
+  }
+  
+  // Remove duplicates and empty strings, limit to 5 variations (more conservative)
+  const uniqueVariations = Array.from(new Set(variations))
+    .filter(v => v.length > 0)
+    .slice(0, 5);
+  
+  return uniqueVariations;
 }
 
 // Cache for discovered league slugs to avoid repeated URL checking
@@ -1716,60 +1712,178 @@ export function extractLeagueSlug(competitionName: string): string {
     return discoveredLeagueSlugs.get(cleanedName)!;
   }
   
-  // Manual mappings for leagues that don't follow the simple pattern
+  // Comprehensive manual mappings for 100+ leagues worldwide
   const leagueSlugMap: Record<string, string> = {
+    // Top 5 European Leagues
     'Spain La Liga': 'la-liga',
     'La Liga': 'la-liga',
+    'Spain LaLiga': 'la-liga',
+    'LaLiga': 'la-liga',
     'England Premier League': 'premier-league',
     'Premier League': 'premier-league',
     'England Championship': 'championship',
     'Championship': 'championship',
+    'England League One': 'league-one',
+    'League One': 'league-one',
+    'England League Two': 'league-two',
+    'League Two': 'league-two',
     'Italy Serie A': 'serie-a',
     'Serie A': 'serie-a',
+    'Italy Serie B': 'serie-b',
+    'Serie B': 'serie-b',
     'Germany Bundesliga': 'bundesliga',
     'Bundesliga': 'bundesliga',
+    'Germany 2. Bundesliga': '2-bundesliga',
+    '2. Bundesliga': '2-bundesliga',
+    'Germany 3. Liga': '3-liga',
+    '3. Liga': '3-liga',
     'France Ligue 1': 'ligue-1',
     'Ligue 1': 'ligue-1',
     'France Ligue 2': 'ligue-2',
     'Ligue 2': 'ligue-2',
+    
+    // Portugal
     'Portugal Liga Portugal': 'liga-portugal',
     'Liga Portugal': 'liga-portugal',
+    'Portugal Primeira Liga': 'liga-portugal',
+    'Primeira Liga': 'liga-portugal',
+    'Portugal Liga Portugal 2': 'liga-portugal-2',
+    'Liga Portugal 2': 'liga-portugal-2',
+    
+    // Netherlands
     'Netherlands Eredivisie': 'eredivisie',
     'Eredivisie': 'eredivisie',
+    'Netherlands Eerste Divisie': 'eerste-divisie',
+    'Eerste Divisie': 'eerste-divisie',
+    
+    // Belgium
     'Belgium Pro League': '1e-klasse',
     'Belgium Jupiler League': '1e-klasse',
+    'Belgium Jupiler Pro League': '1e-klasse',
     'Jupiler League': '1e-klasse',
     'Jupiler Pro League': '1e-klasse',
+    
+    // Scotland
+    'Scotland Premiership': 'scottish-premiership',
+    'Scottish Premiership': 'scottish-premiership',
+    'Scotland Championship': 'scottish-championship',
+    'Scottish Championship': 'scottish-championship',
+    
+    // Turkey
+    'Turkey Super Lig': 'super-league-tr',
+    'Turkey Süper Lig': 'super-league-tr',
+    'Super Lig': 'super-league-tr',
+    'Süper Lig': 'super-league-tr',
+    'Turkey 1. Lig': '1-lig',
+    '1. Lig': '1-lig',
+    
+    // Eastern Europe
+    'Russia Premier League': 'premier-liga',
+    'Russian Premier League': 'premier-liga',
+    'Poland Ekstraklasa': 'ekstraklasa',
+    'Ekstraklasa': 'ekstraklasa',
+    'Ukraine Premier League': 'premier-league-ua',
+    'Czech Republic First League': 'fortuna-liga',
+    'Fortuna Liga': 'fortuna-liga',
+    'Greece Super League': 'super-league-gr',
+    'Super League Greece': 'super-league-gr',
+    
+    // Scandinavia
+    'Denmark Superliga': 'superligaen',
+    'Superligaen': 'superligaen',
+    'Sweden Allsvenskan': 'allsvenskan',
+    'Allsvenskan': 'allsvenskan',
+    'Norway Eliteserien': 'eliteserien',
+    'Eliteserien': 'eliteserien',
+    
+    // Central Europe
+    'Austria Bundesliga': 'bundesliga-at',
+    'Switzerland Super League': 'super-league',
+    'Croatia HNL': '1-hnl',
+    'Serbia SuperLiga': 'super-liga-rs',
+    'Hungary OTP Bank Liga NB1': 'nb-i',
+    'OTP Bank Liga NB1': 'nb-i',
+    'Hungary NB I': 'nb-i',
+    'NB I': 'nb-i',
+    'Romania Liga 1': 'liga-1',
+    'Bulgaria First League': 'parva-liga',
+    
+    // South America
     'Brazil Serie A': 'brasileiro-serie-a',
     'Serie A Brazil': 'brasileiro-serie-a',
+    'Brasileiro Serie A': 'brasileiro-serie-a',
+    'Brazil Serie B': 'brasileiro-serie-b',
+    'Brasileiro Serie B': 'brasileiro-serie-b',
     'Argentina Primera Division': 'liga-profesional',
+    'Argentina Liga Profesional': 'liga-profesional',
     'Primera Division': 'liga-profesional',
+    'Liga Profesional': 'liga-profesional',
+    'Colombia Primera A': 'primera-a',
+    'Chile Primera Division': 'primera-division',
+    'Uruguay Primera Division': 'primera-division-uy',
+    'Ecuador Serie A': 'serie-a-ec',
+    'Paraguay Primera Division': 'primera-division-py',
+    'Peru Liga 1': 'liga-1-pe',
+    
+    // International Tournaments
     'UEFA Champions League': 'champions-league',
     'Champions League': 'champions-league',
     'UEFA Europa League': 'europa-league',
     'Europa League': 'europa-league',
+    'UEFA Conference League': 'conference-league',
+    'Conference League': 'conference-league',
     'CONMEBOL Copa Libertadores': 'copa-libertadores',
     'Copa Libertadores': 'copa-libertadores',
     'CONMEBOL Copa Sudamericana': 'copa-sudamericana',
     'Copa Sudamericana': 'copa-sudamericana',
     'CONMEBOL Copa': 'copa-libertadores',
-    'Scotland Premiership': 'scottish-premiership',
-    'Scottish Premiership': 'scottish-premiership',
-    'Turkey Super Lig': 'super-league-tr',
-    'Turkey Süper Lig': 'super-league-tr',
-    'Super Lig': 'super-league-tr',
-    'Süper Lig': 'super-league-tr',
-    'Russia Premier League': 'premier-liga',
-    'Russian Premier League': 'premier-liga',
-    'Mexico Liga MX': 'liga-mx',
-    'Liga MX': 'liga-mx',
+    
+    // North America
     'MLS': 'mls',
     'Major League Soccer': 'mls',
-    'Poland Ekstraklasa': 'ekstraklasa',
+    'Mexico Liga MX': 'liga-mx',
+    'Liga MX': 'liga-mx',
+    'United States MLS': 'mls',
+    'USA MLS': 'mls',
+    'Canada Premier League': 'premier-league-ca',
+    
+    // Asia
+    'Saudi Arabia Pro League': 'pro-league',
+    'Saudi Pro League': 'pro-league',
+    'UAE Pro League': 'pro-league-ae',
+    'Qatar Stars League': 'stars-league',
+    'Japan J1 League': 'j1-league',
+    'J1 League': 'j1-league',
+    'Japan J2 League': 'j2-league',
+    'J2 League': 'j2-league',
+    'South Korea K League 1': 'k-league-1',
+    'K League 1': 'k-league-1',
+    'China Super League': 'super-league-cn',
+    'Australia A-League': 'a-league',
+    'A-League': 'a-league',
+    
+    // Africa
+    'South Africa PSL': 'premiership',
+    'Egypt Premier League': 'premier-league-eg',
+    'Morocco Botola Pro': 'botola-pro',
+    
+    // Additional European leagues
+    'Slovenia 1. SNL': '1-snl',
+    '1. SNL': '1-snl',
     'Slovenia 2. Liga SNL': '2-snl',
     '2. Liga SNL': '2-snl',
-    'Hungary OTP Bank Liga NB1': 'nb-i',
-    'OTP Bank Liga NB1': 'nb-i',
+    'Slovakia Super Liga': 'super-liga',
+    'Israel Premier League': 'ligat-haal',
+    'Ireland Premier Division': 'premier-division',
+    'Wales Premier League': 'cymru-premier',
+    'Northern Ireland Premiership': 'premiership',
+    
+    // Second divisions
+    'Spain Segunda Division': 'segunda-division',
+    'Segunda Division': 'segunda-division',
+    'Italy Serie B': 'serie-b',
+    'Portugal Segunda Liga': 'liga-portugal-2',
+    'Segunda Liga': 'liga-portugal-2',
   };
   
   // Check if we have a manual mapping
@@ -1844,9 +1958,72 @@ export async function getLeagueYears(competitionName: string): Promise<number[]>
 }
 
 /**
- * Try to fetch a URL and return the HTML if successful
+ * Normalize league name for comparison (remove accents, lowercase, trim)
  */
-async function tryFetchLeaguePage(url: string): Promise<{ success: boolean; html?: string; error?: any }> {
+function normalizeLeagueName(name: string): string {
+  return normalizeText(name)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Check if the league name from the page matches the requested league
+ */
+function validateLeagueName(pageHtml: string, expectedLeagueName: string): boolean {
+  const $ = cheerio.load(pageHtml);
+  
+  // Extract league name from various possible locations
+  const possibleTitles = [
+    $('h1').first().text(),
+    $('h2').first().text(),
+    $('title').text(),
+    $('.league-name').text(),
+    $('.competition-name').text(),
+    $('meta[property="og:title"]').attr('content') || '',
+  ];
+  
+  const normalizedExpected = normalizeLeagueName(expectedLeagueName);
+  
+  // Split expected name into important keywords
+  const expectedKeywords = normalizedExpected
+    .split(/\s+/)
+    .filter(word => word.length > 2 && !['the', 'and', 'of', 'in'].includes(word));
+  
+  // Check if any title contains the important keywords
+  for (const title of possibleTitles) {
+    if (!title) continue;
+    
+    const normalizedTitle = normalizeLeagueName(title);
+    
+    // Direct match (best case)
+    if (normalizedTitle.includes(normalizedExpected) || normalizedExpected.includes(normalizedTitle)) {
+      console.log(`✓ League name validated: "${title}" matches "${expectedLeagueName}"`);
+      return true;
+    }
+    
+    // Keyword matching (at least 50% of keywords must match)
+    const matchedKeywords = expectedKeywords.filter(keyword => normalizedTitle.includes(keyword));
+    if (expectedKeywords.length > 0 && matchedKeywords.length >= Math.ceil(expectedKeywords.length * 0.5)) {
+      console.log(`✓ League name validated via keywords: "${title}" matches "${expectedLeagueName}" (${matchedKeywords.join(', ')})`);
+      return true;
+    }
+  }
+  
+  console.log(`✗ League name validation failed for "${expectedLeagueName}"`);
+  console.log(`  Page titles found:`, possibleTitles.filter(t => t).slice(0, 3));
+  return false;
+}
+
+/**
+ * Try to fetch a URL and return the HTML if successful
+ * Now includes league name validation to ensure correct league is loaded
+ */
+async function tryFetchLeaguePage(
+  url: string, 
+  expectedLeagueName?: string
+): Promise<{ success: boolean; html?: string; error?: any }> {
   try {
     const html: string = await new Promise((resolve, reject) => {
       cloudscraper.get({
@@ -1873,6 +2050,11 @@ async function tryFetchLeaguePage(url: string): Promise<{ success: boolean; html
     
     if (!hasMatches) {
       return { success: false, error: 'No match data found on page' };
+    }
+    
+    // Validate league name if provided
+    if (expectedLeagueName && !validateLeagueName(html, expectedLeagueName)) {
+      return { success: false, error: 'League name mismatch - wrong league page' };
     }
     
     return { success: true, html };
@@ -1926,7 +2108,8 @@ export async function scrapeLeagueMatches(
       console.log(`Trying URL: ${baseUrl}`);
       onProgress?.(`Trying ${competitionName} at ${slug}...`, 0);
       
-      const result = await tryFetchLeaguePage(baseUrl);
+      // Pass the expected league name for validation
+      const result = await tryFetchLeaguePage(baseUrl, cleanedName);
       
       if (result.success && result.html) {
         console.log(`✓ Success! Found league at: ${baseUrl}`);
