@@ -712,8 +712,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         numTeams: Math.max(...Array.from(uniqueTeams)),
         numLeagues: Math.max(...Array.from(uniqueLeagues)),
         numCountries: Math.max(...Array.from(uniqueCountries)),
-        teamEmbeddingSize: 40,
-        leagueEmbeddingSize: 15,
+        teamEmbeddingSize: 50,
+        leagueEmbeddingSize: 20,
         countryEmbeddingSize: 10,
         hiddenLayers
       };
@@ -1238,8 +1238,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         numTeams: Math.max(...Array.from(uniqueTeams)),
         numLeagues: Math.max(...Array.from(uniqueLeagues)),
         numCountries: Math.max(...Array.from(uniqueCountries)),
-        teamEmbeddingSize: 40,
-        leagueEmbeddingSize: 15,
+        teamEmbeddingSize: 50,
+        leagueEmbeddingSize: 20,
         countryEmbeddingSize: 10,
         hiddenLayers
       };
