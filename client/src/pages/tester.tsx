@@ -319,6 +319,66 @@ export default function TesterPage() {
                         <TableCell>{stat.leagueAvgGoals?.toFixed(2)}</TableCell>
                         <TableCell>
                           <div className="space-y-1">
+                            <div>{stat.odds1?.toFixed(2) ?? '-'}</div>
+                            {prediction && (
+                              <div className="text-xs text-primary" data-testid={`pred-1x2-${stat.id}`}>
+                                Pred: {prediction.predResult === '1' ? '1' : prediction.predResult === 'X' ? '1-X' : '1'}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div>{stat.oddsX?.toFixed(2) ?? '-'}</div>
+                            {prediction && (
+                              <div className="text-xs text-primary" data-testid={`pred-1x2-x-${stat.id}`}>
+                                Pred: {prediction.predResult === 'X' ? '1-X' : prediction.predResult === '1' ? '1-0' : '1-1'}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div>{stat.odds2?.toFixed(2) ?? '-'}</div>
+                            {prediction && (
+                              <div className="text-xs text-primary" data-testid={`pred-1x2-2-${stat.id}`}>
+                                Pred: {prediction.predResult}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div>{stat.prob1 != null ? `${(stat.prob1 * 100).toFixed(0)}%` : '-'}</div>
+                            {prediction && (
+                              <div className="text-xs text-primary" data-testid={`pred-prob-1-${stat.id}`}>
+                                Pred: {prediction.predResult === '1' ? 'Yes' : prediction.predResult === 'X' ? 'Over' : 'Yes'}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div>{stat.probX != null ? `${(stat.probX * 100).toFixed(0)}%` : '-'}</div>
+                            {prediction && (
+                              <div className="text-xs text-primary" data-testid={`pred-prob-x-${stat.id}`}>
+                                Pred: {prediction.predResult === 'X' ? 'Over' : prediction.predResult === '1' ? 'Over' : 'Over'}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div>{stat.prob2 != null ? `${(stat.prob2 * 100).toFixed(0)}%` : '-'}</div>
+                            {prediction && (
+                              <div className="text-xs text-primary" data-testid={`pred-prob-2-${stat.id}`}>
+                                Pred: {(prediction.predAwayWinProb * 100).toFixed(0)}%
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
                             <div>
                               {stat.ftHomeScore !== null && stat.ftAwayScore !== null 
                                 ? `FT ${stat.ftHomeScore}-${stat.ftAwayScore}` 
