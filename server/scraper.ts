@@ -1933,6 +1933,7 @@ export async function scrapeLeagueMatches(
       'conference-league',
       'mls',
       'brasileiro-serie-a',
+      'liga-profesional',
       'primera-a',
       'liga-pro-ecuador',
       'liga-mx',
