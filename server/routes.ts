@@ -663,9 +663,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         batchSize = 32,
         validationSplit = 0.2,
         learningRate = 0.001,
-        teamEmbeddingSize: 40,
-        leagueEmbeddingSize: 15,
-        countryEmbeddingSize: 10,
+        teamEmbeddingSize = 40,
+        leagueEmbeddingSize = 15,
+        countryEmbeddingSize = 10,
         hiddenLayers = [128, 64]
       } = req.body;
 
@@ -1192,9 +1192,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         batchSize = 32,
         validationSplit = 0.2,
         learningRate = 0.001,
-        teamEmbeddingSize: 40,
-        leagueEmbeddingSize: 15,
-        countryEmbeddingSize: 10,
+        teamEmbeddingSize = 40,
+        leagueEmbeddingSize = 15,
+        countryEmbeddingSize = 10,
         hiddenLayers = [128, 64]
       } = req.body;
 
