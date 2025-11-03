@@ -1,6 +1,7 @@
 import cloudscraper from 'cloudscraper';
 import * as cheerio from 'cheerio';
 import { type Match, type MatchDetails } from '@shared/schema';
+import { COMPREHENSIVE_LEAGUE_MAPPINGS, getLeagueSlug } from './league-mappings-comprehensive';
 
 // Helper function to clean team names by removing artifacts like "logo", extra spaces, etc.
 function cleanTeamName(name: string): string {
@@ -1705,199 +1706,35 @@ const discoveredLeagueSlugs = new Map<string, string>();
  * Tries multiple URL patterns and returns the one that works
  */
 export function extractLeagueSlug(competitionName: string): string {
-  const cleanedName = competitionName.replace(/\s+\d{4}\/\d{4}$/g, '').trim();
+  const cleanedName = competitionName.replace(/\s+\d{4}(\/\d{4})?$/g, '').trim();
   
   // Check cache first
   if (discoveredLeagueSlugs.has(cleanedName)) {
     return discoveredLeagueSlugs.get(cleanedName)!;
   }
   
-  // Comprehensive manual mappings for 100+ leagues worldwide
-  const leagueSlugMap: Record<string, string> = {
-    // Top 5 European Leagues
-    'Spain La Liga': 'la-liga',
-    'La Liga': 'la-liga',
-    'Spain LaLiga': 'la-liga',
-    'LaLiga': 'la-liga',
-    'England Premier League': 'premier-league',
-    'Premier League': 'premier-league',
-    'England Championship': 'championship',
-    'Championship': 'championship',
-    'England League One': 'league-one',
-    'League One': 'league-one',
-    'England League Two': 'league-two',
-    'League Two': 'league-two',
-    'Italy Serie A': 'serie-a',
-    'Serie A': 'serie-a',
-    'Italy Serie B': 'serie-b',
-    'Serie B': 'serie-b',
-    'Germany Bundesliga': 'bundesliga',
-    'Bundesliga': 'bundesliga',
-    'Germany 2. Bundesliga': '2-bundesliga',
-    '2. Bundesliga': '2-bundesliga',
-    'Germany 3. Liga': '3-liga',
-    '3. Liga': '3-liga',
-    'France Ligue 1': 'ligue-1',
-    'Ligue 1': 'ligue-1',
-    'France Ligue 2': 'ligue-2',
-    'Ligue 2': 'ligue-2',
-    
-    // Portugal
-    'Portugal Liga Portugal': 'liga-portugal',
-    'Liga Portugal': 'liga-portugal',
-    'Portugal Primeira Liga': 'liga-portugal',
-    'Primeira Liga': 'liga-portugal',
-    'Portugal Liga Portugal 2': 'liga-portugal-2',
-    'Liga Portugal 2': 'liga-portugal-2',
-    
-    // Netherlands
-    'Netherlands Eredivisie': 'eredivisie',
-    'Eredivisie': 'eredivisie',
-    'Netherlands Eerste Divisie': 'eerste-divisie',
-    'Eerste Divisie': 'eerste-divisie',
-    
-    // Belgium
-    'Belgium Pro League': '1e-klasse',
-    'Belgium Jupiler League': '1e-klasse',
-    'Belgium Jupiler Pro League': '1e-klasse',
-    'Jupiler League': '1e-klasse',
-    'Jupiler Pro League': '1e-klasse',
-    
-    // Scotland
-    'Scotland Premiership': 'scottish-premiership',
-    'Scottish Premiership': 'scottish-premiership',
-    'Scotland Championship': 'scottish-championship',
-    'Scottish Championship': 'scottish-championship',
-    
-    // Turkey
-    'Turkey Super Lig': 'super-league-tr',
-    'Turkey Süper Lig': 'super-league-tr',
-    'Super Lig': 'super-league-tr',
-    'Süper Lig': 'super-league-tr',
-    'Turkey 1. Lig': '1-lig',
-    '1. Lig': '1-lig',
-    
-    // Eastern Europe
-    'Russia Premier League': 'premier-liga',
-    'Russian Premier League': 'premier-liga',
-    'Poland Ekstraklasa': 'ekstraklasa',
-    'Ekstraklasa': 'ekstraklasa',
-    'Ukraine Premier League': 'premier-league-ua',
-    'Czech Republic First League': 'fortuna-liga',
-    'Fortuna Liga': 'fortuna-liga',
-    'Greece Super League': 'super-league-gr',
-    'Super League Greece': 'super-league-gr',
-    
-    // Scandinavia
-    'Denmark Superliga': 'superligaen',
-    'Superligaen': 'superligaen',
-    'Sweden Allsvenskan': 'allsvenskan',
-    'Allsvenskan': 'allsvenskan',
-    'Norway Eliteserien': 'eliteserien',
-    'Eliteserien': 'eliteserien',
-    
-    // Central Europe
-    'Austria Bundesliga': 'bundesliga-at',
-    'Switzerland Super League': 'super-league',
-    'Croatia HNL': '1-hnl',
-    'Serbia SuperLiga': 'super-liga-rs',
-    'Hungary OTP Bank Liga NB1': 'nb-i',
-    'OTP Bank Liga NB1': 'nb-i',
-    'Hungary NB I': 'nb-i',
-    'NB I': 'nb-i',
-    'Romania Liga 1': 'liga-1',
-    'Bulgaria First League': 'parva-liga',
-    
-    // South America
-    'Brazil Serie A': 'brasileiro-serie-a',
-    'Serie A Brazil': 'brasileiro-serie-a',
-    'Brasileiro Serie A': 'brasileiro-serie-a',
-    'Brazil Serie B': 'brasileiro-serie-b',
-    'Brasileiro Serie B': 'brasileiro-serie-b',
-    'Argentina Primera Division': 'liga-profesional',
-    'Argentina Liga Profesional': 'liga-profesional',
-    'Primera Division': 'liga-profesional',
-    'Liga Profesional': 'liga-profesional',
-    'Colombia Primera A': 'primera-a',
-    'Chile Primera Division': 'primera-division',
-    'Uruguay Primera Division': 'primera-division-uy',
-    'Ecuador Serie A': 'serie-a-ec',
-    'Paraguay Primera Division': 'primera-division-py',
-    'Peru Liga 1': 'liga-1-pe',
-    
-    // International Tournaments
-    'UEFA Champions League': 'champions-league',
-    'Champions League': 'champions-league',
-    'UEFA Europa League': 'europa-league',
-    'Europa League': 'europa-league',
-    'UEFA Conference League': 'conference-league',
-    'Conference League': 'conference-league',
-    'CONMEBOL Copa Libertadores': 'copa-libertadores',
-    'Copa Libertadores': 'copa-libertadores',
-    'CONMEBOL Copa Sudamericana': 'copa-sudamericana',
-    'Copa Sudamericana': 'copa-sudamericana',
-    'CONMEBOL Copa': 'copa-libertadores',
-    
-    // North America
-    'MLS': 'mls',
-    'Major League Soccer': 'mls',
-    'Mexico Liga MX': 'liga-mx',
-    'Liga MX': 'liga-mx',
-    'United States MLS': 'mls',
-    'USA MLS': 'mls',
-    'Canada Premier League': 'premier-league-ca',
-    
-    // Asia
-    'Saudi Arabia Pro League': 'pro-league',
-    'Saudi Pro League': 'pro-league',
-    'UAE Pro League': 'pro-league-ae',
-    'Qatar Stars League': 'stars-league',
-    'Japan J1 League': 'j1-league',
-    'J1 League': 'j1-league',
-    'Japan J2 League': 'j2-league',
-    'J2 League': 'j2-league',
-    'South Korea K League 1': 'k-league-1',
-    'K League 1': 'k-league-1',
-    'China Super League': 'super-league-cn',
-    'Australia A-League': 'a-league',
-    'A-League': 'a-league',
-    
-    // Africa
-    'South Africa PSL': 'premiership',
-    'Egypt Premier League': 'premier-league-eg',
-    'Morocco Botola Pro': 'botola-pro',
-    
-    // Additional European leagues
-    'Slovenia 1. SNL': '1-snl',
-    '1. SNL': '1-snl',
-    'Slovenia 2. Liga SNL': '2-snl',
-    '2. Liga SNL': '2-snl',
-    'Slovakia Super Liga': 'super-liga',
-    'Israel Premier League': 'ligat-haal',
-    'Ireland Premier Division': 'premier-division',
-    'Wales Premier League': 'cymru-premier',
-    'Northern Ireland Premiership': 'premiership',
-    
-    // Second divisions
-    'Spain Segunda Division': 'segunda-division',
-    'Segunda Division': 'segunda-division',
-    'Italy Serie B': 'serie-b',
-    'Portugal Segunda Liga': 'liga-portugal-2',
-    'Segunda Liga': 'liga-portugal-2',
-  };
+  // PRIORITY 1: Use comprehensive mappings (covers all leagues from user's list)
+  const comprehensiveSlug = getLeagueSlug(competitionName);
+  if (comprehensiveSlug) {
+    console.log(`✓ Found comprehensive mapping for "${cleanedName}" => "${comprehensiveSlug}"`);
+    discoveredLeagueSlugs.set(cleanedName, comprehensiveSlug);
+    return comprehensiveSlug;
+  }
   
-  // Check if we have a manual mapping
-  if (leagueSlugMap[cleanedName]) {
-    const slug = leagueSlugMap[cleanedName];
+  // PRIORITY 2: Check if we have it in the comprehensive mappings directly
+  if (COMPREHENSIVE_LEAGUE_MAPPINGS[cleanedName]) {
+    const slug = COMPREHENSIVE_LEAGUE_MAPPINGS[cleanedName];
+    console.log(`✓ Found direct mapping for "${cleanedName}" => "${slug}"`);
     discoveredLeagueSlugs.set(cleanedName, slug);
     return slug;
   }
   
-  // Generate variations and return the first one (will be validated in scrapeLeagueMatches)
+  // PRIORITY 3: Fall back to generating variations (for leagues not in our list)
+  console.log(`⚠ No mapping found for "${cleanedName}", generating variations...`);
   const variations = generateSlugVariations(cleanedName);
   const primarySlug = variations[0];
   
-  console.log(`Generated slug variations for "${cleanedName}":`, variations);
+  console.log(`  Generated slug variations for "${cleanedName}":`, variations);
   
   return primarySlug;
 }
