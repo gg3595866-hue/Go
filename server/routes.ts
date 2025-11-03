@@ -14,13 +14,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const dateString = req.params.date;
       const date = new Date(dateString);
-      
+
       if (isNaN(date.getTime())) {
         return res.status(400).json({ error: "Invalid date format" });
       }
-      
+
       const matches = await scrapeFixtures(date);
-      
+
       res.json({
         date: dateString,
         matches,
@@ -36,13 +36,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const dateString = req.params.date;
       const date = new Date(dateString);
-      
+
       if (isNaN(date.getTime())) {
         return res.status(400).json({ error: "Invalid date format" });
       }
-      
+
       const matches = await scrapeBasketballFixtures(date);
-      
+
       res.json({
         date: dateString,
         matches,
@@ -57,13 +57,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/match-details", async (req, res) => {
     try {
       const { matchUrl } = req.body;
-      
+
       if (!matchUrl || typeof matchUrl !== 'string') {
         return res.status(400).json({ error: "matchUrl is required" });
       }
-      
+
       const matchDetails = await scrapeMatchDetails(matchUrl);
-      
+
       res.json(matchDetails);
     } catch (error) {
       console.error("Error fetching match details:", error);
@@ -75,13 +75,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/basketball/match-details", async (req, res) => {
     try {
       const { matchUrl } = req.body;
-      
+
       if (!matchUrl || typeof matchUrl !== 'string') {
         return res.status(400).json({ error: "matchUrl is required" });
       }
-      
+
       const matchDetails = await scrapeBasketballMatchDetails(matchUrl);
-      
+
       res.json(matchDetails);
     } catch (error) {
       console.error("Error fetching basketball match details:", error);
@@ -113,13 +113,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/match-stats/tester", async (req, res) => {
     try {
       const stats = await testerStorage.getAllMatchStats();
-      
+
       // Enrich stats with team names
       const enrichedStats = await Promise.all(
         stats.map(async (stat) => {
           const homeTeam = await testerStorage.getTeamById(stat.homeTeamId);
           const awayTeam = await testerStorage.getTeamById(stat.awayTeamId);
-          
+
           return {
             ...stat,
             homeTeamName: homeTeam?.name || 'Unknown',
@@ -127,7 +127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         })
       );
-      
+
       res.json(enrichedStats);
     } catch (error) {
       console.error("Error fetching tester match stats:", error);
@@ -141,12 +141,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(id)) {
         return res.status(400).json({ error: "Invalid ID" });
       }
-      
+
       const stats = await storage.getMatchStatsById(id);
       if (!stats) {
         return res.status(404).json({ error: "Match statistics not found" });
       }
-      
+
       res.json(stats);
     } catch (error) {
       console.error("Error fetching match stat:", error);
@@ -171,12 +171,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(id)) {
         return res.status(400).json({ error: "Invalid ID" });
       }
-      
+
       const updated = await storage.updateMatchStats(id, req.body);
       if (!updated) {
         return res.status(404).json({ error: "Match statistics not found" });
       }
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Error updating match stats:", error);
@@ -190,12 +190,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(id)) {
         return res.status(400).json({ error: "Invalid ID" });
       }
-      
+
       const deleted = await storage.deleteMatchStats(id);
       if (!deleted) {
         return res.status(404).json({ error: "Match statistics not found" });
       }
-      
+
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting match stats:", error);
@@ -663,17 +663,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         batchSize = 32,
         validationSplit = 0.2,
         learningRate = 0.001,
-        teamEmbeddingSize = 8,  // ⬇️ Reduced from 50 to prevent memorization
-        leagueEmbeddingSize = 4,  // ⬇️ Reduced from 20
-        countryEmbeddingSize = 4,  // ⬇️ Reduced from 10
+        teamEmbeddingSize: 40,
+        leagueEmbeddingSize: 15,
+        countryEmbeddingSize: 10,
         hiddenLayers = [128, 64]
       } = req.body;
 
       console.log('Starting model training...');
-      
+
       // Get all training data from database
       const matchStatsArray = await databaseStorage.getAllMatchStats();
-      
+
       if (matchStatsArray.length < 100) {
         return res.status(400).json({
           error: 'Insufficient training data',
@@ -683,47 +683,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Import ML functions
       const { trainModel, saveModel } = await import('./ml-model');
-      
+
       // Determine unique counts for embeddings
       const uniqueTeams = new Set<number>();
       const uniqueLeagues = new Set<number>();
       const uniqueCountries = new Set<number>();
-      
+
       matchStatsArray.forEach(stats => {
         uniqueTeams.add(stats.homeTeamId);
         uniqueTeams.add(stats.awayTeamId);
         uniqueLeagues.add(stats.leagueId);
         uniqueCountries.add(stats.countryId);
       });
-      
+
       const archConfig = {
         numTeams: Math.max(...Array.from(uniqueTeams)),
         numLeagues: Math.max(...Array.from(uniqueLeagues)),
         numCountries: Math.max(...Array.from(uniqueCountries)),
-        teamEmbeddingSize,
-        leagueEmbeddingSize,
-        countryEmbeddingSize,
+        teamEmbeddingSize: 40,
+        leagueEmbeddingSize: 15,
+        countryEmbeddingSize: 10,
         hiddenLayers
       };
-      
+
       const trainingConfig = {
         epochs,
         batchSize,
         validationSplit,
         learningRate
       };
-      
+
       // Train model
       const { model, result } = await trainModel(
         matchStatsArray,
         trainingConfig,
         archConfig
       );
-      
+
       // Save model
       const modelPath = `./models/model_${Date.now()}`;
       await saveModel(model, modelPath);
-      
+
       // Save model metadata
       const modelMetadata = await databaseStorage.createModel({
         modelName: 'Multi-Task Football Predictor',
@@ -738,12 +738,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: true,
         modelPath
       });
-      
+
       // Set as active model
       await databaseStorage.setActiveModel(modelMetadata.id);
-      
+
       console.log('Model training completed successfully');
-      
+
       res.json({
         success: true,
         modelId: modelMetadata.id,
@@ -751,7 +751,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         history: result.history,
         totalSamples: matchStatsArray.length
       });
-      
+
     } catch (error) {
       console.error('Error training model:', error);
       res.status(500).json({
@@ -819,7 +819,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ml/predict", async (req, res) => {
     try {
       console.log('Starting predictions for tester matches...');
-      
+
       // Get active model
       const activeModel = await databaseStorage.getActiveModel();
       if (!activeModel) {
@@ -832,10 +832,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Load the model
       const { loadModel, predict } = await import('./ml-model');
       const model = await loadModel(activeModel.modelPath!);
-      
+
       // Get all matches from tester database
       const testerMatches = await testerStorage.getAllMatchStats();
-      
+
       if (testerMatches.length === 0) {
         return res.status(400).json({
           error: 'No matches to predict',
@@ -844,11 +844,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const predictions = [];
-      
+
       for (const match of testerMatches) {
         try {
           const prediction = await predict(model, match);
-          
+
           // Store prediction in database
           const savedPrediction = await testerStorage.createPrediction({
             matchStatsId: match.id,
@@ -867,7 +867,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             predOver25: prediction.over25.predicted,
             confidence: prediction.confidence
           });
-          
+
           predictions.push({
             matchId: match.id,
             prediction: savedPrediction
@@ -876,16 +876,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error(`Error predicting match ${match.id}:`, error);
         }
       }
-      
+
       console.log(`Predictions completed: ${predictions.length}/${testerMatches.length}`);
-      
+
       res.json({
         success: true,
         totalMatches: testerMatches.length,
         predictions: predictions.length,
         results: predictions
       });
-      
+
     } catch (error) {
       console.error('Error making predictions:', error);
       res.status(500).json({
@@ -911,7 +911,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ml/analyze-features", async (req, res) => {
     try {
       console.log('Starting feature importance analysis...');
-      
+
       // Get active model
       const activeModel = await databaseStorage.getActiveModel();
       if (!activeModel) {
@@ -924,13 +924,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Load the model
       const { loadModel } = await import('./ml-model');
       const model = await loadModel(activeModel.modelPath!);
-      
+
       // Get validation data (use 20% of database for analysis)
       const allMatches = await databaseStorage.getAllMatchStats();
       const validMatches = allMatches.filter(m => 
         m.ftResult && m.ftHomeScore !== null && m.ftAwayScore !== null
       );
-      
+
       if (validMatches.length < 50) {
         return res.status(400).json({
           error: 'Insufficient data',
@@ -941,19 +941,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use last 20% as validation set for analysis
       const validationSize = Math.floor(validMatches.length * 0.2);
       const validationData = validMatches.slice(-validationSize);
-      
+
       // Run feature importance analysis
       const { computePermutationImportance, printFeatureImportanceReport } = await import('./feature-importance');
       const report = await computePermutationImportance(model, validationData, 3);
-      
+
       // Print report to console
       printFeatureImportanceReport(report);
-      
+
       res.json({
         success: true,
         report
       });
-      
+
     } catch (error) {
       console.error('Error analyzing features:', error);
       res.status(500).json({
@@ -967,7 +967,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/basketball/ml/analyze-features", async (req, res) => {
     try {
       console.log('Starting basketball feature importance analysis...');
-      
+
       // Get active basketball model
       const activeModel = await databaseStorage.getActiveBasketballModel();
       if (!activeModel) {
@@ -980,13 +980,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Load the model
       const { loadBasketballModel } = await import('./ml-model-basketball');
       const modelData = await loadBasketballModel(activeModel.modelPath!);
-      
+
       // Get validation data
       const allMatches = await databaseStorage.getAllBasketballStats();
       const validMatches = allMatches.filter(m => 
         m.ftResult && m.ftHomePoints !== null && m.ftAwayPoints !== null
       );
-      
+
       if (validMatches.length < 50) {
         return res.status(400).json({
           error: 'Insufficient data',
@@ -996,22 +996,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const validationSize = Math.floor(validMatches.length * 0.2);
       const validationData = validMatches.slice(-validationSize);
-      
+
       // Run feature importance analysis
       const { 
         computeBasketballPermutationImportance, 
         printBasketballFeatureImportanceReport 
       } = await import('./feature-importance-basketball');
       const report = await computeBasketballPermutationImportance(modelData.model, validationData, 3);
-      
+
       // Print report to console
       printBasketballFeatureImportanceReport(report);
-      
+
       res.json({
         success: true,
         report
       });
-      
+
     } catch (error) {
       console.error('Error analyzing basketball features:', error);
       res.status(500).json({
@@ -1044,18 +1044,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { extractLeagueSlug } = await import('./scraper');
       const cloudscraper = (await import('cloudscraper')).default;
       const cheerio = await import('cheerio');
-      
+
       const leagueSlug = extractLeagueSlug(competition as string);
       const seasonFormat = `${year}-${parseInt(year as string) + 1}`;
       const baseUrl = `https://sportstats365.com/football/${leagueSlug}/${seasonFormat}`;
-      
+
       console.log(`\n=== TESTING LEAGUE PAGE ACCESS ===`);
       console.log(`Competition: ${competition}`);
       console.log(`Year: ${year}`);
       console.log(`League Slug: ${leagueSlug}`);
       console.log(`Season Format: ${seasonFormat}`);
       console.log(`Base URL: ${baseUrl}`);
-      
+
       const html: string = await new Promise((resolve, reject) => {
         cloudscraper.get({
           uri: baseUrl,
@@ -1072,9 +1072,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         });
       });
-      
+
       const $ = cheerio.load(html);
-      
+
       // Extract key information
       const pageTitle = $('title').text();
       const h1Text = $('h1').first().text();
@@ -1085,9 +1085,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const hxGet = $(el).attr('hx-get');
         if (hxGet) hxGetUrls.push(hxGet);
       });
-      
+
       const matchCount = $('.list-group-item a[href*="/compare/"]').length;
-      
+
       console.log(`Page Title: ${pageTitle}`);
       console.log(`H1 Text: ${h1Text}`);
       console.log(`Fixtures Tab Exists: ${fixturesTabExists}`);
@@ -1095,7 +1095,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Match Items Found: ${matchCount}`);
       console.log(`hx-get URLs found: ${hxGetUrls.length}`);
       console.log(`First 10 hx-get URLs:`, hxGetUrls.slice(0, 10));
-      
+
       return res.json({
         success: true,
         url: baseUrl,
@@ -1123,7 +1123,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========== Basketball API Routes ==========
-  
+
   // Get all basketball stats from database
   app.get("/api/basketball-stats/database", async (req, res) => {
     try {
@@ -1151,12 +1151,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/basketball-stats/tester", async (req, res) => {
     try {
       const stats = await testerStorage.getAllBasketballStats();
-      
+
       const enrichedStats = await Promise.all(
         stats.map(async (stat) => {
           const homeTeam = await databaseStorage.getTeamById(stat.homeTeamId);
           const awayTeam = await databaseStorage.getTeamById(stat.awayTeamId);
-          
+
           return {
             ...stat,
             homeTeamName: homeTeam?.name || `Team ${stat.homeTeamId}`,
@@ -1164,7 +1164,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         })
       );
-      
+
       res.json(enrichedStats);
     } catch (error) {
       console.error('Error fetching basketball tester stats:', error);
@@ -1192,16 +1192,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         batchSize = 32,
         validationSplit = 0.2,
         learningRate = 0.001,
-        teamEmbeddingSize = 8,  // ⬇️ Reduced from 50 to prevent memorization
-        leagueEmbeddingSize = 4,  // ⬇️ Reduced from 20
-        countryEmbeddingSize = 4,  // ⬇️ Reduced from 10
+        teamEmbeddingSize: 40,
+        leagueEmbeddingSize: 15,
+        countryEmbeddingSize: 10,
         hiddenLayers = [128, 64]
       } = req.body;
 
       console.log('Starting basketball model training...');
-      
+
       const basketballStatsArray = await databaseStorage.getAllBasketballStats();
-      
+
       if (basketballStatsArray.length < 100) {
         return res.status(400).json({
           error: 'Insufficient training data',
@@ -1210,44 +1210,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { trainBasketballModel, saveBasketballModel } = await import('./ml-model-basketball');
-      
+
       const uniqueTeams = new Set<number>();
       const uniqueLeagues = new Set<number>();
       const uniqueCountries = new Set<number>();
-      
+
       basketballStatsArray.forEach(stats => {
         uniqueTeams.add(stats.homeTeamId);
         uniqueTeams.add(stats.awayTeamId);
         uniqueLeagues.add(stats.leagueId);
         uniqueCountries.add(stats.countryId);
       });
-      
+
       const archConfig = {
         numTeams: Math.max(...Array.from(uniqueTeams)),
         numLeagues: Math.max(...Array.from(uniqueLeagues)),
         numCountries: Math.max(...Array.from(uniqueCountries)),
-        teamEmbeddingSize,
-        leagueEmbeddingSize,
-        countryEmbeddingSize,
+        teamEmbeddingSize: 40,
+        leagueEmbeddingSize: 15,
+        countryEmbeddingSize: 10,
         hiddenLayers
       };
-      
+
       const trainingConfig = {
         epochs,
         batchSize,
         validationSplit,
         learningRate
       };
-      
+
       const { model, result, normalizationStats } = await trainBasketballModel(
         basketballStatsArray,
         trainingConfig,
         archConfig
       );
-      
+
       const modelPath = `./basketball-models/model_${Date.now()}`;
       await saveBasketballModel(model, modelPath, normalizationStats);
-      
+
       const modelMetadata = await databaseStorage.createBasketballModel({
         modelName: 'Basketball Predictor',
         version: '1.0',
@@ -1261,9 +1261,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: true,
         modelPath
       });
-      
+
       await databaseStorage.setActiveBasketballModel(modelMetadata.id);
-      
+
       res.json({
         success: true,
         modelId: modelMetadata.id,
@@ -1271,7 +1271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         history: result.history,
         totalSamples: basketballStatsArray.length
       });
-      
+
     } catch (error) {
       console.error('Error training basketball model:', error);
       res.status(500).json({
@@ -1339,7 +1339,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/basketball/ml/models/regenerate-normalization", async (req, res) => {
     try {
       console.log('Regenerating normalization files for all basketball models...');
-      
+
       // Try database data first, filter to reasonable values
       const databaseMatches = await databaseStorage.getAllBasketballStats();
       const validDatabaseMatches = databaseMatches.filter(stats => 
@@ -1351,7 +1351,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stats.awayPointsScoredPerGame > 0 && 
         stats.awayPointsScoredPerGame < 200
       );
-      
+
       // Fall back to tester data
       const testerMatches = await testerStorage.getAllBasketballStats();
       const validTesterMatches = testerMatches.filter(stats => 
@@ -1359,19 +1359,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stats.ftHomePoints !== null && 
         stats.ftAwayPoints !== null
       );
-      
+
       const validMatches = validDatabaseMatches.length > 0 ? validDatabaseMatches : validTesterMatches;
-      
+
       if (validMatches.length === 0) {
         return res.status(400).json({
           error: 'No valid basketball stats found',
           message: 'Need completed matches with reasonable stats to compute normalization'
         });
       }
-      
+
       const { computeNormalizationStats } = await import('./ml-model-basketball');
       const normalizationStats = computeNormalizationStats(validMatches);
-      
+
       console.log('Computed normalization stats:', {
         homePoints: normalizationStats.targets.homePoints,
         awayPoints: normalizationStats.targets.awayPoints,
@@ -1381,14 +1381,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         validMatchesUsed: validMatches.length
       });
-      
+
       const models = await databaseStorage.getAllBasketballModels();
       const fs = await import('fs/promises');
       let regeneratedCount = 0;
-      
+
       for (const model of models) {
         if (!model.modelPath) continue;
-        
+
         try {
           const normalizationPath = `${model.modelPath}/normalization.json`;
           await fs.writeFile(
@@ -1401,7 +1401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error(`Failed to regenerate normalization for model ${model.id}:`, error);
         }
       }
-      
+
       res.json({
         success: true,
         message: `Regenerated normalization files for ${regeneratedCount}/${models.length} models using ${validMatches.length} matches`,
@@ -1409,7 +1409,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalModels: models.length,
         validMatches: validMatches.length
       });
-      
+
     } catch (error) {
       console.error('Error regenerating normalization files:', error);
       res.status(500).json({
@@ -1423,36 +1423,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/basketball/ml/predict", async (req, res) => {
     try {
       console.log('Starting basketball predictions...');
-      
+
       const activeModel = await databaseStorage.getActiveBasketballModel();
-      
+
       if (!activeModel || !activeModel.modelPath) {
         return res.status(400).json({
           error: 'No active basketball model found',
           message: 'Please train a basketball model first'
         });
       }
-      
+
       const { loadBasketballModel, predictBasketball } = await import('./ml-model-basketball');
       const { model, normalizationStats } = await loadBasketballModel(activeModel.modelPath);
-      
+
       const testerMatches = await testerStorage.getAllBasketballStats();
-      
+
       if (testerMatches.length === 0) {
         return res.status(400).json({
           error: 'No basketball matches in tester',
           message: 'Load basketball matches into the tester first'
         });
       }
-      
+
       await testerStorage.deleteAllBasketballPredictions();
-      
+
       const predictions = [];
-      
+
       for (const match of testerMatches) {
         try {
           const prediction = await predictBasketball(model, match, normalizationStats);
-          
+
           const savedPrediction = await testerStorage.createBasketballPrediction({
             basketballStatsId: match.id,
             modelId: activeModel.id,
@@ -1463,22 +1463,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
             predAwayPoints: prediction.points.awayPoints,
             confidence: prediction.confidence
           });
-          
+
           predictions.push(savedPrediction);
         } catch (error) {
           console.error(`Error predicting basketball match ${match.id}:`, error);
         }
       }
-      
+
       console.log(`Basketball predictions completed: ${predictions.length}/${testerMatches.length}`);
-      
+
       res.json({
         success: true,
         totalMatches: testerMatches.length,
         predictions: predictions.length,
         results: predictions
       });
-      
+
     } catch (error) {
       console.error('Error making basketball predictions:', error);
       res.status(500).json({

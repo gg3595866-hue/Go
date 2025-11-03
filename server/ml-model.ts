@@ -178,7 +178,7 @@ export function buildModel(config: ModelArchitectureConfig): tf.LayersModel {
   const countryInput = tf.input({ shape: [1], name: 'country_id', dtype: 'int32' });
   const numericalInput = tf.input({ shape: [39], name: 'numerical_features' });
   
-  // Embedding layers
+  // Embedding layers with 40-15-10 configuration
   const homeTeamEmbedding = tf.layers.embedding({
     inputDim: config.numTeams + 1,
     outputDim: config.teamEmbeddingSize,
