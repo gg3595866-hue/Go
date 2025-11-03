@@ -184,7 +184,7 @@ export function buildModel(config: ModelArchitectureConfig): tf.LayersModel {
   const awayTeamInput = tf.input({ shape: [1], name: 'away_team_id', dtype: 'int32' });
   const leagueInput = tf.input({ shape: [1], name: 'league_id', dtype: 'int32' });
   const countryInput = tf.input({ shape: [1], name: 'country_id', dtype: 'int32' });
-  const numericalInput = tf.input({ shape: [39], name: 'numerical_features' });
+  const numericalInput = tf.input({ shape: [45], name: 'numerical_features' });
   
   // Embedding layers with 40-15-10 configuration
   const homeTeamEmbedding = tf.layers.embedding({
@@ -413,7 +413,7 @@ export async function trainModel(
     away_team_id: tf.tensor2d(trainData.awayTeamIds.map(id => [id]), [trainData.awayTeamIds.length, 1], 'int32'),
     league_id: tf.tensor2d(trainData.leagueIds.map(id => [id]), [trainData.leagueIds.length, 1], 'int32'),
     country_id: tf.tensor2d(trainData.countryIds.map(id => [id]), [trainData.countryIds.length, 1], 'int32'),
-    numerical_features: tf.tensor2d(trainData.numericalFeatures, [trainData.numericalFeatures.length, 39])
+    numerical_features: tf.tensor2d(trainData.numericalFeatures, [trainData.numericalFeatures.length, 45])
   };
   
   const trainYs = {
@@ -430,7 +430,7 @@ export async function trainModel(
     away_team_id: tf.tensor2d(valData.awayTeamIds.map(id => [id]), [valData.awayTeamIds.length, 1], 'int32'),
     league_id: tf.tensor2d(valData.leagueIds.map(id => [id]), [valData.leagueIds.length, 1], 'int32'),
     country_id: tf.tensor2d(valData.countryIds.map(id => [id]), [valData.countryIds.length, 1], 'int32'),
-    numerical_features: tf.tensor2d(valData.numericalFeatures, [valData.numericalFeatures.length, 39])
+    numerical_features: tf.tensor2d(valData.numericalFeatures, [valData.numericalFeatures.length, 45])
   };
   
   const valYs = {
@@ -540,7 +540,7 @@ export async function predict(
     away_team_id: tf.tensor2d([[cats.awayTeamId]], [1, 1], 'int32'),
     league_id: tf.tensor2d([[cats.leagueId]], [1, 1], 'int32'),
     country_id: tf.tensor2d([[cats.countryId]], [1, 1], 'int32'),
-    numerical_features: tf.tensor2d([nums], [1, 39])
+    numerical_features: tf.tensor2d([nums], [1, 45])
   };
   
   // Make prediction
