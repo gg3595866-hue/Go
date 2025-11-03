@@ -1430,13 +1430,10 @@ export interface LeagueStats {
 // Cache for league statistics to avoid repeated scraping
 const leagueStatsCache: Map<string, LeagueStats> = new Map();
 
-// Function to extract league slug from competition name
-function getLeagueSlug(competitionName: string): string {
-  // Convert competition name to URL slug
-  // Examples:
-  // "Copa Libertadores" -> "copa-libertadores"
-  // "Primera División" -> "primera-division"
-  // "Premier League" -> "premier-league"
+// Function to generate a simple slug from competition name (used for stats caching only)
+function generateSimpleSlug(competitionName: string): string {
+  // Convert competition name to URL slug for internal caching
+  // This is NOT used for actual URL construction - use extractLeagueSlug for that
   
   return competitionName
     .toLowerCase()
@@ -1466,7 +1463,7 @@ export async function scrapeLeagueStats(competitionName: string): Promise<League
     };
   }
   
-  const leagueSlug = getLeagueSlug(competitionName);
+  const leagueSlug = generateSimpleSlug(competitionName);
   
   // Check cache first
   if (leagueStatsCache.has(leagueSlug)) {
@@ -1715,6 +1712,7 @@ export function extractLeagueSlug(competitionName: string): string {
   
   // PRIORITY 1: Use comprehensive mappings (covers all leagues from user's list)
   const comprehensiveSlug = getLeagueSlug(competitionName);
+  console.log(`[extractLeagueSlug] Calling getLeagueSlug("${competitionName}") returned:`, comprehensiveSlug);
   if (comprehensiveSlug) {
     console.log(`✓ Found comprehensive mapping for "${cleanedName}" => "${comprehensiveSlug}"`);
     discoveredLeagueSlugs.set(cleanedName, comprehensiveSlug);

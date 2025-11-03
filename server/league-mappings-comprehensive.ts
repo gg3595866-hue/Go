@@ -499,11 +499,16 @@ export function getLeagueSlug(competitionName: string): string | null {
   // Remove year suffix (e.g., " 2025/2026" or " 2025")
   const cleanName = competitionName.replace(/\s+\d{4}(\/\d{4})?$/g, '').trim();
   
+  console.log(`[getLeagueSlug] Input: "${competitionName}" -> Cleaned: "${cleanName}"`);
+  
   // Check direct mapping
   if (COMPREHENSIVE_LEAGUE_MAPPINGS[cleanName]) {
-    return COMPREHENSIVE_LEAGUE_MAPPINGS[cleanName];
+    const slug = COMPREHENSIVE_LEAGUE_MAPPINGS[cleanName];
+    console.log(`[getLeagueSlug] Found mapping: "${cleanName}" -> "${slug}"`);
+    return slug;
   }
   
+  console.log(`[getLeagueSlug] No mapping found for "${cleanName}"`);
   // Return null if not found (will fallback to original logic)
   return null;
 }
