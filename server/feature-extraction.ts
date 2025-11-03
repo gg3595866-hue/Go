@@ -196,6 +196,94 @@ export function generateCountryId(competitionName: string): number {
   return Math.abs(competitionName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % 100;
 }
 
+// Validation function to check if basketball match data is complete and valid
+export function validateBasketballMatchData(basketballMatchDetails: any): { valid: boolean; reason?: string } {
+  const { stats, homeScore, awayScore, quarterScores } = basketballMatchDetails;
+
+  // Check if scores exist and are valid
+  if (homeScore === null || awayScore === null) {
+    return { valid: false, reason: 'Missing final scores' };
+  }
+
+  // Basketball scores should be realistic (at least 40 points per team typically)
+  if (homeScore < 30 || awayScore < 30) {
+    return { valid: false, reason: 'Unrealistic scores (too low for basketball)' };
+  }
+
+  // Check if stats object exists and has minimum required data
+  if (!stats || !stats.pointStats || !stats.teamStats) {
+    return { valid: false, reason: 'Missing stats data' };
+  }
+
+  // Check if both teams have point stats
+  const homePointsScoredPerGame = stats?.pointStats?.home?.pointsScoredPerGame;
+  const awayPointsScoredPerGame = stats?.pointStats?.away?.pointsScoredPerGame;
+  
+  if (!homePointsScoredPerGame || !awayPointsScoredPerGame || 
+      homePointsScoredPerGame === 0 || awayPointsScoredPerGame === 0) {
+    return { valid: false, reason: 'Missing or invalid points per game stats' };
+  }
+
+  // Check for team stats
+  const homeWinsPercent = stats?.teamStats?.home?.winsPercent;
+  const awayWinsPercent = stats?.teamStats?.away?.winsPercent;
+  
+  if (homeWinsPercent === undefined || awayWinsPercent === undefined) {
+    return { valid: false, reason: 'Missing team win percentage stats' };
+  }
+
+  return { valid: true };
+}
+
+// Validation function to check if football match data is complete and valid
+export function validateFootballMatchData(matchDetails: MatchDetails): { valid: boolean; reason?: string } {
+  const { score, homeTeamStats, awayTeamStats, oddsData } = matchDetails;
+
+  // Check if scores exist
+  if (score.home === null || score.away === null) {
+    return { valid: false, reason: 'Missing final scores' };
+  }
+
+  // Check if half-time scores exist
+  if (!score.halfTime || score.halfTime.home === null || score.halfTime.away === null) {
+    return { valid: false, reason: 'Missing half-time scores' };
+  }
+
+  // Check if team stats exist and have minimum required data
+  if (!homeTeamStats || !awayTeamStats) {
+    return { valid: false, reason: 'Missing team stats' };
+  }
+
+  // Check for unrealistic patterns - all stats being exactly 0 indicates incomplete scraping
+  const homeStatsCount = [
+    homeTeamStats.winPercentage,
+    homeTeamStats.drawPercentage,
+    homeTeamStats.lossPercentage
+  ].filter(val => val !== undefined && val !== null && val !== 0).length;
+
+  const awayStatsCount = [
+    awayTeamStats.winPercentage,
+    awayTeamStats.drawPercentage,
+    awayTeamStats.lossPercentage
+  ].filter(val => val !== undefined && val !== null && val !== 0).length;
+
+  if (homeStatsCount === 0 || awayStatsCount === 0) {
+    return { valid: false, reason: 'Team statistics are all zeros - incomplete data' };
+  }
+
+  // Check if odds data exists (important for predictions)
+  if (!oddsData || !oddsData.odds1 || !oddsData.oddsX || !oddsData.odds2) {
+    return { valid: false, reason: 'Missing betting odds data' };
+  }
+
+  // Validate odds are realistic (should be > 1.0)
+  if (oddsData.odds1 <= 1.0 || oddsData.oddsX <= 1.0 || oddsData.odds2 <= 1.0) {
+    return { valid: false, reason: 'Invalid betting odds (unrealistic values)' };
+  }
+
+  return { valid: true };
+}
+
 // Extract basketball features for database upload (with target variables)
 export function extractBasketballFeaturesForDatabase(
   basketballMatchDetails: any,

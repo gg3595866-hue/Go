@@ -571,6 +571,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Fetch match details
           const matchDetails = await scrapeMatchDetails(match.matchUrl);
 
+          // Validate match data completeness BEFORE processing
+          const { validateFootballMatchData } = await import('./feature-extraction');
+          const validation = validateFootballMatchData(matchDetails);
+          if (!validation.valid) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - ${validation.reason}`);
+            processed++;
+            continue;
+          }
+
           // Get or create IDs using database mapping (ensures consistency)
           const homeTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.homeTeam);
           const awayTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.awayTeam);
@@ -590,7 +599,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             leagueStats
           );
 
-          // Check if all required data is present (scores and complete features must exist for database)
+          // Double-check scores (additional safety check)
           if (
             features.ftHomeScore === null ||
             features.ftAwayScore === null ||
@@ -598,7 +607,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             features.htAwayScore === null ||
             features.ftResult === null
           ) {
-            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - missing scores or incomplete features`);
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - missing scores after extraction`);
             processed++;
             continue;
           }
@@ -619,11 +628,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           sendEvent({
             status: 'processing',
-            message: `Processed ${processed}/${matches.length} matches`,
+            message: `Stored ${match.homeTeam} vs ${match.awayTeam} successfully`,
             totalMatches: matches.length,
             processed,
             stored,
           });
+
+          // Add delay to prevent rate limiting (1.5 seconds between requests)
+          await new Promise(resolve => setTimeout(resolve, 1500));
         } catch (error) {
           console.error(`Error processing match ${match.homeTeam} vs ${match.awayTeam}:`, error);
           processed++;
@@ -1579,6 +1591,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Fetch basketball match details
           const matchDetails = await scrapeBasketballMatchDetails(match.matchUrl);
 
+          // Validate basketball match data completeness BEFORE processing
+          const { validateBasketballMatchData, extractBasketballFeaturesForDatabase } = await import('./feature-extraction');
+          const validation = validateBasketballMatchData(matchDetails);
+          if (!validation.valid) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - ${validation.reason}`);
+            processed++;
+            continue;
+          }
+
           // Get or create IDs using database mapping (ensures consistency)
           const homeTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.homeTeam);
           const awayTeamId = await databaseStorage.getOrCreateTeamId(matchDetails.awayTeam);
@@ -1586,7 +1607,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const countryId = await databaseStorage.getOrCreateCountryId(matchDetails.competition);
 
           // Extract basketball features
-          const { extractBasketballFeaturesForDatabase } = await import('./feature-extraction');
           const features = extractBasketballFeaturesForDatabase(
             matchDetails,
             homeTeamId,
@@ -1595,13 +1615,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             countryId
           );
 
-          // Check if all required data is present (scores must exist for database)
+          // Double-check scores (additional safety check)
           if (
             features.ftHomePoints === null ||
             features.ftAwayPoints === null ||
             features.ftResult === null
           ) {
-            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - missing scores or incomplete features`);
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - missing scores after extraction`);
             processed++;
             continue;
           }

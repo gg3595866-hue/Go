@@ -2022,8 +2022,9 @@ export async function scrapeLeagueMatches(
           const homeTeamImg = homeTeamSpan.find('img');
           const awayTeamImg = awayTeamSpan.find('img');
           
-          const homeTeam = homeTeamImg.attr('alt')?.trim() || homeTeamSpan.text().trim();
-          const awayTeam = awayTeamImg.attr('alt')?.trim() || awayTeamSpan.text().trim();
+          // Clean team names to remove artifacts like "logo", "images", etc.
+          const homeTeam = cleanTeamName(homeTeamImg.attr('alt') || homeTeamSpan.text());
+          const awayTeam = cleanTeamName(awayTeamImg.attr('alt') || awayTeamSpan.text());
           const homeTeamLogo = homeTeamImg.attr('src');
           const awayTeamLogo = awayTeamImg.attr('src');
           
@@ -2367,8 +2368,9 @@ export async function scrapeBasketballLeagueMatches(
           const homeTeamImg = homeTeamSpan.find('img');
           const awayTeamImg = awayTeamSpan.find('img');
           
-          const homeTeam = homeTeamImg.attr('alt')?.trim() || homeTeamSpan.text().trim();
-          const awayTeam = awayTeamImg.attr('alt')?.trim() || awayTeamSpan.text().trim();
+          // Clean team names to remove artifacts like "logo", "images", etc.
+          const homeTeam = cleanTeamName(homeTeamImg.attr('alt') || homeTeamSpan.text());
+          const awayTeam = cleanTeamName(awayTeamImg.attr('alt') || awayTeamSpan.text());
           const homeTeamLogo = homeTeamImg.attr('src');
           const awayTeamLogo = awayTeamImg.attr('src');
           
