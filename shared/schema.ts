@@ -123,6 +123,14 @@ export const matchStats = sqliteTable("match_stats", {
   leagueOver25: real("league_over_2_5").notNull(),
   leagueAvgGoals: real("league_avg_goals").notNull(),
   
+  // Betting odds and probabilities
+  odds1: real("odds_1").notNull(),
+  oddsX: real("odds_x").notNull(),
+  odds2: real("odds_2").notNull(),
+  prob1: real("prob_1").notNull(),
+  probX: real("prob_x").notNull(),
+  prob2: real("prob_2").notNull(),
+  
   // Match date for time-aware splitting
   matchDate: integer("match_date", { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   
@@ -333,6 +341,16 @@ export const matchDetailsSchema = z.object({
     home: z.number(),
     draw: z.number(),
     away: z.number(),
+  }).optional(),
+  
+  // Detailed odds and probabilities data
+  oddsData: z.object({
+    odds1: z.number(),
+    oddsX: z.number(),
+    odds2: z.number(),
+    prob1: z.number(),
+    probX: z.number(),
+    prob2: z.number(),
   }).optional(),
   
   // Comparison insights

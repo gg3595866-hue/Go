@@ -20,7 +20,7 @@ export function extractFeaturesForDatabase(
   countryId: number,
   leagueStats?: LeagueStats
 ): InsertMatchStats {
-  const { homeTeamForm, awayTeamForm, homeTeamStats, awayTeamStats, score } = matchDetails;
+  const { homeTeamForm, awayTeamForm, homeTeamStats, awayTeamStats, score, oddsData } = matchDetails;
 
   // Calculate target variables from actual scores
   const ftHomeScore = score.home ?? null;
@@ -107,6 +107,14 @@ export function extractFeaturesForDatabase(
     leagueUnder25,
     leagueOver25,
     leagueAvgGoals,
+
+    // Betting odds and probabilities
+    odds1: oddsData?.odds1 ?? 0,
+    oddsX: oddsData?.oddsX ?? 0,
+    odds2: oddsData?.odds2 ?? 0,
+    prob1: oddsData?.prob1 ?? 0,
+    probX: oddsData?.probX ?? 0,
+    prob2: oddsData?.prob2 ?? 0,
 
     // Target variables
     ftHomeScore,

@@ -881,21 +881,74 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
       }
     });
     
-    // Extract odds
-    const oddsRow = $('tr').filter(function() {
-      return $(this).find('td').text().includes('Odds');
-    });
-    
+    // Extract odds and probabilities
+    // Look for the "Odds" section which contains both odds values and probabilities
     let odds;
-    if (oddsRow.length > 0) {
-      const oddsCells = oddsRow.find('td');
-      if (oddsCells.length >= 3) {
-        const homeOdds = parseFloat($(oddsCells[1]).text().trim());
-        const drawOdds = parseFloat($(oddsCells[1]).next().text().trim());
-        const awayOdds = parseFloat($(oddsCells[2]).text().trim());
+    let oddsData: { odds1: number; oddsX: number; odds2: number; prob1: number; probX: number; prob2: number } | undefined;
+    
+    // Try to find odds section by looking for elements containing "Odds" text
+    const oddsSection = $('.card-header, h3, h4, .compare-header').filter(function() {
+      return $(this).text().trim() === 'Odds';
+    }).closest('.card, section, div[class*="card"]').first();
+    
+    if (oddsSection.length > 0) {
+      // Extract all numeric values from the odds section
+      const oddsText = oddsSection.text();
+      // Match pattern: number, then percentage, repeated 3 times
+      const oddsMatches = oddsText.match(/(\d+\.?\d*)\s*(\d+)\s*%/g);
+      
+      if (oddsMatches && oddsMatches.length >= 3) {
+        const parseOddsAndProb = (match: string): { odds: number; prob: number } => {
+          const parts = match.match(/(\d+\.?\d*)\s*(\d+)\s*%/);
+          return {
+            odds: parts ? parseFloat(parts[1]) : 0,
+            prob: parts ? parseFloat(parts[2]) : 0
+          };
+        };
         
-        if (!isNaN(homeOdds) && !isNaN(drawOdds) && !isNaN(awayOdds)) {
-          odds = { home: homeOdds, draw: drawOdds, away: awayOdds };
+        const home = parseOddsAndProb(oddsMatches[0]);
+        const draw = parseOddsAndProb(oddsMatches[1]);
+        const away = parseOddsAndProb(oddsMatches[2]);
+        
+        odds = { home: home.odds, draw: draw.odds, away: away.odds };
+        oddsData = {
+          odds1: home.odds,
+          oddsX: draw.odds,
+          odds2: away.odds,
+          prob1: home.prob / 100, // Convert percentage to decimal
+          probX: draw.prob / 100,
+          prob2: away.prob / 100
+        };
+        
+        console.log('Extracted odds and probabilities:', oddsData);
+      }
+    }
+    
+    // Fallback: Try old method for odds only
+    if (!odds) {
+      const oddsRow = $('tr').filter(function() {
+        return $(this).find('td').text().includes('Odds');
+      });
+      
+      if (oddsRow.length > 0) {
+        const oddsCells = oddsRow.find('td');
+        if (oddsCells.length >= 3) {
+          const homeOdds = parseFloat($(oddsCells[1]).text().trim());
+          const drawOdds = parseFloat($(oddsCells[1]).next().text().trim());
+          const awayOdds = parseFloat($(oddsCells[2]).text().trim());
+          
+          if (!isNaN(homeOdds) && !isNaN(drawOdds) && !isNaN(awayOdds)) {
+            odds = { home: homeOdds, draw: drawOdds, away: awayOdds };
+            // Set default probabilities if we only have odds
+            oddsData = {
+              odds1: homeOdds,
+              oddsX: drawOdds,
+              odds2: awayOdds,
+              prob1: 0,
+              probX: 0,
+              prob2: 0
+            };
+          }
         }
       }
     }
@@ -1032,6 +1085,7 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
       } : undefined,
       streaks,
       odds,
+      oddsData,
       insights: insights.slice(0, 10),
     };
     
