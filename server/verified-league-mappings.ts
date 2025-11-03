@@ -26,9 +26,13 @@ export const VERIFIED_LEAGUE_MAPPINGS: Record<string, string> = {
   'Chile Primera División': 'primera-division-cl',
   'Colombia Primera A': 'primera-division-co',
   'Copa del Rey': 'copa-del-rey',
+  'Spain Copa del Rey': 'copa-del-rey',
   'Copa Libertadores': 'copa-libertadores',
   'Copa Sudamericana': 'copa-sudamericana',
   'Croatia 1. HNL': '1-hnl',
+  'Croatia HNL': '1-hnl',
+  '1. HNL': '1-hnl',
+  'HNL': '1-hnl',
   'Czech Cup': 'czech-cup',
   'Czechia FNL': '2-liga',
   'Czechia Fortuna Liga': '1-liga',
@@ -131,6 +135,7 @@ export const VERIFIED_LEAGUE_MAPPINGS: Record<string, string> = {
   'World Cup Qualifiers - Asia': 'world-cup-q-asia',
   'World Cup Qualifiers - Europe': 'world-cup-q-europe',
   'World Cup Qualifiers - N+C America': 'world-cup-q-n-c-america',
+  'World Cup Qualifiers - South America': 'world-cup-q-conmebol',
 };
 
 /**

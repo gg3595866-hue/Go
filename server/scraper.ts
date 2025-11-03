@@ -1,7 +1,7 @@
 import cloudscraper from 'cloudscraper';
 import * as cheerio from 'cheerio';
 import { type Match, type MatchDetails } from '@shared/schema';
-import { COMPREHENSIVE_LEAGUE_MAPPINGS, getLeagueSlug } from './league-mappings-comprehensive';
+import { VERIFIED_LEAGUE_MAPPINGS, getVerifiedLeagueSlug } from './verified-league-mappings';
 
 // Helper function to clean team names by removing artifacts like "logo", extra spaces, etc.
 function cleanTeamName(name: string): string {
@@ -1699,7 +1699,8 @@ function generateSlugVariations(competitionName: string): string[] {
 const discoveredLeagueSlugs = new Map<string, string>();
 
 /**
- * Extract league slug from competition name - ONLY uses comprehensive mappings
+ * Extract league slug from competition name - ONLY uses VERIFIED mappings
+ * These mappings are scraped directly from Sportstats365 fixtures pages
  * NO automatic URL construction to ensure 100% accuracy
  */
 export function extractLeagueSlug(competitionName: string): string {
@@ -1710,27 +1711,27 @@ export function extractLeagueSlug(competitionName: string): string {
     return discoveredLeagueSlugs.get(cleanedName)!;
   }
   
-  // ONLY use comprehensive mappings - NEVER construct URLs automatically
-  const comprehensiveSlug = getLeagueSlug(competitionName);
-  console.log(`[extractLeagueSlug] Calling getLeagueSlug("${competitionName}") returned:`, comprehensiveSlug);
-  if (comprehensiveSlug) {
-    console.log(`✓ Found comprehensive mapping for "${cleanedName}" => "${comprehensiveSlug}"`);
-    discoveredLeagueSlugs.set(cleanedName, comprehensiveSlug);
-    return comprehensiveSlug;
+  // ONLY use VERIFIED mappings - scraped from actual Sportstats365 fixtures
+  const verifiedSlug = getVerifiedLeagueSlug(competitionName);
+  console.log(`[extractLeagueSlug] Calling getVerifiedLeagueSlug("${competitionName}") returned:`, verifiedSlug);
+  if (verifiedSlug) {
+    console.log(`✓ Found VERIFIED mapping for "${cleanedName}" => "${verifiedSlug}"`);
+    discoveredLeagueSlugs.set(cleanedName, verifiedSlug);
+    return verifiedSlug;
   }
   
-  // Check if we have it in the comprehensive mappings directly
-  if (COMPREHENSIVE_LEAGUE_MAPPINGS[cleanedName]) {
-    const slug = COMPREHENSIVE_LEAGUE_MAPPINGS[cleanedName];
-    console.log(`✓ Found direct mapping for "${cleanedName}" => "${slug}"`);
+  // Check if we have it in the verified mappings directly
+  if (VERIFIED_LEAGUE_MAPPINGS[cleanedName]) {
+    const slug = VERIFIED_LEAGUE_MAPPINGS[cleanedName];
+    console.log(`✓ Found direct VERIFIED mapping for "${cleanedName}" => "${slug}"`);
     discoveredLeagueSlugs.set(cleanedName, slug);
     return slug;
   }
   
-  // If no mapping found, this is an ERROR - league needs to be added to mappings
-  console.error(`❌ NO MAPPING FOUND FOR LEAGUE: "${cleanedName}"`);
+  // If no mapping found, this is an ERROR - league needs to be added to verified mappings
+  console.error(`❌ NO VERIFIED MAPPING FOUND FOR LEAGUE: "${cleanedName}"`);
   console.error(`   Original name: "${competitionName}"`);
-  console.error(`   This league must be added to server/league-mappings-comprehensive.ts`);
+  console.error(`   This league needs to be discovered. Run: npx tsx server/extract-league-urls-from-fixtures.ts`);
   
   // Return a safe fallback that will be obvious if used
   return `UNMAPPED-LEAGUE-${createSlug(cleanedName)}`;
