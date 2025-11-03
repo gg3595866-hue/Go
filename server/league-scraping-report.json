@@ -1,0 +1,13 @@
+{
+  "source": "https://sportstats365.com/football/competitions/leagues",
+  "totalLeagues": 1,
+  "timestamp": "2025-11-03T14:53:16.933Z",
+  "leagues": [
+    {
+      "name": "No Wins",
+      "cleanName": "No Wins",
+      "slug": "streaks",
+      "url": "https://sportstats365.com/football/streaks/no_wins"
+    }
+  ]
+}

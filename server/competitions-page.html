@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta http-equiv="x-ua-compatible" content="ie=edge" />
+    <title>Leagues - Sportstats365.com</title>
+    <!-- Favicon -->
+    <link rel="apple-touch-icon" sizes="180x180" href="https://sportstats365.com/static/images/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="https://sportstats365.com/static/images/icons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="https://sportstats365.com/static/images/icons/favicon-16x16.png">
+    <link rel="manifest" href="https://sportstats365.com/site.webmanifest">
+    <link rel="mask-icon" href="https://sportstats365.com/static/images/icons/safari-pinned-tab.svg" color="#df4d37">
+        
+    <link rel="preconnect" href="https://ka-p.fontawesome.com">
+    
+    
+    <link rel="preload" href="https://sportstats365.com/static/test/main.2031e4b7e2d9fca9179d.css" as="style">
+    <link rel="preload" href="https://kit.fontawesome.com/d0e2fb2606.css" as="style" crossorigin="anonymous">
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" as="style">
+    <link rel="preload" href="https://sportstats365.com/static/mdb7/plugins/css/treeview.min.css" as="style">
+    <link rel="preload" href="https://sportstats365.com/static/js/htmx-1.9.8.js" as="script">
+    <link rel="preload" href="https://sportstats365.com/static/js/alpinejs-3.js" as="script">
+    <link rel="preload" href="https://sportstats365.com/static/js/jquery-3.7.1.min.js" as="script">
+    <link rel="preload" href="https://sportstats365.com/static/test/main.js" as="script">
+
+    
+    <meta name="msapplication-TileColor" content="#df4d37">
+    <meta name="theme-color" content="#df4d37">
+    <!-- Font Awesome -->
+        <link rel="stylesheet" href="https://sportstats365.com/static/test/main.2031e4b7e2d9fca9179d.css" />
+
+    <link rel="stylesheet" href="https://kit.fontawesome.com/d0e2fb2606.css" crossorigin="anonymous">
+    <!-- Google Fonts Roboto -->
+    <style type="text/css">@font-face {font-family:Roboto;font-style:normal;font-weight:300;src:url(/cf-fonts/s/roboto/5.0.11/greek/300/normal.woff2);unicode-range:U+0370-03FF;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:300;src:url(/cf-fonts/s/roboto/5.0.11/cyrillic-ext/300/normal.woff2);unicode-range:U+0460-052F,U+1C80-1C88,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:300;src:url(/cf-fonts/s/roboto/5.0.11/greek-ext/300/normal.woff2);unicode-range:U+1F00-1FFF;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:300;src:url(/cf-fonts/s/roboto/5.0.11/latin/300/normal.woff2);unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:300;src:url(/cf-fonts/s/roboto/5.0.11/cyrillic/300/normal.woff2);unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:300;src:url(/cf-fonts/s/roboto/5.0.11/latin-ext/300/normal.woff2);unicode-range:U+0100-02AF,U+0304,U+0308,U+0329,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20CF,U+2113,U+2C60-2C7F,U+A720-A7FF;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:300;src:url(/cf-fonts/s/roboto/5.0.11/vietnamese/300/normal.woff2);unicode-range:U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:400;src:url(/cf-fonts/s/roboto/5.0.11/cyrillic-ext/400/normal.woff2);unicode-range:U+0460-052F,U+1C80-1C88,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:400;src:url(/cf-fonts/s/roboto/5.0.11/greek/400/normal.woff2);unicode-range:U+0370-03FF;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:400;src:url(/cf-fonts/s/roboto/5.0.11/vietnamese/400/normal.woff2);unicode-range:U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:400;src:url(/cf-fonts/s/roboto/5.0.11/cyrillic/400/normal.woff2);unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:400;src:url(/cf-fonts/s/roboto/5.0.11/greek-ext/400/normal.woff2);unicode-range:U+1F00-1FFF;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:400;src:url(/cf-fonts/s/roboto/5.0.11/latin/400/normal.woff2);unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:400;src:url(/cf-fonts/s/roboto/5.0.11/latin-ext/400/normal.woff2);unicode-range:U+0100-02AF,U+0304,U+0308,U+0329,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20CF,U+2113,U+2C60-2C7F,U+A720-A7FF;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:500;src:url(/cf-fonts/s/roboto/5.0.11/greek-ext/500/normal.woff2);unicode-range:U+1F00-1FFF;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:500;src:url(/cf-fonts/s/roboto/5.0.11/cyrillic/500/normal.woff2);unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:500;src:url(/cf-fonts/s/roboto/5.0.11/greek/500/normal.woff2);unicode-range:U+0370-03FF;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:500;src:url(/cf-fonts/s/roboto/5.0.11/latin/500/normal.woff2);unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:500;src:url(/cf-fonts/s/roboto/5.0.11/latin-ext/500/normal.woff2);unicode-range:U+0100-02AF,U+0304,U+0308,U+0329,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20CF,U+2113,U+2C60-2C7F,U+A720-A7FF;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:500;src:url(/cf-fonts/s/roboto/5.0.11/vietnamese/500/normal.woff2);unicode-range:U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:500;src:url(/cf-fonts/s/roboto/5.0.11/cyrillic-ext/500/normal.woff2);unicode-range:U+0460-052F,U+1C80-1C88,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:700;src:url(/cf-fonts/s/roboto/5.0.11/greek-ext/700/normal.woff2);unicode-range:U+1F00-1FFF;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:700;src:url(/cf-fonts/s/roboto/5.0.11/latin/700/normal.woff2);unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:700;src:url(/cf-fonts/s/roboto/5.0.11/cyrillic/700/normal.woff2);unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:700;src:url(/cf-fonts/s/roboto/5.0.11/latin-ext/700/normal.woff2);unicode-range:U+0100-02AF,U+0304,U+0308,U+0329,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20CF,U+2113,U+2C60-2C7F,U+A720-A7FF;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:700;src:url(/cf-fonts/s/roboto/5.0.11/cyrillic-ext/700/normal.woff2);unicode-range:U+0460-052F,U+1C80-1C88,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:700;src:url(/cf-fonts/s/roboto/5.0.11/vietnamese/700/normal.woff2);unicode-range:U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB;font-display:swap;}@font-face {font-family:Roboto;font-style:normal;font-weight:700;src:url(/cf-fonts/s/roboto/5.0.11/greek/700/normal.woff2);unicode-range:U+0370-03FF;font-display:swap;}</style>
+    <!-- Main css file -->
+            <link rel="stylesheet" href="https://sportstats365.com/static/mdb7/plugins/css/treeview.min.css"/>
+    <script src="https://sportstats365.com/static/js/jquery-3.7.1.min.js"></script>
+    <script src="https://sportstats365.com/static/js/htmx-1.9.8.js"></script>
+    <script defer src="https://sportstats365.com/static/js/alpinejs-3.js"></script>
+        
+
+                            <link rel="alternate" hreflang="en" href="https://sportstats365.com/football/competitions/leagues" />
+                            <link rel="canonical" href="https://sportstats365.com/football/competitions/leagues" />
+                                            <link rel="alternate" hreflang="hu" href="https://sportstats365.com/hu/foci/competitions/leagues" />
+                                            <link rel="alternate" hreflang="ro" href="https://sportstats365.com/ro/fotbal/competitions/leagues" />
+                                            <link rel="alternate" hreflang="de" href="https://sportstats365.com/de/fussball/competitions/leagues" />
+                                                                        <meta property="og:title" content="Competitions">
+                                <meta property="og:type" content="article">
+                                <meta property="og:url" content="https://sportstats365.com/competitions">
+                                <meta property="og:description" content="">
+                    </head>
+
+<body><header>
+    <nav class="navbar fixed-top navbar-expand-md bg-primary spf-navbar" style="z-index:1031;">
+        <div class="container-fluid justify-content-between flex-nowrap">
+            <button data-mdb-ripple-init data-mdb-toggle="sidenav" data-mdb-target="#sidenav_main" class="navbar-toggler" aria-controls="#sidenav_main" aria-haspopup="true" aria-label="Menu">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="navbar-brand p-0 me-auto">
+                <a href="https://sportstats365.com/" class="d-inline d-md-none">
+                    <img id="left_logo" src="https://sportstats365.com/static/images/logo-365-dark.svg" alt="Sportstats365.com logo" draggable="false" width="41" height="32"/>
+                </a>
+            </div>
+            <div class="navbar-collapse justify-content-center">
+                                                    <div class="col-md-8 col-lg-6">
+                    <div id="main_search" class="position-relative autocomplete rounded mx-3" data-mdb-input-init>
+                        <input type="search" class="form-control" placeholder="Search" aria-label="Search"/>
+                                            </div>
+                    <script>
+                                            </script>
+                </div>
+                            </div>
+            <div class="d-flex align-items-center">
+                                <div class="nav-item dropdown text-white">
+                    <a data-mdb-dropdown-init class="nav-link dropdown-toggle" href="#" id="settingsDropdown" role="button" aria-expanded="false" aria-label="Settings">
+                        <i class="fas fa-gear"></i>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="settingsDropdown">
+                                                                                    <li>
+                                    <a class="dropdown-item" href="/football/competitions/leagues"><i class="flag-united-kingdom flag"></i>English
+                                        <i class="fa fa-check text-success ms-2"></i>                                    </a>
+                                </li>
+                                                            <li>
+                                    <a class="dropdown-item" href="/hu/foci/competitions/leagues"><i class="flag-hungary flag"></i>Magyar
+                                                                            </a>
+                                </li>
+                                                            <li>
+                                    <a class="dropdown-item" href="/ro/fotbal/competitions/leagues"><i class="flag-romania flag"></i>Romana
+                                                                            </a>
+                                </li>
+                                                            <li>
+                                    <a class="dropdown-item" href="/de/fussball/competitions/leagues"><i class="flag-germany flag"></i>Deutsch
+                                                                            </a>
+                                </li>
+                                                                            <li><hr class="dropdown-divider" /></li>
+                        <li>
+                            <div class="d-flex align-items-center dropdown-item py-2">
+                                <span class="me-2"><i class="fas fa-moon me-2"></i> Dark mode</span>
+
+                                <!-- Default switch -->
+                                <div class="ms-2 form-check seconday-color form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="themingSwitcher" name="dark" hx-post="/settings/save_theme" />
+                                </div>
+                            </div>
+                        </li>
+                                                <li>
+                            <a href="#" class="dropdown-item" hx-get="/settings" hx-target="#modals"><i class="fas fa-clock me-2"></i>Timezone</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <nav class="navbar fixed-top navbar-expand mt-5 bg-black navbar-dark spf-navbar pb-0">
+        <div class="container justify-content-between flex-nowrap">
+            <div class="collapse navbar-collapse scroll-horizontal-menu" id="navbar2_collapse">
+                <ul class="navbar-nav mb-1 me-auto">
+                                            <li class="nav-item">
+                            <a class="nav-link text-nowrap active" href="/football">
+                                <i class="fas fa-soccer-ball me-1"></i><span>Football</span>
+                            </a>
+                        </li>
+                                            <li class="nav-item">
+                            <a class="nav-link text-nowrap" href="/basketball">
+                                <i class="fas fa-basketball me-1"></i><span>Basketball</span>
+                            </a>
+                        </li>
+                                            <li class="nav-item">
+                            <a class="nav-link text-nowrap" href="/handball">
+                                <i class="fal fa-futbol me-1"></i><span>Handball</span>
+                            </a>
+                        </li>
+                                            <li class="nav-item">
+                            <a class="nav-link text-nowrap" href="/ice-hockey">
+                                <i class="fas fa-hockey-stick-puck me-1"></i><span>Ice Hockey</span>
+                            </a>
+                        </li>
+                                    </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidenav -->
+    <nav data-mdb-sidenav-init id="sidenav_main" class="sidenav sidenav-sm bg-black" data-mdb-color="spf" data-mdb-theme="dark" data-mdb-hidden="true" data-mdb-mode="side">
+        <a class="ripple d-flex justify-content-center py-2 mb-0 mb-lg-3" href="https://sportstats365.com/" data-mdb-ripple-color="primary" data-mdb-ripple-init="">
+            <img id="left_logo" src="https://sportstats365.com/static/images/logo-sportstats365-red.svg" alt="Sportstats365.com logo" draggable="false" width="72" height="74"/>
+        </a>
+        <ul class="sidenav-menu sidenav-spf px-2 pb-5">
+                            <li class="sidenav-item">
+                    <span class="sidenav-subheading text-muted">Competitions</span>
+                    <a class="sidenav-link" href="/football/competitions"><i class="fas fa-list fa-fw me-3"></i> Browse</a>
+                </li>
+                <li class="sidenav-item">
+                    <a class="sidenav-link" href="/football/competitions/stats"><i class="fas fa-chart-simple fa-fw me-3"></i> Competition stats</a>
+                </li>
+                                    <li hx-get="/football/sports/popular" class="sidenav-item pt-3" hx-trigger="intersect" hx-swap="outerHTML">
+                        <span class="sidenav-subheading"><span class="placeholder placeholder-xs"></span>
+                            <a class="sidenav-link"><span class="placeholder"></span></a>
+                            <a class="sidenav-link"><span class="placeholder"></span></a>
+                            <a class="sidenav-link"><span class="placeholder"></span></a>
+                            <a class="sidenav-link"><span class="placeholder"></span></a>
+                            <a class="sidenav-link"><span class="placeholder"></span></a>
+                            <a class="sidenav-link"><span class="placeholder"></span></a>
+                    </li>
+                
+                
+                <li class="sidenav-item">
+                    <a class="sidenav-link"><i class="fas fa-list-tree fa-fw me-3"></i><span>More competitions</span></a>
+                    <ul class="sidenav-collapse">
+                        <li class="sidenav-item">
+                            <div class="" hx-get="/football/competitions" hx-trigger="intersect" hx-swap="outerHTML">
+                            </div>
+                        </li>
+                    </ul>
+                </li>
+                                                                                                                                        <li class="sidenav-item pt-3">
+                                <span class="sidenav-subheading text-muted">Select</span>                                <a class="sidenav-link" href="/football/streaks/no_wins">
+                                    <i class="fas fa-ban text-danger fa-fw me-3"></i><span>No Wins</span>
+                                </a>
+                            </li>
+                                                    <li class="sidenav-item">
+                                                                <a class="sidenav-link" href="/football/streaks/no_draws">
+                                    <i class="fas fa-ban fa-fw me-3"></i><span>No Draws</span>
+                                </a>
+                            </li>
+                                                    <li class="sidenav-item">
+                                                                <a class="sidenav-link" href="/football/streaks/no_losses">
+                                    <i class="fas fa-ban text-success fa-fw me-3"></i><span>No Losses</span>
+                                </a>
+                            </li>
+                                                                                                <li class="sidenav-item pt-3">
+                                <span class="sidenav-subheading text-muted">Streaks</span>                                <a class="sidenav-link" href="/football/streaks/wins">
+                                    <i class="fas fa-check text-success fa-fw me-3"></i><span>Wins</span>
+                                </a>
+                            </li>
+                                                    <li class="sidenav-item">
+                                                                <a class="sidenav-link" href="/football/streaks/draws">
+                                    <i class="fas fa-equals fa-fw me-3"></i><span>Draws</span>
+                                </a>
+                            </li>
+                                                    <li class="sidenav-item">
+                                                                <a class="sidenav-link" href="/football/streaks/losses">
+                                    <i class="fas fa-remove text-danger fa-fw me-3"></i><span>Losses</span>
+                                </a>
+                            </li>
+                                                    <li class="sidenav-item">
+                                                                <a class="sidenav-link" href="/football/streaks/under">
+                                    <i class="fas fa-arrow-down fa-fw me-3"></i><span>Under</span>
+                                </a>
+                            </li>
+                                                    <li class="sidenav-item">
+                                                                <a class="sidenav-link" href="/football/streaks/over">
+                                    <i class="fas fa-arrow-up fa-fw me-3"></i><span>Over</span>
+                                </a>
+                            </li>
+                                                    <li class="sidenav-item">
+                                                                <a class="sidenav-link" href="/football/streaks/not_scored">
+                                    <i class="fas fa-ban fa-fw me-3"></i><span>Not Scored</span>
+                                </a>
+                            </li>
+                                                    <li class="sidenav-item">
+                                                                <a class="sidenav-link" href="/football/streaks/not_received">
+                                    <i class="fas fa-ban fa-fw me-3"></i><span>No Goals Received</span>
+                                </a>
+                            </li>
+                                                                                                        </ul>
+    </nav>
+    <!-- Sidenav -->
+</header><main class="mt-5 pt-5">
+    <div class="container">
+        
+                        <div class="d-flex justify-content-between align-items-center">
+                <nav aria-label="breadcrumb" class="mt-4">
+                    <ol class="breadcrumb" itemscope itemtype="https://schema.org/BreadcrumbList">
+                                                    <li class="breadcrumb-item small" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                                                                    <a href="/" class="link-secondary" itemscope itemtype="https://schema.org/WebPage" itemprop="item" itemid="https://sportstats365.com/"><i class="far fa-house" title="Sportstats365"></i><meta itemprop="name" content="Sportstats365" /></a>
+                                                                <meta itemprop="position" content="1" />
+                            </li>
+                                                    <li class="breadcrumb-item small" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                                                                    <a href="/football" class="link-secondary" itemscope itemtype="https://schema.org/WebPage" itemprop="item" itemid="https://sportstats365.com/football"><span itemprop="name">Football</span></a>
+                                                                <meta itemprop="position" content="2" />
+                            </li>
+                                                    <li class="breadcrumb-item small" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                                                                    <a href="/football/competitions" class="link-secondary" itemscope itemtype="https://schema.org/WebPage" itemprop="item" itemid="https://sportstats365.com/football/competitions"><span itemprop="name">Competitions</span></a>
+                                                                <meta itemprop="position" content="3" />
+                            </li>
+                                                    <li class="breadcrumb-item active d-none d-lg-inline small" aria-current="page" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                                                                    <span itemprop="name">Leagues</span>
+                                                                <meta itemprop="position" content="4" />
+                            </li>
+                                            </ol>
+                </nav>
+                
+                <div>
+                    <button id="btn_tz" class="btn btn-sm btn-link d-none d-md-inline" hx-get="/settings" hx-target="#modals"><i class="far fa-clock me-2"></i><span>CET</span></button>
+                                            <input type="hidden" name="tz" id="tz_field" value="" hx-post="/settings/save_tz2" hx-trigger="load" hx-target="#btn_tz span">
+                        <script>
+                            {
+                                if(typeof Intl.DateTimeFormat() !== 'undefined'){
+                                    const elem = document.querySelector("#tz_field");
+                                    elem.value = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                                }
+                            }
+                        </script>
+                                    </div>
+                
+            </div>
+        
+        
+    
+    <div class="card mb-4">
+        <div class="card-body" x-data="{ title: 'Leagues'}">
+            <div class="row align-items-center">
+                <div class="col-lg-5 col-10">
+                    <h1 x-text="title">Leagues</h1>
+                </div>
+                <div class="col-2 col-lg-1 text-end ms-auto order-lg-last">
+                    <a href="/football/competitions/stats" class="btn btn-floating btn-sm btn-info" title="Competition stats"><i class="fas fa-chart-simple"></i></a>
+                </div>
+                <div class="col-lg-6 col-10 text-start text-lg-end align-items-center" id="type_filter">
+                                        <div class="btn-group shadow-0">
+                        <a href="/football/competitions" @click="title = 'Leagues'" data-filter="" class="btn btn-secondary" data-mdb-ripple-init>All</a>
+                        <a href="/football/competitions/leagues" @click="title = $el.text" data-filter="leagues" class="btn btn-secondary active" data-mdb-ripple-init>Leagues</a>
+                        <a href="/football/competitions/cups" @click="title = $el.text" data-filter="cups" class="btn btn-secondary" data-mdb-ripple-init>Cups</a>
+                    </div>
+                    <input type="hidden" name="filter" value="">
+                    <script>
+                                                                    </script>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-3">
+            <p class="fw-bold mb-0">Select region</p>
+            <ul class="nav nav-pills nav- flex-md-column mb-3" id="nav_regions" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                        <a data-mdb-tab-init class="nav-link mx-1 p-2 px-md-4 py-md-3 mb-0 active" id="link_region_eu" href="#regions_eu" aria-controls="regions_eu" aria-selected="true">
+                            Europe
+                        </a>
+                    </li>
+                                    <li class="nav-item" role="presentation">
+                        <a data-mdb-tab-init class="nav-link mx-1 p-2 px-md-4 py-md-3 mb-0" id="link_region_int" href="#regions_int" aria-controls="regions_int">
+                            International
+                        </a>
+                    </li>
+                                    <li class="nav-item" role="presentation">
+                        <a data-mdb-tab-init class="nav-link mx-1 p-2 px-md-4 py-md-3 mb-0" id="link_region_na" href="#regions_na" aria-controls="regions_na">
+                            North America
+                        </a>
+                    </li>
+                                    <li class="nav-item" role="presentation">
+                        <a data-mdb-tab-init class="nav-link mx-1 p-2 px-md-4 py-md-3 mb-0" id="link_region_sa" href="#regions_sa" aria-controls="regions_sa">
+                            South America
+                        </a>
+                    </li>
+                                    <li class="nav-item" role="presentation">
+                        <a data-mdb-tab-init class="nav-link mx-1 p-2 px-md-4 py-md-3 mb-0" id="link_region_af" href="#regions_af" aria-controls="regions_af">
+                            Africa
+                        </a>
+                    </li>
+                                    <li class="nav-item" role="presentation">
+                        <a data-mdb-tab-init class="nav-link mx-1 p-2 px-md-4 py-md-3 mb-0" id="link_region_as" href="#regions_as" aria-controls="regions_as">
+                            Asia
+                        </a>
+                    </li>
+                                    <li class="nav-item" role="presentation">
+                        <a data-mdb-tab-init class="nav-link mx-1 p-2 px-md-4 py-md-3 mb-0" id="link_region_au" href="#regions_au" aria-controls="regions_au">
+                            Australia
+                        </a>
+                    </li>
+                            </ul>
+        </div>
+        <div class="col-md-9">
+            <div class="tab-content">
+                                    <div class="tab-pane fade show active" id="regions_eu" role="tabpanel" aria-labelledby="link_region_eu" hx-get="/football/competitions/region/eu" hx-trigger="intersect" hx-include="[name='filter']">
+                                            </div>
+                                    <div class="tab-pane fade" id="regions_int" role="tabpanel" aria-labelledby="link_region_int" hx-get="/football/competitions/region/int" hx-trigger="intersect" hx-include="[name='filter']">
+                                            </div>
+                                    <div class="tab-pane fade" id="regions_na" role="tabpanel" aria-labelledby="link_region_na" hx-get="/football/competitions/region/na" hx-trigger="intersect" hx-include="[name='filter']">
+                                            </div>
+                                    <div class="tab-pane fade" id="regions_sa" role="tabpanel" aria-labelledby="link_region_sa" hx-get="/football/competitions/region/sa" hx-trigger="intersect" hx-include="[name='filter']">
+                                            </div>
+                                    <div class="tab-pane fade" id="regions_af" role="tabpanel" aria-labelledby="link_region_af" hx-get="/football/competitions/region/af" hx-trigger="intersect" hx-include="[name='filter']">
+                                            </div>
+                                    <div class="tab-pane fade" id="regions_as" role="tabpanel" aria-labelledby="link_region_as" hx-get="/football/competitions/region/as" hx-trigger="intersect" hx-include="[name='filter']">
+                                            </div>
+                                    <div class="tab-pane fade" id="regions_au" role="tabpanel" aria-labelledby="link_region_au" hx-get="/football/competitions/region/au" hx-trigger="intersect" hx-include="[name='filter']">
+                                            </div>
+                            </div>
+        </div>
+    </div>
+
+
+    
+        
+    </div>
+    
+</main>
+
+<footer class="bg-body-tertiary text-center text-lg-start text-muted mt-5">
+    <section class="pt-4">
+        <div class="container text-center text-md-start">
+            <!-- Grid row -->
+            <div class="row mt-3">
+                <!-- Grid column -->
+                <div class="col-md-12 col-lg-5 col-xl-3 mx-auto mb-4">
+                    <!-- Content -->
+                    <h6 class="text-uppercase fw-bold mb-4">
+                        <i class="fas fa-line-chart me-3"></i>Sport statistics
+                    </h6>
+                    
+<p>Football, basketball, handball and ice hockey statistics from more than 150 leagues (results, tables, fixtures, other useful statistics)
+</p>
+                    <p>
+                        Data by: <a href="https://www.trefik.cz/" class="text-reset">Trefik</a>
+                    </p>
+                </div>
+                <!-- Grid column -->
+
+                <!-- Grid column -->
+                <div class="col-md-4 col-lg-2 col-xl-2 mx-auto mb-4">
+                    <!-- Links -->
+                                            <p>
+                            <a href="/extra" class="text-reset">Guides</a>
+                        </p>
+
+                        <p>
+                            <a href="/extra/disclaimer" class="text-reset">Disclaimer</a>
+                        </p>
+                        <p>
+                            <a href="/extra/privacy-policy" class="text-reset">Privacy Policy</a>
+                        </p>
+                        <p>
+                            <a href="/extra/terms-and-conditions" class="text-reset">Terms &amp; Conditions</a>
+                        </p>
+                                    </div>
+                <!-- Grid column -->
+
+                <!-- Grid column -->
+                <div class="col-md-4 col-lg-2 col-xl-2 mx-auto mb-4">
+                    <!-- Links -->
+                    <h6 class="text-uppercase fw-bold mb-4">
+                        Partners
+                    </h6>
+                                            <p>
+                            <a href="https://www.flashscore.com/" class="text-reset">Live scores</a>
+                        </p>
+                                        <p>
+                        <a href="https://www.sportfogadas.org/" class="text-reset">Sportfogadás</a>
+                    </p>
+                    <p>
+                        <a href="https://www.ghidpariuri.ro/" class="text-reset">Ghid Pariuri</a>
+                    </p>
+                    <p>
+                        <a href="/partners" class="text-reset">Partners</a>
+                    </p>
+                </div>
+                <!-- Grid column -->
+
+                <!-- Grid column -->
+                <div class="col-md-4 col-lg-3 col-xl-3 mx-auto mb-md-0 mb-4">
+                    <!-- Links -->
+                    <h6 class="text-uppercase fw-bold mb-4">Contact</h6>
+                    <p>
+                        <i class="fas fa-envelope me-1"></i>
+                        <a href="/contact" class="text-reset">Contact us</a>
+                    </p>
+                </div>
+                <!-- Grid column -->
+            </div>
+            <!-- Grid row -->
+        </div>
+    </section>
+    <div class="text-center text-white-50 p-3 bg-black">
+        © 2006-2025
+        <a class="fw-bold text-white" href="https://sportstats365.com/">Sportstats365.com</a> (Sfstats.net).
+    </div>
+</footer>
+<script src="https://sportstats365.com/static/test/main.js"></script>
+<div id="modals"></div>
+        <!--Modal: modalCookie-->
+        <div class="modal bottom" id="modalCookie" tabindex="-1" role="dialog" aria-labelledby="cookieModalLabel" aria-hidden="true" data-mdb-backdrop="false" data-mdb-modal-non-invasive="true" data-mdb-keyboard="true">
+            <div class="modal-dialog modal-side modal-bottom-right" role="document">
+                <!--Content-->
+                <div class="modal-content">
+                    <!--Body-->
+                    <div class="modal-body py-1 elegant-color white-text">
+                        <p id="cookieModalLabel" class="pt-3 pr-2 text-center">This website uses cookies. By visiting this website you accept the <a href="/extra/terms-and-conditions" class="link-secondary">Terms of Use</a> and our <a href="/extra/privacy-policy" class="link-secondary"">Privacy Policy</a>.</p>
+                        <div class="d-flex justify-content-center align-items-center mb-3">
+                            <button name="cookieAccept" value="1" id="cookieAccept" type="button" class="btn btn-sm btn-primary me-3" data-mdb-dismiss="modal" hx-post="/settings/save_cookie"><i class="fas fa-check"></i> Understood</button>
+                            <button type="button" class="btn btn-sm btn-outline-primary waves-effect" data-mdb-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+                <!--/.Content-->
+            </div>
+        </div>
+    <script>
+        const modal = new mdb.Modal(document.getElementById('modalCookie'));
+        const autoLoadDuration = 5; //In Seconds
+        const eventList = ["keydown", "mousemove", "wheel", "touchmove", "touchstart", "touchend"];
+
+        const autoLoadTimeout = setTimeout(showConsent, autoLoadDuration * 1000);
+
+        eventList.forEach(function(event) {
+            window.addEventListener(event, triggerConsent, { passive: true })
+        });
+
+        function triggerConsent(){
+            showConsent();
+            clearTimeout(autoLoadTimeout);
+            eventList.forEach(function(event) {
+                window.removeEventListener(event, triggerConsent, { passive: true });
+            });
+        }
+
+        function showConsent(){
+            modal.show();
+        }
+    </script>
+    <script type="text/javascript" src="https://sportstats365.com/static/mdb7/plugins/js/treeview.min.js"></script>
+<!-- Custom scripts -->
+<script type="text/javascript">
+    $(function (){
+
+            });
+                                                {
+                            const asyncAutocomplete = document.querySelector('#main_search');
+                            const asyncFilter = async (query) => {
+                                const url = '/football/search?q=' + encodeURI(query);
+                                const response = await fetch(url);
+                                return response.json();
+                            };
+
+                            asyncAutocomplete.addEventListener('itemSelect.mdb.autocomplete',(e) => {
+                                window.location.href = e.value.link;
+                            });
+
+                            const ac = new Autocomplete(asyncAutocomplete, {
+                                filter: asyncFilter,
+                                listHeight: 380,
+                                threshold: 0,
+                                displayValue: (value) => value.click_name,
+                                itemContent: (result) => {
+                                    return `
+                                      <div class="autocomplete-custom-item-content w-100">
+                                        <a href="${ result.link }" class="d-block link-primary fw-bolder autocomplete-custom-item-title">
+                                            ${ result.name }
+                                            <br><small class="text-muted fw-normal">${ result.type }</small>
+                                        </a>
+                                      </div>
+                                    `;
+                                },
+                            });
+                        }
+                        
+                                            htmx.on('#type_filter .btn-group','click',function (e){
+                            e.preventDefault();
+                            htmx.takeClass(e.target,'active');
+                            htmx.find('#type_filter input[name="filter"]').value = e.target.dataset.filter;
+                            htmx.trigger(htmx.find('.tab-pane.active'),'intersect');
+                        });
+                        
+            </script>
+
+<script>
+    const sidenav = document.getElementById('sidenav_main');
+    const sidenavInstance = Sidenav.getInstance(sidenav);
+
+    let innerWidth = null;
+
+    const setMode = (e) => {
+        // Check necessary for Android devices
+        if (window.innerWidth === innerWidth) {
+            return;
+        }
+
+        innerWidth = window.innerWidth;
+
+        if (window.innerWidth < 768) {
+            sidenavInstance.changeMode('over');
+            sidenavInstance.hide();
+        } else {
+            sidenavInstance.changeMode('side');
+            sidenavInstance.show();
+        }
+    };
+
+    setMode();
+
+    // Event listeners
+    window.addEventListener('resize', setMode);
+
+    const themeStitcher = document.getElementById("themingSwitcher");
+    const isSystemThemeSetToDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+    // set toggler position based on system theme
+    /*if (isSystemThemeSetToDark) {
+        themeStitcher.checked = true;
+    }*/
+
+    // add listener to theme toggler
+    themeStitcher.addEventListener("change", (e) => {
+        toggleTheme(e.target.checked);
+    });
+
+    const toggleTheme = (isChecked) => {
+        const theme = isChecked ? "dark" : "light";
+
+        document.documentElement.dataset.mdbTheme = theme;
+    }
+</script>
+<script async data-id="101445752" src="//static.getclicky.com/js"></script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'998cb4213aea884f',t:'MTc2MjE4MTYzMg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>

@@ -1,0 +1,611 @@
+{
+  "totalLeagues": 121,
+  "timestamp": "2025-11-03T14:56:07.973Z",
+  "leagues": [
+    {
+      "name": "Albania Super League 2025/2026",
+      "slug": "super-league",
+      "url": "https://sportstats365.com/football/super-league"
+    },
+    {
+      "name": "Argentina Liga Profesional 2025",
+      "slug": "primera-division",
+      "url": "https://sportstats365.com/football/primera-division"
+    },
+    {
+      "name": "Australia A-League 2025/2026",
+      "slug": "a-league",
+      "url": "https://sportstats365.com/football/a-league"
+    },
+    {
+      "name": "Austria 2. Liga 2025/2026",
+      "slug": "1-liga-at",
+      "url": "https://sportstats365.com/football/1-liga-at"
+    },
+    {
+      "name": "Austria Admiral Bundesliga 2025/2026",
+      "slug": "bundesliga-at",
+      "url": "https://sportstats365.com/football/bundesliga-at"
+    },
+    {
+      "name": "Austria ÖFB Stiegl Cup 2025/2026",
+      "slug": "ofb-stiegl-cup",
+      "url": "https://sportstats365.com/football/ofb-stiegl-cup"
+    },
+    {
+      "name": "Belarus Vysheyshaya Liga 2025",
+      "slug": "premier-league",
+      "url": "https://sportstats365.com/football/premier-league"
+    },
+    {
+      "name": "Belgian Cup 2025/2026",
+      "slug": "beker-van-belgie",
+      "url": "https://sportstats365.com/football/beker-van-belgie"
+    },
+    {
+      "name": "Belgium Challenger Pro League 2025/2026",
+      "slug": "2e-klasse",
+      "url": "https://sportstats365.com/football/2e-klasse"
+    },
+    {
+      "name": "Belgium Jupiler League 2025/2026",
+      "slug": "1e-klasse",
+      "url": "https://sportstats365.com/football/1e-klasse"
+    },
+    {
+      "name": "Bosnia & Herzegovina Premier Liga 2025/2026",
+      "slug": "premier-liga",
+      "url": "https://sportstats365.com/football/premier-liga"
+    },
+    {
+      "name": "Brazil Série A 2025",
+      "slug": "serie-a-br",
+      "url": "https://sportstats365.com/football/serie-a-br"
+    },
+    {
+      "name": "Bulgaria Parva Liga 2025/2026",
+      "slug": "a-pfg",
+      "url": "https://sportstats365.com/football/a-pfg"
+    },
+    {
+      "name": "Chile Primera División 2025",
+      "slug": "primera-division-cl",
+      "url": "https://sportstats365.com/football/primera-division-cl"
+    },
+    {
+      "name": "Colombia Primera A 2025",
+      "slug": "primera-division-co",
+      "url": "https://sportstats365.com/football/primera-division-co"
+    },
+    {
+      "name": "Copa del Rey 2025/2026",
+      "slug": "copa-del-rey",
+      "url": "https://sportstats365.com/football/copa-del-rey"
+    },
+    {
+      "name": "Copa Libertadores 2025",
+      "slug": "copa-libertadores",
+      "url": "https://sportstats365.com/football/copa-libertadores"
+    },
+    {
+      "name": "Copa Sudamericana 2025",
+      "slug": "copa-sudamericana",
+      "url": "https://sportstats365.com/football/copa-sudamericana"
+    },
+    {
+      "name": "Croatia 1. HNL 2025/2026",
+      "slug": "1-hnl",
+      "url": "https://sportstats365.com/football/1-hnl"
+    },
+    {
+      "name": "Czech Cup 2025/2026",
+      "slug": "czech-cup",
+      "url": "https://sportstats365.com/football/czech-cup"
+    },
+    {
+      "name": "Czechia FNL 2025/2026",
+      "slug": "2-liga",
+      "url": "https://sportstats365.com/football/2-liga"
+    },
+    {
+      "name": "Czechia Fortuna Liga 2025/2026",
+      "slug": "1-liga",
+      "url": "https://sportstats365.com/football/1-liga"
+    },
+    {
+      "name": "Danish Landspokal 2025/2026",
+      "slug": "landspokal",
+      "url": "https://sportstats365.com/football/landspokal"
+    },
+    {
+      "name": "Denmark 1st Division 2025/2026",
+      "slug": "1st-division",
+      "url": "https://sportstats365.com/football/1st-division"
+    },
+    {
+      "name": "Denmark Superliga 2025/2026",
+      "slug": "superligaen",
+      "url": "https://sportstats365.com/football/superligaen"
+    },
+    {
+      "name": "DFB Cup 2025/2026",
+      "slug": "dfb-pokal",
+      "url": "https://sportstats365.com/football/dfb-pokal"
+    },
+    {
+      "name": "Ecuador Liga Pro 2025",
+      "slug": "primera-a",
+      "url": "https://sportstats365.com/football/primera-a"
+    },
+    {
+      "name": "England Carling Cup 2025/2026",
+      "slug": "carling-cup",
+      "url": "https://sportstats365.com/football/carling-cup"
+    },
+    {
+      "name": "England Championship 2025/2026",
+      "slug": "championship",
+      "url": "https://sportstats365.com/football/championship"
+    },
+    {
+      "name": "England FA Cup 2025/2026",
+      "slug": "fa-cup",
+      "url": "https://sportstats365.com/football/fa-cup"
+    },
+    {
+      "name": "England FA Trophy 2025/2026",
+      "slug": "fa-trophy",
+      "url": "https://sportstats365.com/football/fa-trophy"
+    },
+    {
+      "name": "England LDV Trophy 2025/2026",
+      "slug": "ldv-trophy",
+      "url": "https://sportstats365.com/football/ldv-trophy"
+    },
+    {
+      "name": "England League One 2025/2026",
+      "slug": "league-one",
+      "url": "https://sportstats365.com/football/league-one"
+    },
+    {
+      "name": "England League Two 2025/2026",
+      "slug": "league-two",
+      "url": "https://sportstats365.com/football/league-two"
+    },
+    {
+      "name": "England National League 2025/2026",
+      "slug": "conference-national",
+      "url": "https://sportstats365.com/football/conference-national"
+    },
+    {
+      "name": "England Premier League 2025/2026",
+      "slug": "premiership",
+      "url": "https://sportstats365.com/football/premiership"
+    },
+    {
+      "name": "Estonia Meistriliiga 2025",
+      "slug": "meistriliiga",
+      "url": "https://sportstats365.com/football/meistriliiga"
+    },
+    {
+      "name": "Finland Veikkausliiga 2025",
+      "slug": "veikkausliiga",
+      "url": "https://sportstats365.com/football/veikkausliiga"
+    },
+    {
+      "name": "France Championnat National 2025/2026",
+      "slug": "national",
+      "url": "https://sportstats365.com/football/national"
+    },
+    {
+      "name": "France Ligue 1 2025/2026",
+      "slug": "ligue-1",
+      "url": "https://sportstats365.com/football/ligue-1"
+    },
+    {
+      "name": "France Ligue 2 2025/2026",
+      "slug": "ligue-2",
+      "url": "https://sportstats365.com/football/ligue-2"
+    },
+    {
+      "name": "Germany 2. Bundesliga 2025/2026",
+      "slug": "2-liga-de",
+      "url": "https://sportstats365.com/football/2-liga-de"
+    },
+    {
+      "name": "Germany 3. Liga 2025/2026",
+      "slug": "3-liga",
+      "url": "https://sportstats365.com/football/3-liga"
+    },
+    {
+      "name": "Germany Bundesliga 2025/2026",
+      "slug": "bundesliga",
+      "url": "https://sportstats365.com/football/bundesliga"
+    },
+    {
+      "name": "Greece Super League 2 2025/2026",
+      "slug": "b-ethniki",
+      "url": "https://sportstats365.com/football/b-ethniki"
+    },
+    {
+      "name": "Greece Super League 2025/2026",
+      "slug": "super-league-gr",
+      "url": "https://sportstats365.com/football/super-league-gr"
+    },
+    {
+      "name": "Greek Cup 2025/2026",
+      "slug": "cup-gr",
+      "url": "https://sportstats365.com/football/cup-gr"
+    },
+    {
+      "name": "HR Nogometni Cup 2025/2026",
+      "slug": "hr-nogometni-cup",
+      "url": "https://sportstats365.com/football/hr-nogometni-cup"
+    },
+    {
+      "name": "Hungarian Cup 2025/2026",
+      "slug": "magyar-kupa",
+      "url": "https://sportstats365.com/football/magyar-kupa"
+    },
+    {
+      "name": "Hungary NB II 2025/2026",
+      "slug": "nb-ii",
+      "url": "https://sportstats365.com/football/nb-ii"
+    },
+    {
+      "name": "Hungary OTP Bank Liga NB1 2025/2026",
+      "slug": "nb-i",
+      "url": "https://sportstats365.com/football/nb-i"
+    },
+    {
+      "name": "Iceland Besta Deild Karla 2025",
+      "slug": "landsbankadeild-karla",
+      "url": "https://sportstats365.com/football/landsbankadeild-karla"
+    },
+    {
+      "name": "International Friendlies 2025",
+      "slug": "friendly-m",
+      "url": "https://sportstats365.com/football/friendly-m"
+    },
+    {
+      "name": "Ireland FAI Cup 2025",
+      "slug": "fai-cup",
+      "url": "https://sportstats365.com/football/fai-cup"
+    },
+    {
+      "name": "Ireland First Division 2025",
+      "slug": "division-1",
+      "url": "https://sportstats365.com/football/division-1"
+    },
+    {
+      "name": "Ireland Premier Division 2025",
+      "slug": "premier-league-ie",
+      "url": "https://sportstats365.com/football/premier-league-ie"
+    },
+    {
+      "name": "Israel Premier League 2025/2026",
+      "slug": "ligat-al",
+      "url": "https://sportstats365.com/football/ligat-al"
+    },
+    {
+      "name": "Italy Serie A 2025/2026",
+      "slug": "serie-a",
+      "url": "https://sportstats365.com/football/serie-a"
+    },
+    {
+      "name": "Italy Serie B 2025/2026",
+      "slug": "serie-b",
+      "url": "https://sportstats365.com/football/serie-b"
+    },
+    {
+      "name": "Japan J League 2025",
+      "slug": "j-league",
+      "url": "https://sportstats365.com/football/j-league"
+    },
+    {
+      "name": "Latvia Virsliga 2025",
+      "slug": "virsliga",
+      "url": "https://sportstats365.com/football/virsliga"
+    },
+    {
+      "name": "Lithuania A Lyga 2025",
+      "slug": "a-lyga",
+      "url": "https://sportstats365.com/football/a-lyga"
+    },
+    {
+      "name": "Mexico Liga BBVA MX 2025/2026",
+      "slug": "primera-division-mx",
+      "url": "https://sportstats365.com/football/primera-division-mx"
+    },
+    {
+      "name": "Moldavia Super Liga 2025/2026",
+      "slug": "divizia-nationala",
+      "url": "https://sportstats365.com/football/divizia-nationala"
+    },
+    {
+      "name": "Montenegro 1. CFL League 2025/2026",
+      "slug": "prva-liga",
+      "url": "https://sportstats365.com/football/prva-liga"
+    },
+    {
+      "name": "Netherlands Eerste Divisie 2025/2026",
+      "slug": "eerste-divisie",
+      "url": "https://sportstats365.com/football/eerste-divisie"
+    },
+    {
+      "name": "Netherlands Eredivisie 2025/2026",
+      "slug": "eredivisie",
+      "url": "https://sportstats365.com/football/eredivisie"
+    },
+    {
+      "name": "Netherlands KNVB Beker 2025/2026",
+      "slug": "knvb-beker",
+      "url": "https://sportstats365.com/football/knvb-beker"
+    },
+    {
+      "name": "North Macedonia First League 2025/2026",
+      "slug": "first-league",
+      "url": "https://sportstats365.com/football/first-league"
+    },
+    {
+      "name": "Norway Eliteserien 2025",
+      "slug": "tippeligaen",
+      "url": "https://sportstats365.com/football/tippeligaen"
+    },
+    {
+      "name": "Norway OBOS-ligaen 2025",
+      "slug": "adeccoligaen",
+      "url": "https://sportstats365.com/football/adeccoligaen"
+    },
+    {
+      "name": "Poland Ekstraklasa 2025/2026",
+      "slug": "ekstraklasa",
+      "url": "https://sportstats365.com/football/ekstraklasa"
+    },
+    {
+      "name": "Poland I Liga 2025/2026",
+      "slug": "i-liga",
+      "url": "https://sportstats365.com/football/i-liga"
+    },
+    {
+      "name": "Polish Cup 2025/2026",
+      "slug": "puchar-polski",
+      "url": "https://sportstats365.com/football/puchar-polski"
+    },
+    {
+      "name": "Portugal Liga Portugal 2 2025/2026",
+      "slug": "liga-vitalis",
+      "url": "https://sportstats365.com/football/liga-vitalis"
+    },
+    {
+      "name": "Portugal Liga Portugal 2025/2026",
+      "slug": "liga-sagres",
+      "url": "https://sportstats365.com/football/liga-sagres"
+    },
+    {
+      "name": "Romania Liga I 2025/2026",
+      "slug": "liga-i",
+      "url": "https://sportstats365.com/football/liga-i"
+    },
+    {
+      "name": "Romania Liga II 2025/2026",
+      "slug": "liga-ii",
+      "url": "https://sportstats365.com/football/liga-ii"
+    },
+    {
+      "name": "Romanian Cup 2025/2026",
+      "slug": "cupa-romaniei",
+      "url": "https://sportstats365.com/football/cupa-romaniei"
+    },
+    {
+      "name": "Russia Premier League 2025/2026",
+      "slug": "premier-league-ru",
+      "url": "https://sportstats365.com/football/premier-league-ru"
+    },
+    {
+      "name": "Russian Cup 2025/2026",
+      "slug": "cup",
+      "url": "https://sportstats365.com/football/cup"
+    },
+    {
+      "name": "Scotland Challenge Cup 2025/2026",
+      "slug": "challenge-cup",
+      "url": "https://sportstats365.com/football/challenge-cup"
+    },
+    {
+      "name": "Scotland League Cup 2025/2026",
+      "slug": "league-cup-sx",
+      "url": "https://sportstats365.com/football/league-cup-sx"
+    },
+    {
+      "name": "Scotland Scottish Championship 2025/2026",
+      "slug": "first-division",
+      "url": "https://sportstats365.com/football/first-division"
+    },
+    {
+      "name": "Scotland Scottish League One 2025/2026",
+      "slug": "second-division",
+      "url": "https://sportstats365.com/football/second-division"
+    },
+    {
+      "name": "Scotland Scottish League Two 2025/2026",
+      "slug": "third-division",
+      "url": "https://sportstats365.com/football/third-division"
+    },
+    {
+      "name": "Scotland Scottish Premiership 2025/2026",
+      "slug": "premier-league-sx",
+      "url": "https://sportstats365.com/football/premier-league-sx"
+    },
+    {
+      "name": "Scottish Cup 2025/2026",
+      "slug": "scottish-cup",
+      "url": "https://sportstats365.com/football/scottish-cup"
+    },
+    {
+      "name": "Serbia Super Liga 2025/2026",
+      "slug": "super-liga-rs",
+      "url": "https://sportstats365.com/football/super-liga-rs"
+    },
+    {
+      "name": "Serbian Cup 2025/2026",
+      "slug": "cup-rs",
+      "url": "https://sportstats365.com/football/cup-rs"
+    },
+    {
+      "name": "Singapore S-League 2025/2026",
+      "slug": "s-league",
+      "url": "https://sportstats365.com/football/s-league"
+    },
+    {
+      "name": "Slovakia Niké Liga 2025/2026",
+      "slug": "super-liga",
+      "url": "https://sportstats365.com/football/super-liga"
+    },
+    {
+      "name": "Slovakian Cup 2025/2026",
+      "slug": "cup-sk",
+      "url": "https://sportstats365.com/football/cup-sk"
+    },
+    {
+      "name": "Slovenia 2. Liga SNL 2025/2026",
+      "slug": "2-snl",
+      "url": "https://sportstats365.com/football/2-snl"
+    },
+    {
+      "name": "Slovenia Prva Liga 2025/2026",
+      "slug": "1-snl",
+      "url": "https://sportstats365.com/football/1-snl"
+    },
+    {
+      "name": "Slovenian Cup 2025/2026",
+      "slug": "cup-si",
+      "url": "https://sportstats365.com/football/cup-si"
+    },
+    {
+      "name": "Spain La Liga 2 2025/2026",
+      "slug": "liga-bbva",
+      "url": "https://sportstats365.com/football/liga-bbva"
+    },
+    {
+      "name": "Spain La Liga 2025/2026",
+      "slug": "la-liga",
+      "url": "https://sportstats365.com/football/la-liga"
+    },
+    {
+      "name": "Spain Primera RFEF - Group I 2025/2026",
+      "slug": "segunda-b-group-i",
+      "url": "https://sportstats365.com/football/segunda-b-group-i"
+    },
+    {
+      "name": "Spain Primera RFEF - Group II 2025/2026",
+      "slug": "segunda-b-group-ii",
+      "url": "https://sportstats365.com/football/segunda-b-group-ii"
+    },
+    {
+      "name": "Sweden Allsvenskan 2025",
+      "slug": "allsvenskan",
+      "url": "https://sportstats365.com/football/allsvenskan"
+    },
+    {
+      "name": "Sweden Superettan 2025",
+      "slug": "superettan",
+      "url": "https://sportstats365.com/football/superettan"
+    },
+    {
+      "name": "Switzerland Challenge League 2025/2026",
+      "slug": "challenge-league",
+      "url": "https://sportstats365.com/football/challenge-league"
+    },
+    {
+      "name": "Switzerland Super League 2025/2026",
+      "slug": "super-league-ch",
+      "url": "https://sportstats365.com/football/super-league-ch"
+    },
+    {
+      "name": "Taça de Portugal 2025/2026",
+      "slug": "taca-de-portugal",
+      "url": "https://sportstats365.com/football/taca-de-portugal"
+    },
+    {
+      "name": "Turkey Süper Lig 2025/2026",
+      "slug": "super-league-tr",
+      "url": "https://sportstats365.com/football/super-league-tr"
+    },
+    {
+      "name": "Türkiye Kupasi 2025/2026",
+      "slug": "turkiye-kupasi",
+      "url": "https://sportstats365.com/football/turkiye-kupasi"
+    },
+    {
+      "name": "UEFA Champions League 2025/2026",
+      "slug": "champions-league",
+      "url": "https://sportstats365.com/football/champions-league"
+    },
+    {
+      "name": "UEFA Europa Conference League 2025/2026",
+      "slug": "uefa-europa-conference-league",
+      "url": "https://sportstats365.com/football/uefa-europa-conference-league"
+    },
+    {
+      "name": "UEFA Europa League 2025/2026",
+      "slug": "europa-league",
+      "url": "https://sportstats365.com/football/europa-league"
+    },
+    {
+      "name": "Ukraine Premier League 2025/2026",
+      "slug": "premier-league-ua",
+      "url": "https://sportstats365.com/football/premier-league-ua"
+    },
+    {
+      "name": "Ukranian Cup 2025/2026",
+      "slug": "cup-ua",
+      "url": "https://sportstats365.com/football/cup-ua"
+    },
+    {
+      "name": "United States MLS 2025",
+      "slug": "mls",
+      "url": "https://sportstats365.com/football/mls"
+    },
+    {
+      "name": "Uruguay Primera División 2025",
+      "slug": "primera-division-uy",
+      "url": "https://sportstats365.com/football/primera-division-uy"
+    },
+    {
+      "name": "Venezuela Primera División 2025",
+      "slug": "primera-division-ve",
+      "url": "https://sportstats365.com/football/primera-division-ve"
+    },
+    {
+      "name": "Wales FA Cup 2025/2026",
+      "slug": "cup-wa",
+      "url": "https://sportstats365.com/football/cup-wa"
+    },
+    {
+      "name": "Wales Premier League 2025/2026",
+      "slug": "premier-league-wa",
+      "url": "https://sportstats365.com/football/premier-league-wa"
+    },
+    {
+      "name": "World Cup Qualifiers - Africa 2023/2024",
+      "slug": "world-cup-q-africa",
+      "url": "https://sportstats365.com/football/world-cup-q-africa"
+    },
+    {
+      "name": "World Cup Qualifiers - Asia 2023/2024",
+      "slug": "world-cup-q-asia",
+      "url": "https://sportstats365.com/football/world-cup-q-asia"
+    },
+    {
+      "name": "World Cup Qualifiers - Europe 2025/2026",
+      "slug": "world-cup-q-europe",
+      "url": "https://sportstats365.com/football/world-cup-q-europe"
+    },
+    {
+      "name": "World Cup Qualifiers - N+C America 2024/2025",
+      "slug": "world-cup-q-n-c-america",
+      "url": "https://sportstats365.com/football/world-cup-q-n-c-america"
+    }
+  ]
+}
