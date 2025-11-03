@@ -246,6 +246,12 @@ export default function TesterPage() {
                     <TableHead className="min-w-[140px]">League Under 2.5</TableHead>
                     <TableHead className="min-w-[140px]">League Over 2.5</TableHead>
                     <TableHead className="min-w-[140px]">League Avg Goals</TableHead>
+                    <TableHead className="min-w-[100px]">Odds 1</TableHead>
+                    <TableHead className="min-w-[100px]">Odds X</TableHead>
+                    <TableHead className="min-w-[100px]">Odds 2</TableHead>
+                    <TableHead className="min-w-[100px]">Prob 1</TableHead>
+                    <TableHead className="min-w-[100px]">Prob X</TableHead>
+                    <TableHead className="min-w-[100px]">Prob 2</TableHead>
                     <TableHead className="min-w-[120px]">Full Time Score</TableHead>
                     <TableHead className="min-w-[120px]">Half Time Score</TableHead>
                     <TableHead className="min-w-[100px]">FT Result</TableHead>
@@ -257,7 +263,7 @@ export default function TesterPage() {
                 <TableBody>
                   {!filteredStats || filteredStats.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={52} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
+                      <TableCell colSpan={58} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
                         {searchQuery ? `No matches found for "${searchQuery}"` : "No data available. Add match statistics to see them here."}
                       </TableCell>
                     </TableRow>

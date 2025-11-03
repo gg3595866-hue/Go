@@ -181,6 +181,12 @@ export default function DatabasePage() {
                     <TableHead className="min-w-[140px]">League Under 2.5</TableHead>
                     <TableHead className="min-w-[140px]">League Over 2.5</TableHead>
                     <TableHead className="min-w-[140px]">League Avg Goals</TableHead>
+                    <TableHead className="min-w-[100px]">Odds 1</TableHead>
+                    <TableHead className="min-w-[100px]">Odds X</TableHead>
+                    <TableHead className="min-w-[100px]">Odds 2</TableHead>
+                    <TableHead className="min-w-[100px]">Prob 1</TableHead>
+                    <TableHead className="min-w-[100px]">Prob X</TableHead>
+                    <TableHead className="min-w-[100px]">Prob 2</TableHead>
                     <TableHead className="min-w-[120px]">FT Home Score</TableHead>
                     <TableHead className="min-w-[120px]">FT Away Score</TableHead>
                     <TableHead className="min-w-[120px]">HT Home Score</TableHead>
@@ -193,7 +199,7 @@ export default function DatabasePage() {
                 <TableBody>
                   {!stats || stats.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={51} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
+                      <TableCell colSpan={57} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
                         No data available. Add match statistics to see them here.
                       </TableCell>
                     </TableRow>
@@ -244,6 +250,12 @@ export default function DatabasePage() {
                         <TableCell>{(stat.leagueUnder25 * 100).toFixed(1)}%</TableCell>
                         <TableCell>{(stat.leagueOver25 * 100).toFixed(1)}%</TableCell>
                         <TableCell>{stat.leagueAvgGoals?.toFixed(2)}</TableCell>
+                        <TableCell>{stat.odds1?.toFixed(2) ?? '-'}</TableCell>
+                        <TableCell>{stat.oddsX?.toFixed(2) ?? '-'}</TableCell>
+                        <TableCell>{stat.odds2?.toFixed(2) ?? '-'}</TableCell>
+                        <TableCell>{stat.prob1 ? (stat.prob1 * 100).toFixed(0) + '%' : '-'}</TableCell>
+                        <TableCell>{stat.probX ? (stat.probX * 100).toFixed(0) + '%' : '-'}</TableCell>
+                        <TableCell>{stat.prob2 ? (stat.prob2 * 100).toFixed(0) + '%' : '-'}</TableCell>
                         <TableCell>{stat.ftHomeScore ?? '-'}</TableCell>
                         <TableCell>{stat.ftAwayScore ?? '-'}</TableCell>
                         <TableCell>{stat.htHomeScore ?? '-'}</TableCell>

@@ -886,71 +886,86 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     let odds;
     let oddsData: { odds1: number; oddsX: number; odds2: number; prob1: number; probX: number; prob2: number } | undefined;
     
-    // Try to find odds section by looking for elements containing "Odds" text
-    const oddsSection = $('.card-header, h3, h4, .compare-header').filter(function() {
-      return $(this).text().trim() === 'Odds';
-    }).closest('.card, section, div[class*="card"]').first();
-    
-    if (oddsSection.length > 0) {
-      // Extract all numeric values from the odds section
-      const oddsText = oddsSection.text();
-      // Match pattern: number, then percentage, repeated 3 times
-      const oddsMatches = oddsText.match(/(\d+\.?\d*)\s*(\d+)\s*%/g);
+    // Method 1: Try to find odds section in the form HTML (more reliable)
+    if (formHtml) {
+      const $form = cheerio.load(formHtml);
+      const formText = $form.text();
       
-      if (oddsMatches && oddsMatches.length >= 3) {
-        const parseOddsAndProb = (match: string): { odds: number; prob: number } => {
-          const parts = match.match(/(\d+\.?\d*)\s*(\d+)\s*%/);
-          return {
-            odds: parts ? parseFloat(parts[1]) : 0,
-            prob: parts ? parseFloat(parts[2]) : 0
+      // Look for pattern: "Odds" followed by three sets of (decimal number, percentage)
+      const oddsMatch = formText.match(/Odds[\s\S]{0,200}?(\d+\.?\d*)\s*(\d+)\s*%\s*(\d+\.?\d*)\s*(\d+)\s*%\s*(\d+\.?\d*)\s*(\d+)\s*%/);
+      
+      if (oddsMatch) {
+        const odds1 = parseFloat(oddsMatch[1]);
+        const prob1 = parseFloat(oddsMatch[2]);
+        const oddsX = parseFloat(oddsMatch[3]);
+        const probX = parseFloat(oddsMatch[4]);
+        const odds2 = parseFloat(oddsMatch[5]);
+        const prob2 = parseFloat(oddsMatch[6]);
+        
+        if (!isNaN(odds1) && !isNaN(oddsX) && !isNaN(odds2)) {
+          odds = { home: odds1, draw: oddsX, away: odds2 };
+          oddsData = {
+            odds1,
+            oddsX,
+            odds2,
+            prob1: prob1 / 100, // Convert percentage to decimal
+            probX: probX / 100,
+            prob2: prob2 / 100
           };
-        };
-        
-        const home = parseOddsAndProb(oddsMatches[0]);
-        const draw = parseOddsAndProb(oddsMatches[1]);
-        const away = parseOddsAndProb(oddsMatches[2]);
-        
-        odds = { home: home.odds, draw: draw.odds, away: away.odds };
-        oddsData = {
-          odds1: home.odds,
-          oddsX: draw.odds,
-          odds2: away.odds,
-          prob1: home.prob / 100, // Convert percentage to decimal
-          probX: draw.prob / 100,
-          prob2: away.prob / 100
-        };
-        
-        console.log('Extracted odds and probabilities:', oddsData);
+          
+          console.log('Extracted odds and probabilities from form HTML:', oddsData);
+        }
       }
     }
     
-    // Fallback: Try old method for odds only
-    if (!odds) {
-      const oddsRow = $('tr').filter(function() {
-        return $(this).find('td').text().includes('Odds');
-      });
+    // Method 2: Try to find odds section in main HTML
+    if (!oddsData) {
+      const oddsSection = $('.card-header, h3, h4, .compare-header, div').filter(function() {
+        const text = $(this).text().trim();
+        return text === 'Odds' || text.includes('Odds');
+      }).first().parent();
       
-      if (oddsRow.length > 0) {
-        const oddsCells = oddsRow.find('td');
-        if (oddsCells.length >= 3) {
-          const homeOdds = parseFloat($(oddsCells[1]).text().trim());
-          const drawOdds = parseFloat($(oddsCells[1]).next().text().trim());
-          const awayOdds = parseFloat($(oddsCells[2]).text().trim());
+      if (oddsSection.length > 0) {
+        const oddsText = oddsSection.text();
+        // Match pattern: decimal number followed by percentage, repeated 3 times
+        const matches = oddsText.match(/(\d+\.?\d*)\s*(\d+)\s*%\s*(\d+\.?\d*)\s*(\d+)\s*%\s*(\d+\.?\d*)\s*(\d+)\s*%/);
+        
+        if (matches) {
+          const odds1 = parseFloat(matches[1]);
+          const prob1 = parseFloat(matches[2]);
+          const oddsX = parseFloat(matches[3]);
+          const probX = parseFloat(matches[4]);
+          const odds2 = parseFloat(matches[5]);
+          const prob2 = parseFloat(matches[6]);
           
-          if (!isNaN(homeOdds) && !isNaN(drawOdds) && !isNaN(awayOdds)) {
-            odds = { home: homeOdds, draw: drawOdds, away: awayOdds };
-            // Set default probabilities if we only have odds
+          if (!isNaN(odds1) && !isNaN(oddsX) && !isNaN(odds2)) {
+            odds = { home: odds1, draw: oddsX, away: odds2 };
             oddsData = {
-              odds1: homeOdds,
-              oddsX: drawOdds,
-              odds2: awayOdds,
-              prob1: 0,
-              probX: 0,
-              prob2: 0
+              odds1,
+              oddsX,
+              odds2,
+              prob1: prob1 / 100,
+              probX: probX / 100,
+              prob2: prob2 / 100
             };
+            
+            console.log('Extracted odds and probabilities from main HTML:', oddsData);
           }
         }
       }
+    }
+    
+    // Fallback: Set default values if extraction failed
+    if (!oddsData) {
+      console.log('Warning: Could not extract odds and probabilities, using defaults');
+      oddsData = {
+        odds1: 0,
+        oddsX: 0,
+        odds2: 0,
+        prob1: 0,
+        probX: 0,
+        prob2: 0
+      };
     }
     
     // Extract insights

@@ -697,7 +697,7 @@ export default function MatchDetailsPage() {
     );
   }
 
-  const { homeTeam, awayTeam, homeTeamLogo, awayTeamLogo, score, status, competition, homeTeamForm, awayTeamForm, homeTeamStats, awayTeamStats, headToHead, odds, insights, streaks } = matchDetails;
+  const { homeTeam, awayTeam, homeTeamLogo, awayTeamLogo, score, status, competition, homeTeamForm, awayTeamForm, homeTeamStats, awayTeamStats, headToHead, odds, oddsData, insights, streaks } = matchDetails;
 
   const FormBadge = ({ result }: { result: 'W' | 'L' | 'D' }) => {
     const variants = {
@@ -788,7 +788,7 @@ export default function MatchDetailsPage() {
       {/* Main Content */}
       <div className="max-w-6xl mx-auto p-4 space-y-6">
         {/* Betting Odds */}
-        {odds && (
+        {(odds || oddsData) && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -799,19 +799,31 @@ export default function MatchDetailsPage() {
             <CardContent>
               <div className="grid grid-cols-3 gap-4">
                 <div className="text-center">
-                  <div className="text-sm text-muted-foreground mb-1">Home Win</div>
-                  <div className="text-2xl font-bold" data-testid="text-odds-home">{odds.home.toFixed(2)}</div>
-                  <div className="text-xs text-muted-foreground">{((1 / odds.home) * 100).toFixed(1)}%</div>
+                  <div className="text-sm text-muted-foreground mb-1">1 (Home Win)</div>
+                  <div className="text-2xl font-bold" data-testid="text-odds-home">
+                    {oddsData?.odds1 ? oddsData.odds1.toFixed(2) : odds?.home.toFixed(2)}
+                  </div>
+                  <div className="text-xs text-muted-foreground" data-testid="text-prob-home">
+                    {oddsData?.prob1 ? (oddsData.prob1 * 100).toFixed(0) : odds ? ((1 / odds.home) * 100).toFixed(1) : '0'}%
+                  </div>
                 </div>
                 <div className="text-center">
-                  <div className="text-sm text-muted-foreground mb-1">Draw</div>
-                  <div className="text-2xl font-bold" data-testid="text-odds-draw">{odds.draw.toFixed(2)}</div>
-                  <div className="text-xs text-muted-foreground">{((1 / odds.draw) * 100).toFixed(1)}%</div>
+                  <div className="text-sm text-muted-foreground mb-1">X (Draw)</div>
+                  <div className="text-2xl font-bold" data-testid="text-odds-draw">
+                    {oddsData?.oddsX ? oddsData.oddsX.toFixed(2) : odds?.draw.toFixed(2)}
+                  </div>
+                  <div className="text-xs text-muted-foreground" data-testid="text-prob-draw">
+                    {oddsData?.probX ? (oddsData.probX * 100).toFixed(0) : odds ? ((1 / odds.draw) * 100).toFixed(1) : '0'}%
+                  </div>
                 </div>
                 <div className="text-center">
-                  <div className="text-sm text-muted-foreground mb-1">Away Win</div>
-                  <div className="text-2xl font-bold" data-testid="text-odds-away">{odds.away.toFixed(2)}</div>
-                  <div className="text-xs text-muted-foreground">{((1 / odds.away) * 100).toFixed(1)}%</div>
+                  <div className="text-sm text-muted-foreground mb-1">2 (Away Win)</div>
+                  <div className="text-2xl font-bold" data-testid="text-odds-away">
+                    {oddsData?.odds2 ? oddsData.odds2.toFixed(2) : odds?.away.toFixed(2)}
+                  </div>
+                  <div className="text-xs text-muted-foreground" data-testid="text-prob-away">
+                    {oddsData?.prob2 ? (oddsData.prob2 * 100).toFixed(0) : odds ? ((1 / odds.away) * 100).toFixed(1) : '0'}%
+                  </div>
                 </div>
               </div>
             </CardContent>
