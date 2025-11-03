@@ -26,13 +26,9 @@ export const VERIFIED_LEAGUE_MAPPINGS: Record<string, string> = {
   'Chile Primera División': 'primera-division-cl',
   'Colombia Primera A': 'primera-division-co',
   'Copa del Rey': 'copa-del-rey',
-  'Spain Copa del Rey': 'copa-del-rey',
   'Copa Libertadores': 'copa-libertadores',
   'Copa Sudamericana': 'copa-sudamericana',
   'Croatia 1. HNL': '1-hnl',
-  'Croatia HNL': '1-hnl',
-  '1. HNL': '1-hnl',
-  'HNL': '1-hnl',
   'Czech Cup': 'czech-cup',
   'Czechia FNL': '2-liga',
   'Czechia Fortuna Liga': '1-liga',
@@ -139,22 +135,102 @@ export const VERIFIED_LEAGUE_MAPPINGS: Record<string, string> = {
 };
 
 /**
+ * Normalize a league name for matching by:
+ * - Removing year suffixes
+ * - Removing leading country/confederation names
+ * - Normalizing whitespace
+ * - Converting to lowercase
+ * - Normalizing accents and special characters
+ */
+function normalizeLeagueName(name: string): string {
+  // Remove year suffix (e.g., " 2025/2026" or " 2025")
+  let normalized = name.replace(/\s+\d{4}(\/\d{4})?$/g, '').trim();
+  
+  // List of country/region prefixes to remove
+  const prefixes = [
+    'England', 'Spain', 'Germany', 'Italy', 'France', 'Portugal', 'Netherlands',
+    'Belgium', 'Turkey', 'Scotland', 'Wales', 'Ireland', 'Denmark', 'Sweden',
+    'Norway', 'Poland', 'Czechia', 'Czech', 'Croatia', 'Greece', 'Hungary',
+    'Romania', 'Serbia', 'Bulgaria', 'Austria', 'Switzerland', 'Russia',
+    'Ukraine', 'Slovakia', 'Slovenia', 'Albania', 'Belarus', 'Bosnia & Herzegovina',
+    'Bosnia', 'Estonia', 'Finland', 'Iceland', 'Latvia', 'Lithuania',
+    'Moldova', 'Moldavia', 'Montenegro', 'North Macedonia', 'Macedonia',
+    'Israel', 'United States', 'USA', 'Mexico', 'Argentina', 'Brazil',
+    'Chile', 'Colombia', 'Uruguay', 'Venezuela', 'Ecuador', 'Paraguay', 'Peru',
+    'Japan', 'Singapore', 'Australia', 'China', 'South Korea',
+    'UEFA', 'FIFA', 'AFC', 'CAF', 'CONCACAF', 'CONMEBOL', 'OFC',
+  ];
+  
+  // Remove leading country/confederation prefix
+  for (const prefix of prefixes) {
+    const pattern = new RegExp(`^${prefix}\\s+`, 'i');
+    normalized = normalized.replace(pattern, '');
+  }
+  
+  // Remove leading numbers and dots (e.g., "1. HNL" -> "HNL", "2. Liga" -> "Liga")
+  normalized = normalized.replace(/^(\d+\.?\s+)/, '');
+  
+  // Normalize whitespace
+  normalized = normalized.replace(/\s+/g, ' ').trim();
+  
+  // Convert to lowercase for case-insensitive matching
+  normalized = normalized.toLowerCase();
+  
+  // Normalize special characters and accents
+  normalized = normalized
+    .replace(/[àáâãäå]/g, 'a')
+    .replace(/[èéêë]/g, 'e')
+    .replace(/[ìíîï]/g, 'i')
+    .replace(/[òóôõö]/g, 'o')
+    .replace(/[ùúûü]/g, 'u')
+    .replace(/[ýÿ]/g, 'y')
+    .replace(/[ñ]/g, 'n')
+    .replace(/[ç]/g, 'c')
+    .replace(/[ß]/g, 'ss')
+    .replace(/[æ]/g, 'ae')
+    .replace(/[œ]/g, 'oe')
+    .replace(/ü/g, 'u')
+    .replace(/ö/g, 'o')
+    .replace(/ä/g, 'a')
+    .replace(/ş/g, 's')
+    .replace(/ğ/g, 'g')
+    .replace(/ı/g, 'i')
+    .replace(/ć/g, 'c')
+    .replace(/č/g, 'c')
+    .replace(/š/g, 's')
+    .replace(/ž/g, 'z')
+    .replace(/đ/g, 'd');
+  
+  return normalized;
+}
+
+/**
  * Get league slug for a competition name
- * Automatically removes year suffixes
+ * Automatically removes year suffixes and handles variations
  */
 export function getVerifiedLeagueSlug(competitionName: string): string | null {
   // Remove year suffix (e.g., " 2025/2026" or " 2025")
   const cleanName = competitionName.replace(/\s+\d{4}(\/\d{4})?$/g, '').trim();
   
-  // Try direct mapping
+  // Try direct exact match first (fastest)
   if (VERIFIED_LEAGUE_MAPPINGS[cleanName]) {
     return VERIFIED_LEAGUE_MAPPINGS[cleanName];
   }
   
-  // Try case-insensitive search
+  // Try case-insensitive exact match
   const lowerCleanName = cleanName.toLowerCase();
   for (const [key, value] of Object.entries(VERIFIED_LEAGUE_MAPPINGS)) {
     if (key.toLowerCase() === lowerCleanName) {
+      return value;
+    }
+  }
+  
+  // Try normalized matching (handles country prefixes, accents, etc.)
+  const normalized = normalizeLeagueName(competitionName);
+  
+  for (const [key, value] of Object.entries(VERIFIED_LEAGUE_MAPPINGS)) {
+    const normalizedKey = normalizeLeagueName(key);
+    if (normalizedKey === normalized) {
       return value;
     }
   }
