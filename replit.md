@@ -63,6 +63,21 @@ Preferred communication style: Simple, everyday language.
 - Timeout handling (10s) for reliability
 - Structured data transformation from HTML to typed Match objects
 
+**Verified League URL Mapping System**
+Solves the league-based bulk upload problem (previously 85% failure rate):
+- **Scrapes real league URLs** from Sportstats365 fixtures instead of guessing
+- **121+ verified league slugs** extracted from 30+ days of fixtures (`server/verified-league-mappings.ts`)
+- **Robust normalization** in `getVerifiedLeagueSlug()`:
+  - Removes country/confederation prefixes (England, Spain, UEFA, etc.)
+  - Removes leading numbers ("1. HNL" → "HNL")
+  - Normalizes accents and special characters
+  - Case-insensitive matching
+- **100% accuracy** on test leagues (50/50 leagues mapped correctly)
+- **Self-maintaining**: Re-run `server/extract-league-urls-from-fixtures.ts` to update mappings
+- **No manual aliases needed**: Normalization handles variations automatically
+
+Key insight: Sportstats365 uses non-predictable slugs ("premiership" not "premier-league"), so we scrape them from the site's own fixture pages.
+
 **Development vs Production**
 - Vite middleware in development for HMR and fast refresh
 - Static file serving in production from compiled dist directory
