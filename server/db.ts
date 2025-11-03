@@ -391,6 +391,82 @@ try {
   // Column already exists, ignore
 }
 
+// Add odds and probability columns to match_stats table (database.db)
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN odds_1 REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added odds_1 column to match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN odds_x REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added odds_x column to match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN odds_2 REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added odds_2 column to match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN prob_1 REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added prob_1 column to match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN prob_x REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added prob_x column to match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN prob_2 REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added prob_2 column to match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+
+// Add odds and probability columns to match_stats table (tester.db)
+try {
+  testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN odds_1 REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added odds_1 column to tester match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN odds_x REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added odds_x column to tester match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN odds_2 REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added odds_2 column to tester match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN prob_1 REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added prob_1 column to tester match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN prob_x REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added prob_x column to tester match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN prob_2 REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added prob_2 column to tester match_stats table');
+} catch (e) {
+  // Column already exists, ignore
+}
+
 export const databaseDb = drizzle(databaseSqlite, { schema });
 export const testerDb = drizzle(testerSqlite, { schema });
 
