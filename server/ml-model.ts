@@ -117,6 +117,14 @@ export function prepareNumericalFeatures(stats: MatchStats): number[] {
     stats.leagueUnder25,
     stats.leagueOver25,
     stats.leagueAvgGoals,
+    
+    // Betting odds and probabilities
+    stats.odds1,
+    stats.oddsX,
+    stats.odds2,
+    stats.prob1,
+    stats.probX,
+    stats.prob2,
   ];
 }
 
