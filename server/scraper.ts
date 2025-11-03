@@ -1699,8 +1699,8 @@ function generateSlugVariations(competitionName: string): string[] {
 const discoveredLeagueSlugs = new Map<string, string>();
 
 /**
- * Extract league slug from competition name with robust URL discovery
- * Tries multiple URL patterns and returns the one that works
+ * Extract league slug from competition name - ONLY uses comprehensive mappings
+ * NO automatic URL construction to ensure 100% accuracy
  */
 export function extractLeagueSlug(competitionName: string): string {
   const cleanedName = competitionName.replace(/\s+\d{4}(\/\d{4})?$/g, '').trim();
@@ -1710,7 +1710,7 @@ export function extractLeagueSlug(competitionName: string): string {
     return discoveredLeagueSlugs.get(cleanedName)!;
   }
   
-  // PRIORITY 1: Use comprehensive mappings (covers all leagues from user's list)
+  // ONLY use comprehensive mappings - NEVER construct URLs automatically
   const comprehensiveSlug = getLeagueSlug(competitionName);
   console.log(`[extractLeagueSlug] Calling getLeagueSlug("${competitionName}") returned:`, comprehensiveSlug);
   if (comprehensiveSlug) {
@@ -1719,7 +1719,7 @@ export function extractLeagueSlug(competitionName: string): string {
     return comprehensiveSlug;
   }
   
-  // PRIORITY 2: Check if we have it in the comprehensive mappings directly
+  // Check if we have it in the comprehensive mappings directly
   if (COMPREHENSIVE_LEAGUE_MAPPINGS[cleanedName]) {
     const slug = COMPREHENSIVE_LEAGUE_MAPPINGS[cleanedName];
     console.log(`✓ Found direct mapping for "${cleanedName}" => "${slug}"`);
@@ -1727,14 +1727,13 @@ export function extractLeagueSlug(competitionName: string): string {
     return slug;
   }
   
-  // PRIORITY 3: Fall back to generating variations (for leagues not in our list)
-  console.log(`⚠ No mapping found for "${cleanedName}", generating variations...`);
-  const variations = generateSlugVariations(cleanedName);
-  const primarySlug = variations[0];
+  // If no mapping found, this is an ERROR - league needs to be added to mappings
+  console.error(`❌ NO MAPPING FOUND FOR LEAGUE: "${cleanedName}"`);
+  console.error(`   Original name: "${competitionName}"`);
+  console.error(`   This league must be added to server/league-mappings-comprehensive.ts`);
   
-  console.log(`  Generated slug variations for "${cleanedName}":`, variations);
-  
-  return primarySlug;
+  // Return a safe fallback that will be obvious if used
+  return `UNMAPPED-LEAGUE-${createSlug(cleanedName)}`;
 }
 
 /**
