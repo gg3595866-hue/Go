@@ -394,12 +394,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let processed = 0;
       let loaded = 0;
+      let skipped = 0;
 
       // Load existing stats once at the beginning for duplicate checking
       const existingStats = await testerStorage.getAllMatchStats();
       const existingKeys = new Set(
         existingStats.map((stat) => `${stat.homeTeamId}-${stat.awayTeamId}`)
       );
+
+      // Get all teams, leagues, and countries from training database
+      const trainingStats = await databaseStorage.getAllMatchStats();
+      const trainingTeams = new Set<number>();
+      const trainingLeagues = new Set<number>();
+      const trainingCountries = new Set<number>();
+
+      trainingStats.forEach(stat => {
+        trainingTeams.add(stat.homeTeamId);
+        trainingTeams.add(stat.awayTeamId);
+        trainingLeagues.add(stat.leagueId);
+        trainingCountries.add(stat.countryId);
+      });
+
+      console.log(`Training data contains ${trainingTeams.size} teams, ${trainingLeagues.size} leagues, ${trainingCountries.size} countries`);
 
       // Process each match
       for (const match of matches) {
@@ -409,6 +425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             totalMatches: matches.length,
             processed,
             loaded,
+            skipped,
             currentMatch: `${match.homeTeam} vs ${match.awayTeam}`,
           });
 
@@ -427,6 +444,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const awayTeamId = await testerStorage.getOrCreateTeamId(matchDetails.awayTeam);
           const leagueId = await testerStorage.getOrCreateLeagueId(matchDetails.competition);
           const countryId = await testerStorage.getOrCreateCountryId(matchDetails.competition);
+
+          // Check if all entities exist in training data
+          const homeTeamInTraining = trainingTeams.has(homeTeamId);
+          const awayTeamInTraining = trainingTeams.has(awayTeamId);
+          const leagueInTraining = trainingLeagues.has(leagueId);
+          const countryInTraining = trainingCountries.has(countryId);
+
+          if (!homeTeamInTraining || !awayTeamInTraining || !leagueInTraining || !countryInTraining) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - not in training data (homeTeam: ${homeTeamInTraining}, awayTeam: ${awayTeamInTraining}, league: ${leagueInTraining}, country: ${countryInTraining})`);
+            processed++;
+            skipped++;
+            continue;
+          }
 
           // Fetch league statistics
           const leagueStats = await scrapeLeagueStats(matchDetails.competition);
@@ -448,6 +478,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (existingKeys.has(matchKey)) {
             console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - duplicate`);
             processed++;
+            skipped++;
             continue;
           }
 
@@ -462,6 +493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             totalMatches: matches.length,
             processed,
             loaded,
+            skipped,
           });
         } catch (error) {
           console.error(`Error processing match ${match.homeTeam} vs ${match.awayTeam}:`, error);
@@ -475,6 +507,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalMatches: matches.length,
         processed,
         loaded,
+        skipped,
       });
 
       res.end();

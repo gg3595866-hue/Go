@@ -20,6 +20,7 @@ interface TestLoadStatus {
   totalMatches: number;
   processed: number;
   loaded: number;
+  skipped?: number;
   currentMatch?: string;
   error?: string;
 }
@@ -38,6 +39,7 @@ export default function ProcessingPage() {
     totalMatches: 0,
     processed: 0,
     loaded: 0,
+    skipped: 0,
   });
 
   const databaseUpload = useMutation({
@@ -99,6 +101,7 @@ export default function ProcessingPage() {
         totalMatches: 0,
         processed: 0,
         loaded: 0,
+        skipped: 0,
       });
 
       const response = await fetch('/api/bulk-upload/tester', {
@@ -319,6 +322,13 @@ export default function ProcessingPage() {
                   <div className="text-sm font-medium text-primary mb-1">LOADED:</div>
                   <div className="text-lg font-bold" data-testid="text-test-loaded">
                     {testStatus.loaded}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-sm font-medium text-primary mb-1">SKIPPED:</div>
+                  <div className="text-lg font-bold" data-testid="text-test-skipped">
+                    {testStatus.skipped || 0}
                   </div>
                 </div>
 
