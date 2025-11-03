@@ -1899,8 +1899,7 @@ async function tryFetchLeaguePage(
 
 /**
  * Scrape all matches for a specific league and year
- * Navigates through all weeks in the FIXTURES tab to collect complete match data
- * Tries multiple URL variations to find the correct league page
+ * Uses ONLY the comprehensive league mappings - NO URL guessing
  */
 export async function scrapeLeagueMatches(
   competitionName: string,
@@ -1910,61 +1909,62 @@ export async function scrapeLeagueMatches(
   try {
     const cleanedName = competitionName.replace(/\s+\d{4}\/\d{4}$/g, '').trim();
     
-    // Get all possible slug variations
-    const slugVariations = generateSlugVariations(cleanedName);
+    // Get the slug from comprehensive mappings ONLY
+    const slug = extractLeagueSlug(competitionName);
     
-    // Also check if we have a manual mapping or cached slug
-    const primarySlug = extractLeagueSlug(competitionName);
+    // Check if we got an unmapped league error
+    if (slug.startsWith('UNMAPPED-LEAGUE-')) {
+      throw new Error(
+        `League "${competitionName}" is not in the comprehensive mappings. ` +
+        `Please add it to server/league-mappings-comprehensive.ts`
+      );
+    }
     
-    // Ensure primary slug is first in the list
-    const slugsToTry = [primarySlug, ...slugVariations.filter(s => s !== primarySlug)];
-    
-    console.log(`Trying ${slugsToTry.length} URL variations for "${competitionName}":`, slugsToTry);
+    console.log(`Using comprehensive mapping for "${competitionName}" => "${slug}"`);
+    onProgress?.(`Loading ${competitionName}...`, 0);
     
     // Determine if this league uses single year or season format
+    // Most leagues use season format (2024-2025), only specific leagues use single year (2024)
     const singleYearLeagues = [
       'copa-libertadores',
       'copa-sudamericana',
       'champions-league',
       'europa-league',
-      'mls'
+      'conference-league',
+      'mls',
+      'brasileiro-serie-a',
+      'primera-a',
+      'liga-pro-ecuador',
+      'liga-mx',
+      'primera-division-chile',
+      'primera-division-uruguay',
+      'primera-division-venezuela',
+      'j1-league',
+      's-league',
+      'a-league',
+      'eliteserien',
+      'allsvenskan',
+      'urvalsdeild'
     ];
     
-    let successfulSlug: string | null = null;
-    let html: string | null = null;
-    
-    // Try each slug variation
-    for (const slug of slugsToTry) {
-      const useSingleYear = singleYearLeagues.includes(slug);
-      const seasonFormat = useSingleYear ? `${year}` : `${year}-${year + 1}`;
-      const baseUrl = `https://sportstats365.com/football/${slug}/${seasonFormat}`;
-      
-      console.log(`Trying URL: ${baseUrl}`);
-      onProgress?.(`Trying ${competitionName} at ${slug}...`, 0);
-      
-      // Pass the expected league name for validation
-      const result = await tryFetchLeaguePage(baseUrl, cleanedName);
-      
-      if (result.success && result.html) {
-        console.log(`✓ Success! Found league at: ${baseUrl}`);
-        successfulSlug = slug;
-        html = result.html;
-        
-        // Cache this successful slug for future use
-        discoveredLeagueSlugs.set(cleanedName, slug);
-        break;
-      } else {
-        console.log(`✗ Failed: ${baseUrl} - ${result.error}`);
-      }
-    }
-    
-    if (!successfulSlug || !html) {
-      throw new Error(`Could not find valid URL for ${competitionName}. Tried: ${slugsToTry.join(', ')}`);
-    }
-    
-    const useSingleYear = singleYearLeagues.includes(successfulSlug);
+    const useSingleYear = singleYearLeagues.includes(slug);
     const seasonFormat = useSingleYear ? `${year}` : `${year}-${year + 1}`;
-    const baseUrl = `https://sportstats365.com/football/${successfulSlug}/${seasonFormat}`;
+    const baseUrl = `https://sportstats365.com/football/${slug}/${seasonFormat}`;
+    
+    console.log(`Fetching league page: ${baseUrl}`);
+    
+    // Fetch the league page
+    const result = await tryFetchLeaguePage(baseUrl, cleanedName);
+    
+    if (!result.success || !result.html) {
+      throw new Error(
+        `Failed to fetch league page for ${competitionName} at ${baseUrl}. ` +
+        `Error: ${result.error}. ` +
+        `The mapping might be incorrect or the year ${year} doesn't exist for this league.`
+      );
+    }
+    
+    const html = result.html;
     
     console.log(`Starting league scrape for ${competitionName} ${seasonFormat}`);
     console.log(`Using URL: ${baseUrl}`);
@@ -2257,7 +2257,7 @@ export async function scrapeLeagueMatches(
 
 /**
  * Scrape all basketball matches for a specific league and year
- * Similar to scrapeLeagueMatches but for basketball leagues
+ * Uses ONLY the comprehensive league mappings - NO URL guessing
  */
 export async function scrapeBasketballLeagueMatches(
   competitionName: string,
@@ -2267,49 +2267,37 @@ export async function scrapeBasketballLeagueMatches(
   try {
     const cleanedName = competitionName.replace(/\s+\d{4}\/\d{4}$/g, '').trim();
     
-    // Get all possible slug variations
-    const slugVariations = generateSlugVariations(cleanedName);
+    // Get the slug from comprehensive mappings ONLY
+    const slug = extractLeagueSlug(competitionName);
     
-    // Also check if we have a manual mapping or cached slug
-    const primarySlug = extractLeagueSlug(competitionName);
-    
-    // Ensure primary slug is first in the list
-    const slugsToTry = [primarySlug, ...slugVariations.filter(s => s !== primarySlug)];
-    
-    console.log(`Trying ${slugsToTry.length} URL variations for basketball "${competitionName}":`, slugsToTry);
-    
-    let successfulSlug: string | null = null;
-    let html: string | null = null;
-    
-    // Try each slug variation
-    for (const slug of slugsToTry) {
-      const seasonFormat = `${year}-${year + 1}`;
-      const baseUrl = `https://sportstats365.com/basketball/${slug}/${seasonFormat}`;
-      
-      console.log(`Trying basketball URL: ${baseUrl}`);
-      onProgress?.(`Trying ${competitionName} at ${slug}...`, 0);
-      
-      const result = await tryFetchLeaguePage(baseUrl);
-      
-      if (result.success && result.html) {
-        console.log(`✓ Success! Found basketball league at: ${baseUrl}`);
-        successfulSlug = slug;
-        html = result.html;
-        
-        // Cache this successful slug for future use
-        discoveredLeagueSlugs.set(cleanedName, slug);
-        break;
-      } else {
-        console.log(`✗ Failed: ${baseUrl} - ${result.error}`);
-      }
+    // Check if we got an unmapped league error
+    if (slug.startsWith('UNMAPPED-LEAGUE-')) {
+      throw new Error(
+        `Basketball league "${competitionName}" is not in the comprehensive mappings. ` +
+        `Please add it to server/league-mappings-comprehensive.ts`
+      );
     }
     
-    if (!successfulSlug || !html) {
-      throw new Error(`Could not find valid URL for basketball ${competitionName}. Tried: ${slugsToTry.join(', ')}`);
-    }
+    console.log(`Using comprehensive mapping for basketball "${competitionName}" => "${slug}"`);
+    onProgress?.(`Loading ${competitionName}...`, 0);
     
     const seasonFormat = `${year}-${year + 1}`;
-    const baseUrl = `https://sportstats365.com/basketball/${successfulSlug}/${seasonFormat}`;
+    const baseUrl = `https://sportstats365.com/basketball/${slug}/${seasonFormat}`;
+    
+    console.log(`Fetching basketball league page: ${baseUrl}`);
+    
+    // Fetch the league page
+    const result = await tryFetchLeaguePage(baseUrl);
+    
+    if (!result.success || !result.html) {
+      throw new Error(
+        `Failed to fetch basketball league page for ${competitionName} at ${baseUrl}. ` +
+        `Error: ${result.error}. ` +
+        `The mapping might be incorrect or the year ${year} doesn't exist for this league.`
+      );
+    }
+    
+    const html = result.html;
     
     console.log(`Starting basketball league scrape for ${competitionName} ${seasonFormat}`);
     console.log(`Using URL: ${baseUrl}`);
