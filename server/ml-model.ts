@@ -547,8 +547,10 @@ export async function trainModel(
     shuffle: false, // ⚠️ NO SHUFFLE to maintain time order
     callbacks: {
       onEpochEnd: (epoch, logs) => {
-        const trainAcc = (logs?.ft_result_acc || 0) * 100;
-        const valAcc = (logs?.val_ft_result_acc || 0) * 100;
+        // Clamp accuracy to valid range [0, 100]%
+        const clamp = (val: number) => Math.min(100, Math.max(0, val * 100));
+        const trainAcc = clamp(logs?.ft_result_acc || 0);
+        const valAcc = clamp(logs?.val_ft_result_acc || 0);
         const gap = trainAcc - valAcc;
         console.log(
           `Epoch ${epoch + 1}/${config.epochs}: ` +
@@ -571,8 +573,16 @@ export async function trainModel(
   const valLossHistory = history.history.val_loss as number[];
   const valFtAccHistory = history.history.val_ft_result_acc as number[];
   
-  const finalTrainAcc = ftAccHistory[ftAccHistory.length - 1] || 0;
-  const finalValAcc = valFtAccHistory[valFtAccHistory.length - 1] || 0;
+  // Clamp accuracy values to valid range [0, 1]
+  // TensorFlow sometimes returns invalid values > 1.0 for multi-output models
+  const clampAccuracy = (acc: number): number => {
+    if (acc < 0) return 0;
+    if (acc > 1) return 1;
+    return acc;
+  };
+  
+  const finalTrainAcc = clampAccuracy(ftAccHistory[ftAccHistory.length - 1] || 0);
+  const finalValAcc = clampAccuracy(valFtAccHistory[valFtAccHistory.length - 1] || 0);
   const generalizationGap = (finalTrainAcc - finalValAcc) * 100;
   
   console.log(`\n📊 Final Results:`);
@@ -583,9 +593,9 @@ export async function trainModel(
   const trainingResult: TrainingResult = {
     history: {
       loss: lossHistory,
-      accuracy: ftAccHistory,
+      accuracy: ftAccHistory.map(clampAccuracy),
       valLoss: valLossHistory,
-      valAccuracy: valFtAccHistory,
+      valAccuracy: valFtAccHistory.map(clampAccuracy),
     },
     finalMetrics: {
       trainingAccuracy: finalTrainAcc,
