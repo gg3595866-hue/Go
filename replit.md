@@ -42,6 +42,8 @@ Preferred communication style: Simple, everyday language.
 - `MatchCard`: Individual match display with team info, scores, and odds
 - `CompetitionGroup`/`TimeGroup`: Organizational containers for matches
 - `LoadingState`/`EmptyState`: Feedback components for async operations
+- `DatabasePage`: Displays all match statistics from the training database with pagination (92 columns including all 35 new ML features)
+- `TesterPage`: Displays match statistics for prediction with team name search (93 columns including team names and all 35 new ML features)
 
 **Design Principles**
 - Dark mode by default for reduced eye strain
@@ -110,7 +112,9 @@ Key insight: Sportstats365 uses non-predictable slugs ("premiership" not "premie
 - Drizzle ORM with SQLite (Better-SQLite3)
 - Two separate databases: `database.db` (for training data) and `tester.db` (for prediction data)
 - Shared entity mapping tables ensure consistent IDs across both databases
-- Match statistics stored with features for neural network training
+- Match statistics stored with 70+ features for neural network training, including:
+  - **Original features** (35): Form metrics, win/draw/loss rates, goal statistics, betting odds, league stats
+  - **New advanced features** (35): Home/away-specific metrics, points per game, over/under goal rates (0.5, 1.5, 3.5), failed-to-score rates, goals-per-half ratios, comparative metrics (attack/defense strength, momentum), market-specific features (expected win ratios, value indices), league position (raw and normalized), win margin ratios
 
 **Entity ID Mapping System (for Neural Network Embeddings)**
 The application uses a centralized ID mapping system to ensure each team, league, and country gets a unique, consistent ID across both databases:
