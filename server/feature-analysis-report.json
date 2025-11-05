@@ -1,0 +1,358 @@
+{
+  "url": "https://sportstats365.com/football/champions-league/2025-2026/compare/garabag-azersun-agdam/chelsea/1018893",
+  "timestamp": "2025-11-05T09:32:13.910Z",
+  "teams": {
+    "home": "Qarabag FK",
+    "away": "Chelsea"
+  },
+  "endpoints": {
+    "Timezone": "/settings",
+    "endpoint_1": "/football/countries/nav/uefa",
+    "endpoint_2": "/football/competitions",
+    "endpoint_3": "/football/streaks/nav",
+    "CET": "/settings",
+    "Prediction": "/football/champions-league/2025-2026/stats/garabag-azersun-agdam/chelsea/1018893/form",
+    "Stats": "/football/champions-league/2025-2026/stats/garabag-azersun-agdam/chelsea/1018893",
+    "Matches": "/football/champions-league/2025-2026/stats/garabag-azersun-agdam/chelsea/1018893/matches",
+    "H2H": "/football/champions-league/2025-2026/stats/garabag-azersun-agdam/chelsea/1018893/h2h",
+    "endpoint_9": "/football/champions-league/2025-2026/stats/garabag-azersun-agdam/chelsea/1018893/form"
+  },
+  "dataAvailability": {
+    "standings": true,
+    "form": true,
+    "stats": true,
+    "odds": true
+  },
+  "requiredFeatures": [
+    {
+      "id": 1,
+      "name": "Win Rate",
+      "category": "Form Dynamics",
+      "calculation": "Wins ÷ Total Matches",
+      "dataNeeded": [
+        "wins",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 2,
+      "name": "Draw Rate",
+      "category": "Form Dynamics",
+      "calculation": "Draws ÷ Total Matches",
+      "dataNeeded": [
+        "draws",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 3,
+      "name": "Loss Rate",
+      "category": "Form Dynamics",
+      "calculation": "Losses ÷ Total Matches",
+      "dataNeeded": [
+        "losses",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 4,
+      "name": "Points per Game",
+      "category": "Form Dynamics",
+      "calculation": "(3×Wins + Draws)/Matches",
+      "dataNeeded": [
+        "wins",
+        "draws",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 5,
+      "name": "Last 5 Form Index",
+      "category": "Form Dynamics",
+      "calculation": "Weighted sum of last 5 results",
+      "dataNeeded": [
+        "last5Results"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 6,
+      "name": "Momentum Score",
+      "category": "Form Dynamics",
+      "calculation": "Trend over last 5-10 games",
+      "dataNeeded": [
+        "last10Results"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 7,
+      "name": "Home Win Rate",
+      "category": "Form Dynamics",
+      "calculation": "Home Wins ÷ Home Games",
+      "dataNeeded": [
+        "homeWins",
+        "homeGames"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 8,
+      "name": "Away Win Rate",
+      "category": "Form Dynamics",
+      "calculation": "Away Wins ÷ Away Games",
+      "dataNeeded": [
+        "awayWins",
+        "awayGames"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 9,
+      "name": "Win after trailing",
+      "category": "Form Dynamics",
+      "calculation": "Wins after losing HT ÷ Total",
+      "dataNeeded": [
+        "htLosses",
+        "ftWinsAfterHtLoss"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 10,
+      "name": "HT to FT Conversion",
+      "category": "Form Dynamics",
+      "calculation": "% where HT result = FT result",
+      "dataNeeded": [
+        "htResults",
+        "ftResults"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 11,
+      "name": "Avg Goals Scored",
+      "category": "Goal Dynamics",
+      "calculation": "Total goals ÷ Matches",
+      "dataNeeded": [
+        "goalsScored",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 12,
+      "name": "Avg Goals Conceded",
+      "category": "Goal Dynamics",
+      "calculation": "Total conceded ÷ Matches",
+      "dataNeeded": [
+        "goalsConceded",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 13,
+      "name": "Goals per Half Ratio",
+      "category": "Goal Dynamics",
+      "calculation": "1H Goals ÷ 2H Goals",
+      "dataNeeded": [
+        "goals1H",
+        "goals2H"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 14,
+      "name": "Clean Sheet %",
+      "category": "Goal Dynamics",
+      "calculation": "Clean sheets ÷ Matches",
+      "dataNeeded": [
+        "cleanSheets",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 15,
+      "name": "Failed to Score %",
+      "category": "Goal Dynamics",
+      "calculation": "No score games ÷ Matches",
+      "dataNeeded": [
+        "failedToScore",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 16,
+      "name": "% Over 0.5",
+      "category": "Goal Dynamics",
+      "calculation": "Matches >0.5 ÷ Total",
+      "dataNeeded": [
+        "over05",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 17,
+      "name": "% Over 1.5",
+      "category": "Goal Dynamics",
+      "calculation": "Matches >1.5 ÷ Total",
+      "dataNeeded": [
+        "over15",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 18,
+      "name": "% Over 2.5",
+      "category": "Goal Dynamics",
+      "calculation": "Matches >2.5 ÷ Total",
+      "dataNeeded": [
+        "over25",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 19,
+      "name": "% Over 3.5",
+      "category": "Goal Dynamics",
+      "calculation": "Matches >3.5 ÷ Total",
+      "dataNeeded": [
+        "over35",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 20,
+      "name": "% BTTS",
+      "category": "Goal Dynamics",
+      "calculation": "Both scored ÷ Matches",
+      "dataNeeded": [
+        "btts",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 21,
+      "name": "% BTTS & Over 2.5",
+      "category": "Goal Dynamics",
+      "calculation": "Combined ÷ Matches",
+      "dataNeeded": [
+        "bttsOver25",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    },
+    {
+      "id": 22,
+      "name": "% BTTS & Win",
+      "category": "Goal Dynamics",
+      "calculation": "Combined ÷ Matches",
+      "dataNeeded": [
+        "bttsWin",
+        "totalMatches"
+      ],
+      "available": false,
+      "currentlyScraped": false,
+      "notes": ""
+    }
+  ],
+  "currentScraper": {
+    "extractedFields": [
+      "homeTeam",
+      "awayTeam",
+      "homeScore",
+      "awayScore",
+      "homeHalfScore",
+      "awayHalfScore",
+      "status",
+      "odds (1X2)",
+      "homeTeamForm",
+      "awayTeamForm",
+      "homeTeamStats.winPercentage",
+      "homeTeamStats.drawPercentage",
+      "homeTeamStats.lossPercentage",
+      "homeTeamStats.goalsScored",
+      "homeTeamStats.goalsConceded",
+      "homeTeamStats.cleanSheetPercentage",
+      "homeTeamStats.btts",
+      "homeTeamStats.winToNil",
+      "homeTeamStats.winByOneGoal",
+      "homeTeamStats.winByTwoPlusGoals",
+      "homeTeamStats.goalsInFirstHalf",
+      "homeTeamStats.goalsInSecondHalf",
+      "homeTeamStats.halftimeStats",
+      "homeTeamStats.scoredPercent",
+      "homeTeamStats.scoredAgainstPercent"
+    ],
+    "missingFields": [
+      "Win Rate (overall)",
+      "Home-specific win rate",
+      "Away-specific win rate",
+      "Over 0.5, 1.5, 3.5 goals percentages",
+      "Win after trailing stats",
+      "HT to FT conversion rate",
+      "Momentum/trend calculations",
+      "Performance vs similar teams",
+      "Emotional swing metrics",
+      "Consistency index",
+      "Response to conceding early",
+      "Late goals percentage",
+      "Margin consistency",
+      "League position normalized"
+    ]
+  }
+}
