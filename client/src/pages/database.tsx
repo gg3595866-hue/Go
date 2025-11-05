@@ -175,6 +175,41 @@ export default function DatabasePage() {
                     <TableHead className="min-w-[160px]">Away HT Tied Rate L8</TableHead>
                     <TableHead className="min-w-[160px]">Home HT Lost Rate L8</TableHead>
                     <TableHead className="min-w-[160px]">Away HT Lost Rate L8</TableHead>
+                    <TableHead className="min-w-[140px]">Home Win Rate Home</TableHead>
+                    <TableHead className="min-w-[140px]">Home Win Rate Away</TableHead>
+                    <TableHead className="min-w-[140px]">Away Win Rate Home</TableHead>
+                    <TableHead className="min-w-[140px]">Away Win Rate Away</TableHead>
+                    <TableHead className="min-w-[140px]">Home PPG</TableHead>
+                    <TableHead className="min-w-[140px]">Away PPG</TableHead>
+                    <TableHead className="min-w-[140px]">Home Over 0.5</TableHead>
+                    <TableHead className="min-w-[140px]">Away Over 0.5</TableHead>
+                    <TableHead className="min-w-[140px]">Home Over 1.5</TableHead>
+                    <TableHead className="min-w-[140px]">Away Over 1.5</TableHead>
+                    <TableHead className="min-w-[140px]">Home Over 3.5</TableHead>
+                    <TableHead className="min-w-[140px]">Away Over 3.5</TableHead>
+                    <TableHead className="min-w-[160px]">Home Failed Score</TableHead>
+                    <TableHead className="min-w-[160px]">Away Failed Score</TableHead>
+                    <TableHead className="min-w-[160px]">Home Goals Half Ratio</TableHead>
+                    <TableHead className="min-w-[160px]">Away Goals Half Ratio</TableHead>
+                    <TableHead className="min-w-[160px]">Relative Attack</TableHead>
+                    <TableHead className="min-w-[160px]">Relative Defense</TableHead>
+                    <TableHead className="min-w-[160px]">Momentum Diff</TableHead>
+                    <TableHead className="min-w-[160px]">Recent Goal Diff</TableHead>
+                    <TableHead className="min-w-[160px]">Expected Win Ratio H</TableHead>
+                    <TableHead className="min-w-[160px]">Expected Win Ratio A</TableHead>
+                    <TableHead className="min-w-[160px]">Win to Odds Index H</TableHead>
+                    <TableHead className="min-w-[160px]">Win to Odds Index A</TableHead>
+                    <TableHead className="min-w-[140px]">Expected Value 1</TableHead>
+                    <TableHead className="min-w-[140px]">Expected Value X</TableHead>
+                    <TableHead className="min-w-[140px]">Expected Value 2</TableHead>
+                    <TableHead className="min-w-[160px]">Market Exp Goals H</TableHead>
+                    <TableHead className="min-w-[160px]">Market Exp Goals A</TableHead>
+                    <TableHead className="min-w-[140px]">Home League Pos</TableHead>
+                    <TableHead className="min-w-[140px]">Away League Pos</TableHead>
+                    <TableHead className="min-w-[160px]">Home League Pos Norm</TableHead>
+                    <TableHead className="min-w-[160px]">Away League Pos Norm</TableHead>
+                    <TableHead className="min-w-[160px]">Home Win Margin Ratio</TableHead>
+                    <TableHead className="min-w-[160px]">Away Win Margin Ratio</TableHead>
                     <TableHead className="min-w-[140px]">League Home Wins</TableHead>
                     <TableHead className="min-w-[120px]">League Draws</TableHead>
                     <TableHead className="min-w-[140px]">League Away Wins</TableHead>
@@ -199,7 +234,7 @@ export default function DatabasePage() {
                 <TableBody>
                   {!stats || stats.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={57} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
+                      <TableCell colSpan={92} className="text-center text-muted-foreground py-8" data-testid="text-no-data">
                         No data available. Add match statistics to see them here.
                       </TableCell>
                     </TableRow>
@@ -244,6 +279,41 @@ export default function DatabasePage() {
                         <TableCell>{(stat.awayTeamHtTiedRateL8 * 100).toFixed(1)}%</TableCell>
                         <TableCell>{(stat.homeTeamHtLostRateL8 * 100).toFixed(1)}%</TableCell>
                         <TableCell>{(stat.awayTeamHtLostRateL8 * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{(stat.homeTeamWinRateHome * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{(stat.homeTeamWinRateAway * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{(stat.awayTeamWinRateHome * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{(stat.awayTeamWinRateAway * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{stat.homeTeamPointsPerGame.toFixed(2)}</TableCell>
+                        <TableCell>{stat.awayTeamPointsPerGame.toFixed(2)}</TableCell>
+                        <TableCell>{(stat.homeTeamOver05Rate * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{(stat.awayTeamOver05Rate * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{(stat.homeTeamOver15Rate * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{(stat.awayTeamOver15Rate * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{(stat.homeTeamOver35Rate * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{(stat.awayTeamOver35Rate * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{(stat.homeTeamFailedToScoreRate * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{(stat.awayTeamFailedToScoreRate * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{stat.homeTeamGoalsPerHalfRatio.toFixed(2)}</TableCell>
+                        <TableCell>{stat.awayTeamGoalsPerHalfRatio.toFixed(2)}</TableCell>
+                        <TableCell>{stat.relativeAttackStrength.toFixed(2)}</TableCell>
+                        <TableCell>{stat.relativeDefenseStrength.toFixed(2)}</TableCell>
+                        <TableCell>{stat.momentumDifference.toFixed(2)}</TableCell>
+                        <TableCell>{stat.recentGoalDifference.toFixed(2)}</TableCell>
+                        <TableCell>{stat.expectedWinRatioHome.toFixed(2)}</TableCell>
+                        <TableCell>{stat.expectedWinRatioAway.toFixed(2)}</TableCell>
+                        <TableCell>{stat.winToOddsIndexHome.toFixed(2)}</TableCell>
+                        <TableCell>{stat.winToOddsIndexAway.toFixed(2)}</TableCell>
+                        <TableCell>{stat.expectedValue1.toFixed(2)}</TableCell>
+                        <TableCell>{stat.expectedValueX.toFixed(2)}</TableCell>
+                        <TableCell>{stat.expectedValue2.toFixed(2)}</TableCell>
+                        <TableCell>{stat.marketExpectedGoalsHome.toFixed(2)}</TableCell>
+                        <TableCell>{stat.marketExpectedGoalsAway.toFixed(2)}</TableCell>
+                        <TableCell>{stat.homeTeamLeaguePosition}</TableCell>
+                        <TableCell>{stat.awayTeamLeaguePosition}</TableCell>
+                        <TableCell>{stat.homeTeamLeaguePositionNormalized.toFixed(2)}</TableCell>
+                        <TableCell>{stat.awayTeamLeaguePositionNormalized.toFixed(2)}</TableCell>
+                        <TableCell>{stat.homeTeamWinMarginRatio.toFixed(2)}</TableCell>
+                        <TableCell>{stat.awayTeamWinMarginRatio.toFixed(2)}</TableCell>
                         <TableCell>{(stat.leagueHomeWins * 100).toFixed(1)}%</TableCell>
                         <TableCell>{(stat.leagueDraws * 100).toFixed(1)}%</TableCell>
                         <TableCell>{(stat.leagueAwayWins * 100).toFixed(1)}%</TableCell>
