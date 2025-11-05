@@ -60,9 +60,17 @@ export interface PredictionResult {
 
 /**
  * Prepare numerical features from match stats
+ * Ensures all features are valid numbers (replaces null/undefined with 0)
  */
 export function prepareNumericalFeatures(stats: MatchStats): number[] {
-  return [
+  const toNumber = (value: any): number => {
+    if (value === null || value === undefined || isNaN(value)) {
+      return 0;
+    }
+    return Number(value);
+  };
+
+  const features = [
     // Form metrics
     stats.homeTeamFormHomeL5,
     stats.awayTeamFormAwayL5,
@@ -178,7 +186,10 @@ export function prepareNumericalFeatures(stats: MatchStats): number[] {
     stats.prob1,
     stats.probX,
     stats.prob2,
-  ]; // Total: 84 features (45 original + 39 new)
+  ]; // Total: 80 features
+
+  // Validate and convert all features to numbers
+  return features.map(toNumber);
 }
 
 /**
@@ -237,7 +248,7 @@ export function buildModel(config: ModelArchitectureConfig): tf.LayersModel {
   const awayTeamInput = tf.input({ shape: [1], name: 'away_team_id', dtype: 'int32' });
   const leagueInput = tf.input({ shape: [1], name: 'league_id', dtype: 'int32' });
   const countryInput = tf.input({ shape: [1], name: 'country_id', dtype: 'int32' });
-  const numericalInput = tf.input({ shape: [84], name: 'numerical_features' });
+  const numericalInput = tf.input({ shape: [80], name: 'numerical_features' });
   
   // Embedding layers with 40-15-10 configuration
   const homeTeamEmbedding = tf.layers.embedding({
@@ -417,6 +428,15 @@ export async function trainModel(
     const nums = prepareNumericalFeatures(stats);
     const labels = prepareLabels(stats);
     
+    // Debug: Check feature count on first iteration
+    if (trainData.homeTeamIds.length === 0) {
+      console.log(`🔍 Feature count check: ${nums.length} features (expected 80)`);
+      if (nums.length !== 80) {
+        console.error(`❌ MISMATCH: Got ${nums.length} features instead of 80!`);
+        console.log('Sample features:', nums.slice(0, 10));
+      }
+    }
+    
     trainData.homeTeamIds.push(cats.homeTeamId);
     trainData.awayTeamIds.push(cats.awayTeamId);
     trainData.leagueIds.push(cats.leagueId);
@@ -466,7 +486,7 @@ export async function trainModel(
     away_team_id: tf.tensor2d(trainData.awayTeamIds.map(id => [id]), [trainData.awayTeamIds.length, 1], 'int32'),
     league_id: tf.tensor2d(trainData.leagueIds.map(id => [id]), [trainData.leagueIds.length, 1], 'int32'),
     country_id: tf.tensor2d(trainData.countryIds.map(id => [id]), [trainData.countryIds.length, 1], 'int32'),
-    numerical_features: tf.tensor2d(trainData.numericalFeatures, [trainData.numericalFeatures.length, 84])
+    numerical_features: tf.tensor2d(trainData.numericalFeatures, [trainData.numericalFeatures.length, 80])
   };
   
   const trainYs = {
@@ -483,7 +503,7 @@ export async function trainModel(
     away_team_id: tf.tensor2d(valData.awayTeamIds.map(id => [id]), [valData.awayTeamIds.length, 1], 'int32'),
     league_id: tf.tensor2d(valData.leagueIds.map(id => [id]), [valData.leagueIds.length, 1], 'int32'),
     country_id: tf.tensor2d(valData.countryIds.map(id => [id]), [valData.countryIds.length, 1], 'int32'),
-    numerical_features: tf.tensor2d(valData.numericalFeatures, [valData.numericalFeatures.length, 84])
+    numerical_features: tf.tensor2d(valData.numericalFeatures, [valData.numericalFeatures.length, 80])
   };
   
   const valYs = {
@@ -593,7 +613,7 @@ export async function predict(
     away_team_id: tf.tensor2d([[cats.awayTeamId]], [1, 1], 'int32'),
     league_id: tf.tensor2d([[cats.leagueId]], [1, 1], 'int32'),
     country_id: tf.tensor2d([[cats.countryId]], [1, 1], 'int32'),
-    numerical_features: tf.tensor2d([nums], [1, 84])
+    numerical_features: tf.tensor2d([nums], [1, 80])
   };
   
   // Make prediction
