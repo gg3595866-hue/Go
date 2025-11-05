@@ -47,6 +47,101 @@ export function extractFeaturesForDatabase(
   const leagueOver25 = leagueStats ? leagueStats.over25 / 100 : 0.47;
   const leagueAvgGoals = leagueStats ? leagueStats.avgGoals : 2.61;
 
+  // NEW: Calculate derived features
+  
+  // Points per game (3 for win, 1 for draw, 0 for loss)
+  const homeWinRate = (homeTeamStats.winPercentage ?? 0) / 100;
+  const homeDrawRate = (homeTeamStats.drawPercentage ?? 0) / 100;
+  const homeTeamPointsPerGame = (homeWinRate * 3) + (homeDrawRate * 1);
+  
+  const awayWinRate = (awayTeamStats.winPercentage ?? 0) / 100;
+  const awayDrawRate = (awayTeamStats.drawPercentage ?? 0) / 100;
+  const awayTeamPointsPerGame = (awayWinRate * 3) + (awayDrawRate * 1);
+  
+  // Over/Under rates from scraped data
+  const homeTeamOver05Rate = (homeTeamStats.over05Percentage ?? 0) / 100;
+  const awayTeamOver05Rate = (awayTeamStats.over05Percentage ?? 0) / 100;
+  const homeTeamOver15Rate = (homeTeamStats.over15Percentage ?? 0) / 100;
+  const awayTeamOver15Rate = (awayTeamStats.over15Percentage ?? 0) / 100;
+  const homeTeamOver35Rate = (homeTeamStats.over35Percentage ?? 0) / 100;
+  const awayTeamOver35Rate = (awayTeamStats.over35Percentage ?? 0) / 100;
+  
+  // Failed to score rate (100% - scored percentage)
+  const homeScoredRate = (homeTeamStats.scoredPercent?.overall?.percentage ?? 0) / 100;
+  const awayScoredRate = (awayTeamStats.scoredPercent?.overall?.percentage ?? 0) / 100;
+  const homeTeamFailedToScoreRate = 1 - homeScoredRate;
+  const awayTeamFailedToScoreRate = 1 - awayScoredRate;
+  
+  // Goals per half ratio (1H goals / 2H goals)
+  const homeFirstHalfGoals = (homeTeamStats.goalsInFirstHalf?.percentage ?? 50) / 100;
+  const homeSecondHalfGoals = (homeTeamStats.goalsInSecondHalf?.percentage ?? 50) / 100;
+  const homeTeamGoalsPerHalfRatio = homeSecondHalfGoals > 0 ? homeFirstHalfGoals / homeSecondHalfGoals : 1.0;
+  
+  const awayFirstHalfGoals = (awayTeamStats.goalsInFirstHalf?.percentage ?? 50) / 100;
+  const awaySecondHalfGoals = (awayTeamStats.goalsInSecondHalf?.percentage ?? 50) / 100;
+  const awayTeamGoalsPerHalfRatio = awaySecondHalfGoals > 0 ? awayFirstHalfGoals / awaySecondHalfGoals : 1.0;
+  
+  // Comparative metrics
+  const homeGoalsScored = homeTeamStats.goalsScored ?? 1;
+  const homeGoalsConceded = homeTeamStats.goalsConceded ?? 1;
+  const awayGoalsScored = awayTeamStats.goalsScored ?? 1;
+  const awayGoalsConceded = awayTeamStats.goalsConceded ?? 1;
+  
+  const relativeAttackStrength = homeGoalsScored / (awayGoalsConceded || 1);
+  const relativeDefenseStrength = homeGoalsConceded / (awayGoalsScored || 1);
+  
+  const homeFormOverall = homeTeamForm.overallForm ?? 0;
+  const awayFormOverall = awayTeamForm.overallForm ?? 0;
+  const momentumDifference = homeFormOverall - awayFormOverall;
+  
+  const recentGoalDifference = (homeGoalsScored - homeGoalsConceded) - (awayGoalsScored - awayGoalsConceded);
+  
+  // Market-specific features
+  const odds1 = oddsData?.odds1 ?? 2.0;
+  const oddsX = oddsData?.oddsX ?? 3.0;
+  const odds2 = oddsData?.odds2 ?? 3.5;
+  const prob1 = oddsData?.prob1 ?? 0.33;
+  const probX = oddsData?.probX ?? 0.27;
+  const prob2 = oddsData?.prob2 ?? 0.4;
+  
+  const impliedProb1 = odds1 > 0 ? 1 / odds1 : 0;
+  const impliedProb2 = odds2 > 0 ? 1 / odds2 : 0;
+  
+  const expectedWinRatioHome = homeWinRate / (impliedProb1 || 0.01);
+  const expectedWinRatioAway = awayWinRate / (impliedProb2 || 0.01);
+  
+  const winToOddsIndexHome = homeWinRate * odds1;
+  const winToOddsIndexAway = awayWinRate * odds2;
+  
+  const expectedValue1 = (prob1 * odds1) - 1;
+  const expectedValueX = (probX * oddsX) - 1;
+  const expectedValue2 = (prob2 * odds2) - 1;
+  
+  const marketExpectedGoalsHome = impliedProb1 * leagueAvgGoals;
+  const marketExpectedGoalsAway = impliedProb2 * leagueAvgGoals;
+  
+  // League position normalized (0-1 where 0 is 1st place, 1 is last place)
+  const homePosition = matchDetails.homeTeamLeaguePosition ?? 10;
+  const awayPosition = matchDetails.awayTeamLeaguePosition ?? 10;
+  const totalTeams = matchDetails.totalTeamsInLeague ?? 20;
+  const homePositionNormalized = totalTeams > 1 ? (homePosition - 1) / (totalTeams - 1) : 0;
+  const awayPositionNormalized = totalTeams > 1 ? (awayPosition - 1) / (totalTeams - 1) : 0;
+  
+  // Win margin ratio (by 1 goal / by 2+ goals)
+  const homeWinBy1 = (homeTeamStats.winByOneGoal?.percentage ?? 50) / 100;
+  const homeWinBy2Plus = (homeTeamStats.winByTwoPlusGoals?.percentage ?? 50) / 100;
+  const homeTeamWinMarginRatio = homeWinBy2Plus > 0 ? homeWinBy1 / homeWinBy2Plus : 1.0;
+  
+  const awayWinBy1 = (awayTeamStats.winByOneGoal?.percentage ?? 50) / 100;
+  const awayWinBy2Plus = (awayTeamStats.winByTwoPlusGoals?.percentage ?? 50) / 100;
+  const awayTeamWinMarginRatio = awayWinBy2Plus > 0 ? awayWinBy1 / awayWinBy2Plus : 1.0;
+  
+  // Home/Away-specific win rates
+  const homeTeamWinRateHome = (homeTeamStats.winPercentageHome ?? homeTeamStats.winPercentage ?? 0) / 100;
+  const homeTeamWinRateAway = (homeTeamStats.winPercentageAway ?? homeTeamStats.winPercentage ?? 0) / 100;
+  const awayTeamWinRateHome = (awayTeamStats.winPercentageHome ?? awayTeamStats.winPercentage ?? 0) / 100;
+  const awayTeamWinRateAway = (awayTeamStats.winPercentageAway ?? awayTeamStats.winPercentage ?? 0) / 100;
+
   return {
     homeTeamId,
     awayTeamId,
@@ -99,6 +194,59 @@ export function extractFeaturesForDatabase(
     awayTeamHtTiedRateL8: (awayTeamStats.halftimeStats?.tiedFirstHalf?.percentage ?? 0) / 100,
     homeTeamHtLostRateL8: (homeTeamStats.halftimeStats?.lostFirstHalf?.percentage ?? 0) / 100,
     awayTeamHtLostRateL8: (awayTeamStats.halftimeStats?.lostFirstHalf?.percentage ?? 0) / 100,
+
+    // NEW: Home/Away-specific win rates
+    homeTeamWinRateHome,
+    homeTeamWinRateAway,
+    awayTeamWinRateHome,
+    awayTeamWinRateAway,
+    
+    // NEW: Points per game
+    homeTeamPointsPerGame,
+    awayTeamPointsPerGame,
+    
+    // NEW: Over/Under goal percentages
+    homeTeamOver05Rate,
+    awayTeamOver05Rate,
+    homeTeamOver15Rate,
+    awayTeamOver15Rate,
+    homeTeamOver35Rate,
+    awayTeamOver35Rate,
+    
+    // NEW: Failed to score percentage
+    homeTeamFailedToScoreRate,
+    awayTeamFailedToScoreRate,
+    
+    // NEW: Goals per half ratio
+    homeTeamGoalsPerHalfRatio,
+    awayTeamGoalsPerHalfRatio,
+    
+    // NEW: Comparative metrics
+    relativeAttackStrength,
+    relativeDefenseStrength,
+    momentumDifference,
+    recentGoalDifference,
+    
+    // NEW: Market-specific features
+    expectedWinRatioHome,
+    expectedWinRatioAway,
+    winToOddsIndexHome,
+    winToOddsIndexAway,
+    expectedValue1,
+    expectedValueX,
+    expectedValue2,
+    marketExpectedGoalsHome,
+    marketExpectedGoalsAway,
+    
+    // NEW: League position
+    homeTeamLeaguePosition: homePosition,
+    awayTeamLeaguePosition: awayPosition,
+    homeTeamLeaguePositionNormalized: homePositionNormalized,
+    awayTeamLeaguePositionNormalized: awayPositionNormalized,
+    
+    // NEW: Win margin ratio
+    homeTeamWinMarginRatio,
+    awayTeamWinMarginRatio,
 
     // League statistics
     leagueHomeWins,

@@ -195,6 +195,133 @@ try {
   // Column already exists, ignore
 }
 
+// Add odds columns to match_stats table
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN odds_1 REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN odds_x REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN odds_2 REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN prob_1 REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN prob_x REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN prob_2 REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+
+// Add 39 NEW feature columns to match_stats table
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_win_rate_home REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_win_rate_away REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_win_rate_home REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_win_rate_away REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_points_per_game REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_points_per_game REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_over_0_5_rate REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_over_0_5_rate REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_over_1_5_rate REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_over_1_5_rate REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_over_3_5_rate REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_over_3_5_rate REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_failed_to_score_rate REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_failed_to_score_rate REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_goals_per_half_ratio REAL NOT NULL DEFAULT 1.0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_goals_per_half_ratio REAL NOT NULL DEFAULT 1.0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN relative_attack_strength REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN relative_defense_strength REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN momentum_difference REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN recent_goal_difference REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN expected_win_ratio_home REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN expected_win_ratio_away REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN win_to_odds_index_home REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN win_to_odds_index_away REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN expected_value_1 REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN expected_value_x REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN expected_value_2 REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN market_expected_goals_home REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN market_expected_goals_away REAL NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_league_position REAL NOT NULL DEFAULT 10;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_league_position REAL NOT NULL DEFAULT 10;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_league_position_normalized REAL NOT NULL DEFAULT 0.5;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_league_position_normalized REAL NOT NULL DEFAULT 0.5;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_win_margin_ratio REAL NOT NULL DEFAULT 1.0;`);
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_win_margin_ratio REAL NOT NULL DEFAULT 1.0;`);
+} catch (e) {}
+
 // Add matchDate column to match_stats table for time-aware splitting
 try {
   databaseSqlite.exec(`ALTER TABLE match_stats ADD COLUMN match_date INTEGER NOT NULL DEFAULT (unixepoch());`);
@@ -466,6 +593,45 @@ try {
 } catch (e) {
   // Column already exists, ignore
 }
+
+// Add 39 NEW feature columns to tester match_stats table
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_win_rate_home REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_win_rate_away REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_win_rate_home REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_win_rate_away REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_points_per_game REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_points_per_game REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_over_0_5_rate REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_over_0_5_rate REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_over_1_5_rate REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_over_1_5_rate REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_over_3_5_rate REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_over_3_5_rate REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_failed_to_score_rate REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_failed_to_score_rate REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_goals_per_half_ratio REAL NOT NULL DEFAULT 1.0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_goals_per_half_ratio REAL NOT NULL DEFAULT 1.0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN relative_attack_strength REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN relative_defense_strength REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN momentum_difference REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN recent_goal_difference REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN expected_win_ratio_home REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN expected_win_ratio_away REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN win_to_odds_index_home REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN win_to_odds_index_away REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN expected_value_1 REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN expected_value_x REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN expected_value_2 REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN market_expected_goals_home REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN market_expected_goals_away REAL NOT NULL DEFAULT 0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_league_position REAL NOT NULL DEFAULT 10;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_league_position REAL NOT NULL DEFAULT 10;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_league_position_normalized REAL NOT NULL DEFAULT 0.5;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_league_position_normalized REAL NOT NULL DEFAULT 0.5;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_win_margin_ratio REAL NOT NULL DEFAULT 1.0;`); } catch (e) {}
+try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_win_margin_ratio REAL NOT NULL DEFAULT 1.0;`); } catch (e) {}
+
+console.log('✅ All 39 new feature columns added to both database and tester');
 
 export const databaseDb = drizzle(databaseSqlite, { schema });
 export const testerDb = drizzle(testerSqlite, { schema });

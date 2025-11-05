@@ -1244,6 +1244,132 @@ export default function MatchDetailsPage() {
           </Card>
         )}
 
+        {/* Over/Under Stats */}
+        {(homeTeamStats.overUnder05 || homeTeamStats.overUnder15 || homeTeamStats.overUnder35) && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Over/Under Goals Stats</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {homeTeamStats.overUnder05 && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.overUnder05.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.overUnder05.count} / {homeTeamStats.overUnder05.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">Over 0.5 Goals</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.overUnder05?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.overUnder05?.count} / {awayTeamStats.overUnder05?.total}</div>
+                    </div>
+                  </div>
+                )}
+                {homeTeamStats.overUnder15 && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.overUnder15.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.overUnder15.count} / {homeTeamStats.overUnder15.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">Over 1.5 Goals</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.overUnder15?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.overUnder15?.count} / {awayTeamStats.overUnder15?.total}</div>
+                    </div>
+                  </div>
+                )}
+                {homeTeamStats.overUnder35 && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.overUnder35.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.overUnder35.count} / {homeTeamStats.overUnder35.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">Over 3.5 Goals</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.overUnder35?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.overUnder35?.count} / {awayTeamStats.overUnder35?.total}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Home/Away Performance */}
+        {(homeTeamStats.homeWinRate || homeTeamStats.awayWinRate) && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Home/Away Win Rates</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {homeTeamStats.homeWinRate && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.homeWinRate.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.homeWinRate.count} / {homeTeamStats.homeWinRate.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">Home Wins (at home)</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.homeWinRate?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.homeWinRate?.count} / {awayTeamStats.homeWinRate?.total}</div>
+                    </div>
+                  </div>
+                )}
+                {homeTeamStats.awayWinRate && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.awayWinRate.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{homeTeamStats.awayWinRate.count} / {homeTeamStats.awayWinRate.total}</div>
+                    </div>
+                    <div className="text-muted-foreground">Away Wins (on the road)</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.awayWinRate?.percentage.toFixed(2)}%</div>
+                      <div className="text-xs text-muted-foreground">{awayTeamStats.awayWinRate?.count} / {awayTeamStats.awayWinRate?.total}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* League Position & Points */}
+        {(homeTeamStats.leaguePosition || homeTeamStats.pointsPerGame) && (
+          <Card>
+            <CardHeader>
+              <CardTitle>League Standing & Performance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {homeTeamStats.leaguePosition !== undefined && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-2xl font-bold">{homeTeamStats.leaguePosition}</div>
+                    </div>
+                    <div className="text-muted-foreground">League Position</div>
+                    <div className="space-y-1">
+                      <div className="text-2xl font-bold">{awayTeamStats.leaguePosition}</div>
+                    </div>
+                  </div>
+                )}
+                {homeTeamStats.pointsPerGame !== undefined && (
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{homeTeamStats.pointsPerGame.toFixed(2)}</div>
+                    </div>
+                    <div className="text-muted-foreground">Points Per Game</div>
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold">{awayTeamStats.pointsPerGame?.toFixed(2)}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Head to Head */}
         {headToHead && headToHead.totalMatches > 0 && (
           <Card>

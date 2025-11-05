@@ -110,6 +110,59 @@ export function prepareNumericalFeatures(stats: MatchStats): number[] {
     stats.homeTeamHtLostRateL8,
     stats.awayTeamHtLostRateL8,
     
+    // NEW: Home/Away-specific win rates
+    stats.homeTeamWinRateHome,
+    stats.homeTeamWinRateAway,
+    stats.awayTeamWinRateHome,
+    stats.awayTeamWinRateAway,
+    
+    // NEW: Points per game
+    stats.homeTeamPointsPerGame,
+    stats.awayTeamPointsPerGame,
+    
+    // NEW: Over/Under goal percentages
+    stats.homeTeamOver05Rate,
+    stats.awayTeamOver05Rate,
+    stats.homeTeamOver15Rate,
+    stats.awayTeamOver15Rate,
+    stats.homeTeamOver35Rate,
+    stats.awayTeamOver35Rate,
+    
+    // NEW: Failed to score percentage
+    stats.homeTeamFailedToScoreRate,
+    stats.awayTeamFailedToScoreRate,
+    
+    // NEW: Goals per half ratio
+    stats.homeTeamGoalsPerHalfRatio,
+    stats.awayTeamGoalsPerHalfRatio,
+    
+    // NEW: Comparative metrics
+    stats.relativeAttackStrength,
+    stats.relativeDefenseStrength,
+    stats.momentumDifference,
+    stats.recentGoalDifference,
+    
+    // NEW: Market-specific features
+    stats.expectedWinRatioHome,
+    stats.expectedWinRatioAway,
+    stats.winToOddsIndexHome,
+    stats.winToOddsIndexAway,
+    stats.expectedValue1,
+    stats.expectedValueX,
+    stats.expectedValue2,
+    stats.marketExpectedGoalsHome,
+    stats.marketExpectedGoalsAway,
+    
+    // NEW: League position
+    stats.homeTeamLeaguePosition,
+    stats.awayTeamLeaguePosition,
+    stats.homeTeamLeaguePositionNormalized,
+    stats.awayTeamLeaguePositionNormalized,
+    
+    // NEW: Win margin ratio
+    stats.homeTeamWinMarginRatio,
+    stats.awayTeamWinMarginRatio,
+    
     // League statistics
     stats.leagueHomeWins,
     stats.leagueDraws,
@@ -125,7 +178,7 @@ export function prepareNumericalFeatures(stats: MatchStats): number[] {
     stats.prob1,
     stats.probX,
     stats.prob2,
-  ];
+  ]; // Total: 84 features (45 original + 39 new)
 }
 
 /**
@@ -184,7 +237,7 @@ export function buildModel(config: ModelArchitectureConfig): tf.LayersModel {
   const awayTeamInput = tf.input({ shape: [1], name: 'away_team_id', dtype: 'int32' });
   const leagueInput = tf.input({ shape: [1], name: 'league_id', dtype: 'int32' });
   const countryInput = tf.input({ shape: [1], name: 'country_id', dtype: 'int32' });
-  const numericalInput = tf.input({ shape: [45], name: 'numerical_features' });
+  const numericalInput = tf.input({ shape: [84], name: 'numerical_features' });
   
   // Embedding layers with 40-15-10 configuration
   const homeTeamEmbedding = tf.layers.embedding({
@@ -413,7 +466,7 @@ export async function trainModel(
     away_team_id: tf.tensor2d(trainData.awayTeamIds.map(id => [id]), [trainData.awayTeamIds.length, 1], 'int32'),
     league_id: tf.tensor2d(trainData.leagueIds.map(id => [id]), [trainData.leagueIds.length, 1], 'int32'),
     country_id: tf.tensor2d(trainData.countryIds.map(id => [id]), [trainData.countryIds.length, 1], 'int32'),
-    numerical_features: tf.tensor2d(trainData.numericalFeatures, [trainData.numericalFeatures.length, 45])
+    numerical_features: tf.tensor2d(trainData.numericalFeatures, [trainData.numericalFeatures.length, 84])
   };
   
   const trainYs = {
@@ -430,7 +483,7 @@ export async function trainModel(
     away_team_id: tf.tensor2d(valData.awayTeamIds.map(id => [id]), [valData.awayTeamIds.length, 1], 'int32'),
     league_id: tf.tensor2d(valData.leagueIds.map(id => [id]), [valData.leagueIds.length, 1], 'int32'),
     country_id: tf.tensor2d(valData.countryIds.map(id => [id]), [valData.countryIds.length, 1], 'int32'),
-    numerical_features: tf.tensor2d(valData.numericalFeatures, [valData.numericalFeatures.length, 45])
+    numerical_features: tf.tensor2d(valData.numericalFeatures, [valData.numericalFeatures.length, 84])
   };
   
   const valYs = {
@@ -540,7 +593,7 @@ export async function predict(
     away_team_id: tf.tensor2d([[cats.awayTeamId]], [1, 1], 'int32'),
     league_id: tf.tensor2d([[cats.leagueId]], [1, 1], 'int32'),
     country_id: tf.tensor2d([[cats.countryId]], [1, 1], 'int32'),
-    numerical_features: tf.tensor2d([nums], [1, 45])
+    numerical_features: tf.tensor2d([nums], [1, 84])
   };
   
   // Make prediction

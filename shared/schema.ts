@@ -115,6 +115,59 @@ export const matchStats = sqliteTable("match_stats", {
   homeTeamHtLostRateL8: real("home_team_ht_lost_rate_l8").notNull(),
   awayTeamHtLostRateL8: real("away_team_ht_lost_rate_l8").notNull(),
   
+  // NEW: Home/Away-specific win rates
+  homeTeamWinRateHome: real("home_team_win_rate_home").notNull(),
+  homeTeamWinRateAway: real("home_team_win_rate_away").notNull(),
+  awayTeamWinRateHome: real("away_team_win_rate_home").notNull(),
+  awayTeamWinRateAway: real("away_team_win_rate_away").notNull(),
+  
+  // NEW: Points per game
+  homeTeamPointsPerGame: real("home_team_points_per_game").notNull(),
+  awayTeamPointsPerGame: real("away_team_points_per_game").notNull(),
+  
+  // NEW: Over/Under goal percentages
+  homeTeamOver05Rate: real("home_team_over_0_5_rate").notNull(),
+  awayTeamOver05Rate: real("away_team_over_0_5_rate").notNull(),
+  homeTeamOver15Rate: real("home_team_over_1_5_rate").notNull(),
+  awayTeamOver15Rate: real("away_team_over_1_5_rate").notNull(),
+  homeTeamOver35Rate: real("home_team_over_3_5_rate").notNull(),
+  awayTeamOver35Rate: real("away_team_over_3_5_rate").notNull(),
+  
+  // NEW: Failed to score percentage
+  homeTeamFailedToScoreRate: real("home_team_failed_to_score_rate").notNull(),
+  awayTeamFailedToScoreRate: real("away_team_failed_to_score_rate").notNull(),
+  
+  // NEW: Goals per half ratio (1H / 2H)
+  homeTeamGoalsPerHalfRatio: real("home_team_goals_per_half_ratio").notNull(),
+  awayTeamGoalsPerHalfRatio: real("away_team_goals_per_half_ratio").notNull(),
+  
+  // NEW: Comparative metrics
+  relativeAttackStrength: real("relative_attack_strength").notNull(),
+  relativeDefenseStrength: real("relative_defense_strength").notNull(),
+  momentumDifference: real("momentum_difference").notNull(),
+  recentGoalDifference: real("recent_goal_difference").notNull(),
+  
+  // NEW: Market-specific features
+  expectedWinRatioHome: real("expected_win_ratio_home").notNull(),
+  expectedWinRatioAway: real("expected_win_ratio_away").notNull(),
+  winToOddsIndexHome: real("win_to_odds_index_home").notNull(),
+  winToOddsIndexAway: real("win_to_odds_index_away").notNull(),
+  expectedValue1: real("expected_value_1").notNull(),
+  expectedValueX: real("expected_value_x").notNull(),
+  expectedValue2: real("expected_value_2").notNull(),
+  marketExpectedGoalsHome: real("market_expected_goals_home").notNull(),
+  marketExpectedGoalsAway: real("market_expected_goals_away").notNull(),
+  
+  // NEW: League position normalized
+  homeTeamLeaguePosition: real("home_team_league_position").notNull(),
+  awayTeamLeaguePosition: real("away_team_league_position").notNull(),
+  homeTeamLeaguePositionNormalized: real("home_team_league_position_normalized").notNull(),
+  awayTeamLeaguePositionNormalized: real("away_team_league_position_normalized").notNull(),
+  
+  // NEW: Win margin ratio
+  homeTeamWinMarginRatio: real("home_team_win_margin_ratio").notNull(),
+  awayTeamWinMarginRatio: real("away_team_win_margin_ratio").notNull(),
+  
   // League statistics
   leagueHomeWins: real("league_home_wins").notNull(),
   leagueDraws: real("league_draws").notNull(),
@@ -205,6 +258,24 @@ export const teamStatsSchema = z.object({
   goalsConcededHome: z.number().optional(),
   goalsConcededAway: z.number().optional(),
   cleanSheetPercentage: z.number(),
+  
+  // NEW: Home/Away-specific win rates
+  winPercentageHome: z.number().optional(),
+  winPercentageAway: z.number().optional(),
+  drawPercentageHome: z.number().optional(),
+  drawPercentageAway: z.number().optional(),
+  lossPercentageHome: z.number().optional(),
+  lossPercentageAway: z.number().optional(),
+  
+  // NEW: Over/Under percentages
+  over05Percentage: z.number().optional(),
+  over15Percentage: z.number().optional(),
+  over25Percentage: z.number().optional(),
+  over35Percentage: z.number().optional(),
+  under05Percentage: z.number().optional(),
+  under15Percentage: z.number().optional(),
+  under25Percentage: z.number().optional(),
+  under35Percentage: z.number().optional(),
   
   // Double Chance stats
   doubleChance1X: z.object({ percentage: z.number(), count: z.number(), total: z.number() }).optional(),
@@ -361,6 +432,11 @@ export const matchDetailsSchema = z.object({
     groupName: z.string().optional(),
     table: z.array(standingSchema),
   }).optional(),
+  
+  // NEW: League positions for both teams
+  homeTeamLeaguePosition: z.number().optional(),
+  awayTeamLeaguePosition: z.number().optional(),
+  totalTeamsInLeague: z.number().optional(),
 });
 
 export type MatchDetails = z.infer<typeof matchDetailsSchema>;

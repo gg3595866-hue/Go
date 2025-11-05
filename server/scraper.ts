@@ -860,6 +860,105 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
       }
     });
     
+    // NEW: Parse Over/Under statistics
+    let homeOver05, homeOver15, homeOver25, homeOver35;
+    let awayOver05, awayOver15, awayOver25, awayOver35;
+    let homeUnder05, homeUnder15, homeUnder25, homeUnder35;
+    let awayUnder05, awayUnder15, awayUnder25, awayUnder35;
+    
+    const overUnderSection = findStatSection('Over/Under');
+    overUnderSection.find('.list-group-item').each((i, row) => {
+      const stat = parseStatRow(row);
+      if (stat.label.includes('Over 0.5')) {
+        homeOver05 = stat.home?.percentage || 0;
+        awayOver05 = stat.away?.percentage || 0;
+      } else if (stat.label.includes('Over 1.5')) {
+        homeOver15 = stat.home?.percentage || 0;
+        awayOver15 = stat.away?.percentage || 0;
+      } else if (stat.label.includes('Over 2.5')) {
+        homeOver25 = stat.home?.percentage || 0;
+        awayOver25 = stat.away?.percentage || 0;
+      } else if (stat.label.includes('Over 3.5')) {
+        homeOver35 = stat.home?.percentage || 0;
+        awayOver35 = stat.away?.percentage || 0;
+      } else if (stat.label.includes('Under 0.5')) {
+        homeUnder05 = stat.home?.percentage || 0;
+        awayUnder05 = stat.away?.percentage || 0;
+      } else if (stat.label.includes('Under 1.5')) {
+        homeUnder15 = stat.home?.percentage || 0;
+        awayUnder15 = stat.away?.percentage || 0;
+      } else if (stat.label.includes('Under 2.5')) {
+        homeUnder25 = stat.home?.percentage || 0;
+        awayUnder25 = stat.away?.percentage || 0;
+      } else if (stat.label.includes('Under 3.5')) {
+        homeUnder35 = stat.home?.percentage || 0;
+        awayUnder35 = stat.away?.percentage || 0;
+      }
+    });
+    
+    // NEW: Extract Home/Away-specific win rates
+    // These may be in separate tabs/sections - attempt to find them
+    let homeWinPercentHome, homeWinPercentAway, homeDrawPercentHome, homeDrawPercentAway, homeLossPercentHome, homeLossPercentAway;
+    let awayWinPercentHome, awayWinPercentAway, awayDrawPercentHome, awayDrawPercentAway, awayLossPercentHome, awayLossPercentAway;
+    
+    // Look for "Home" and "Away" sections or tabs
+    const homeSection = findStatSection('Home Statistics').length > 0 ? findStatSection('Home Statistics') : findStatSection('Home');
+    const awaySection = findStatSection('Away Statistics').length > 0 ? findStatSection('Away Statistics') : findStatSection('Away');
+    
+    homeSection.find('.list-group-item').each((i, row) => {
+      const stat = parseStatRow(row);
+      if (stat.label.includes('Wins')) {
+        homeWinPercentHome = stat.home?.percentage || 0;
+        awayWinPercentHome = stat.away?.percentage || 0;
+      } else if (stat.label.includes('Draws')) {
+        homeDrawPercentHome = stat.home?.percentage || 0;
+        awayDrawPercentHome = stat.away?.percentage || 0;
+      } else if (stat.label.includes('Losses')) {
+        homeLossPercentHome = stat.home?.percentage || 0;
+        awayLossPercentHome = stat.away?.percentage || 0;
+      }
+    });
+    
+    awaySection.find('.list-group-item').each((i, row) => {
+      const stat = parseStatRow(row);
+      if (stat.label.includes('Wins')) {
+        homeWinPercentAway = stat.home?.percentage || 0;
+        awayWinPercentAway = stat.away?.percentage || 0;
+      } else if (stat.label.includes('Draws')) {
+        homeDrawPercentAway = stat.home?.percentage || 0;
+        awayDrawPercentAway = stat.away?.percentage || 0;
+      } else if (stat.label.includes('Losses')) {
+        homeLossPercentAway = stat.home?.percentage || 0;
+        awayLossPercentAway = stat.away?.percentage || 0;
+      }
+    });
+    
+    // NEW: Extract league positions from standings table
+    let homeTeamPosition: number | undefined;
+    let awayTeamPosition: number | undefined;
+    let totalTeamsInLeague: number | undefined;
+    
+    const standingsTable = $('table tbody');
+    if (standingsTable.length > 0) {
+      const rows = standingsTable.find('tr');
+      totalTeamsInLeague = rows.length;
+      
+      rows.each((i, row) => {
+        const cells = $(row).find('td');
+        if (cells.length >= 2) {
+          const position = parseInt($(cells[0]).text().trim());
+          const teamName = $(cells[1]).text().trim();
+          
+          if (teamName.toLowerCase().includes(homeTeam.toLowerCase()) || homeTeam.toLowerCase().includes(teamName.toLowerCase())) {
+            homeTeamPosition = position;
+          }
+          if (teamName.toLowerCase().includes(awayTeam.toLowerCase()) || awayTeam.toLowerCase().includes(teamName.toLowerCase())) {
+            awayTeamPosition = position;
+          }
+        }
+      });
+    }
+    
     // Extract H2H stats
     const h2hMatches = extractStat(/played against.*?(\d+)\s*times/, 0);
     const drawPercent = extractStat(/(\d+)\s*%.*?ended in a.*?draw/);
@@ -1017,6 +1116,24 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
         goalsConceded: homeGoalsConceded,
         cleanSheetPercentage: homeCleanSheet,
         
+        // NEW: Home/Away-specific win rates
+        winPercentageHome: homeWinPercentHome,
+        winPercentageAway: homeWinPercentAway,
+        drawPercentageHome: homeDrawPercentHome,
+        drawPercentageAway: homeDrawPercentAway,
+        lossPercentageHome: homeLossPercentHome,
+        lossPercentageAway: homeLossPercentAway,
+        
+        // NEW: Over/Under percentages
+        over05Percentage: homeOver05,
+        over15Percentage: homeOver15,
+        over25Percentage: homeOver25,
+        over35Percentage: homeOver35,
+        under05Percentage: homeUnder05,
+        under15Percentage: homeUnder15,
+        under25Percentage: homeUnder25,
+        under35Percentage: homeUnder35,
+        
         // Double Chance
         doubleChance1X: homeDoubleChance1X,
         doubleChanceX2: homeDoubleChanceX2,
@@ -1058,6 +1175,24 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
         goalsScored: awayGoalsScored,
         goalsConceded: awayGoalsConceded,
         cleanSheetPercentage: awayCleanSheet,
+        
+        // NEW: Home/Away-specific win rates
+        winPercentageHome: awayWinPercentHome,
+        winPercentageAway: awayWinPercentAway,
+        drawPercentageHome: awayDrawPercentHome,
+        drawPercentageAway: awayDrawPercentAway,
+        lossPercentageHome: awayLossPercentHome,
+        lossPercentageAway: awayLossPercentAway,
+        
+        // NEW: Over/Under percentages
+        over05Percentage: awayOver05,
+        over15Percentage: awayOver15,
+        over25Percentage: awayOver25,
+        over35Percentage: awayOver35,
+        under05Percentage: awayUnder05,
+        under15Percentage: awayUnder15,
+        under25Percentage: awayUnder25,
+        under35Percentage: awayUnder35,
         
         // Double Chance
         doubleChance1X: awayDoubleChance1X,
@@ -1103,6 +1238,11 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
       odds,
       oddsData,
       insights: insights.slice(0, 10),
+      
+      // NEW: League positions
+      homeTeamLeaguePosition: homeTeamPosition,
+      awayTeamLeaguePosition: awayTeamPosition,
+      totalTeamsInLeague,
     };
     
     console.log(`Successfully scraped match details for ${homeTeam} vs ${awayTeam}`);
