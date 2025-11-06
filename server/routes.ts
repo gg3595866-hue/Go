@@ -700,107 +700,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ML Training endpoint
+  // Build Team Ratings from Historical Data (replaces ML Training)
   app.post("/api/ml/train", async (req, res) => {
     try {
-      const {
-        epochs = 30,
-        batchSize = 32,
-        validationSplit = 0.2,
-        learningRate = 0.001,
-        teamEmbeddingSize = 40,
-        leagueEmbeddingSize = 15,
-        countryEmbeddingSize = 10,
-        hiddenLayers = [128, 64]
-      } = req.body;
+      console.log('Building team ratings from historical data...');
 
-      console.log('Starting model training...');
-
-      // Get all training data from database
       const matchStatsArray = await databaseStorage.getAllMatchStats();
 
-      if (matchStatsArray.length < 100) {
+      if (matchStatsArray.length < 50) {
         return res.status(400).json({
-          error: 'Insufficient training data',
-          message: 'At least 100 completed matches are required for training'
+          error: 'Insufficient data',
+          message: 'At least 50 completed matches are required to build ratings'
         });
       }
 
-      // Import ML functions
-      const { trainModel, saveModel } = await import('./ml-model');
+      const { createDefaultTeamRating, updateTeamRatingFromMatch } = await import('./rating-system');
 
-      // Determine unique counts for embeddings
+      await databaseStorage.deleteAllTeamRatings();
+
       const uniqueTeams = new Set<number>();
-      const uniqueLeagues = new Set<number>();
-      const uniqueCountries = new Set<number>();
-
       matchStatsArray.forEach(stats => {
         uniqueTeams.add(stats.homeTeamId);
         uniqueTeams.add(stats.awayTeamId);
-        uniqueLeagues.add(stats.leagueId);
-        uniqueCountries.add(stats.countryId);
       });
 
-      const archConfig = {
-        numTeams: Math.max(...Array.from(uniqueTeams)),
-        numLeagues: Math.max(...Array.from(uniqueLeagues)),
-        numCountries: Math.max(...Array.from(uniqueCountries)),
-        teamEmbeddingSize: 50,
-        leagueEmbeddingSize: 20,
-        countryEmbeddingSize: 10,
-        hiddenLayers
-      };
+      for (const teamId of uniqueTeams) {
+        const defaultRating = createDefaultTeamRating(teamId);
+        await databaseStorage.createTeamRating(defaultRating);
+      }
 
-      const trainingConfig = {
-        epochs,
-        batchSize,
-        validationSplit,
-        learningRate
-      };
-
-      // Train model
-      const { model, result } = await trainModel(
-        matchStatsArray,
-        trainingConfig,
-        archConfig
+      let processedMatches = 0;
+      const sortedMatches = matchStatsArray.sort((a, b) => 
+        a.matchDate.getTime() - b.matchDate.getTime()
       );
 
-      // Save model
-      const modelPath = `./models/model_${Date.now()}`;
-      await saveModel(model, modelPath);
+      for (const match of sortedMatches) {
+        if (match.ftHomeScore === null || match.ftAwayScore === null) continue;
 
-      // Save model metadata
-      const modelMetadata = await databaseStorage.createModel({
-        modelName: 'Multi-Task Football Predictor',
-        version: '1.0',
-        architecture: JSON.stringify({ trainingConfig, archConfig }),
-        trainingAccuracy: result.finalMetrics.trainingAccuracy,
-        validationAccuracy: result.finalMetrics.validationAccuracy,
-        loss: result.finalMetrics.loss,
-        trainingDate: new Date(),
-        totalEpochs: epochs,
-        totalSamples: matchStatsArray.length,
-        isActive: true,
-        modelPath
-      });
+        const homeRating = await databaseStorage.getTeamRating(match.homeTeamId);
+        const awayRating = await databaseStorage.getTeamRating(match.awayTeamId);
 
-      // Set as active model
-      await databaseStorage.setActiveModel(modelMetadata.id);
+        if (homeRating && awayRating) {
+          const homeUpdate = updateTeamRatingFromMatch(homeRating, match, true);
+          const awayUpdate = updateTeamRatingFromMatch(awayRating, match, false);
 
-      console.log('Model training completed successfully');
+          await databaseStorage.updateTeamRating(match.homeTeamId, homeUpdate);
+          await databaseStorage.updateTeamRating(match.awayTeamId, awayUpdate);
+          processedMatches++;
+        }
+      }
+
+      const allRatings = await databaseStorage.getAllTeamRatings();
+
+      console.log('Team ratings built successfully');
 
       res.json({
         success: true,
-        modelId: modelMetadata.id,
-        metrics: result.finalMetrics,
-        history: result.history,
-        totalSamples: matchStatsArray.length
+        totalMatches: matchStatsArray.length,
+        processedMatches,
+        totalTeams: allRatings.length,
+        averageRating: allRatings.reduce((sum, r) => sum + r.eloRating, 0) / allRatings.length,
+        topRating: Math.max(...allRatings.map(r => r.eloRating)),
+        bottomRating: Math.min(...allRatings.map(r => r.eloRating))
       });
 
     } catch (error) {
-      console.error('Error training model:', error);
+      console.error('Error building team ratings:', error);
       res.status(500).json({
-        error: 'Failed to train model',
+        error: 'Failed to build team ratings',
         message: error instanceof Error ? error.message : 'Unknown error'
       });
     }
@@ -860,25 +827,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Predict matches in tester database
+  // Predict matches using rating system
   app.post("/api/ml/predict", async (req, res) => {
     try {
-      console.log('Starting predictions for tester matches...');
+      console.log('Starting predictions using rating system...');
 
-      // Get active model
-      const activeModel = await databaseStorage.getActiveModel();
-      if (!activeModel) {
-        return res.status(404).json({
-          error: 'No active model found',
-          message: 'Please train a model first'
-        });
-      }
-
-      // Load the model
-      const { loadModel, predict } = await import('./ml-model');
-      const model = await loadModel(activeModel.modelPath!);
-
-      // Get all matches from tester database
       const testerMatches = await testerStorage.getAllMatchStats();
 
       if (testerMatches.length === 0) {
@@ -888,28 +841,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      const allRatings = await databaseStorage.getAllTeamRatings();
+      if (allRatings.length === 0) {
+        return res.status(400).json({
+          error: 'No team ratings found',
+          message: 'Please build team ratings first (use the Train button)'
+        });
+      }
+
+      const { calculateMatchProbabilities } = await import('./rating-system');
+
+      await testerStorage.deleteAllRatingPredictions();
+
       const predictions = [];
 
       for (const match of testerMatches) {
         try {
-          const prediction = await predict(model, match);
+          const homeRating = await databaseStorage.getTeamRating(match.homeTeamId);
+          const awayRating = await databaseStorage.getTeamRating(match.awayTeamId);
 
-          // Store prediction in database
-          const savedPrediction = await testerStorage.createPrediction({
+          if (!homeRating || !awayRating) {
+            console.log(`Skipping match ${match.id}: missing team ratings`);
+            continue;
+          }
+
+          const prediction = calculateMatchProbabilities(
+            homeRating.eloRating,
+            awayRating.eloRating,
+            homeRating.attackRating,
+            awayRating.attackRating,
+            homeRating.defenseRating,
+            awayRating.defenseRating
+          );
+
+          const savedPrediction = await testerStorage.createRatingPrediction({
             matchStatsId: match.id,
-            modelId: activeModel.id,
-            predHomeWinProb: prediction.ftResult.home,
-            predDrawProb: prediction.ftResult.draw,
-            predAwayWinProb: prediction.ftResult.away,
-            predResult: prediction.ftResult.predicted,
-            predHomeScore: prediction.scores.homeScore,
-            predAwayScore: prediction.scores.awayScore,
-            predHtHomeScore: prediction.htScores.homeScore,
-            predHtAwayScore: prediction.htScores.awayScore,
-            predBttsProb: prediction.btts.probability,
-            predBtts: prediction.btts.predicted,
-            predOver25Prob: prediction.over25.probability,
-            predOver25: prediction.over25.predicted,
+            homeTeamRating: homeRating.eloRating,
+            awayTeamRating: awayRating.eloRating,
+            homeWinProb: prediction.homeWinProb,
+            drawProb: prediction.drawProb,
+            awayWinProb: prediction.awayWinProb,
+            predictedResult: prediction.predictedResult,
+            predictedHomeScore: prediction.predictedHomeScore,
+            predictedAwayScore: prediction.predictedAwayScore,
+            bttsProb: prediction.bttsProb,
+            over25Prob: prediction.over25Prob,
             confidence: prediction.confidence
           });
 
@@ -940,11 +916,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get predictions for a specific match
+  // Get rating predictions for a specific match
   app.get("/api/ml/predictions/:matchStatsId", async (req, res) => {
     try {
       const { matchStatsId } = req.params;
-      const predictions = await testerStorage.getPredictionsByMatchStatsId(parseInt(matchStatsId));
+      const predictions = await testerStorage.getRatingPredictionsByMatchStatsId(parseInt(matchStatsId));
       res.json(predictions);
     } catch (error) {
       console.error('Error fetching predictions:', error);
@@ -952,57 +928,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Feature Importance Analysis for Football
+  // Get team ratings analysis
   app.post("/api/ml/analyze-features", async (req, res) => {
     try {
-      console.log('Starting feature importance analysis...');
+      console.log('Analyzing team ratings...');
 
-      // Get active model
-      const activeModel = await databaseStorage.getActiveModel();
-      if (!activeModel) {
+      const allRatings = await databaseStorage.getAllTeamRatings();
+      
+      if (allRatings.length === 0) {
         return res.status(404).json({
-          error: 'No active model found',
-          message: 'Please train a model first'
+          error: 'No team ratings found',
+          message: 'Please build team ratings first'
         });
       }
 
-      // Load the model
-      const { loadModel } = await import('./ml-model');
-      const model = await loadModel(activeModel.modelPath!);
+      const sortedByElo = [...allRatings].sort((a, b) => b.eloRating - a.eloRating);
+      const sortedByAttack = [...allRatings].sort((a, b) => b.attackRating - a.attackRating);
+      const sortedByDefense = [...allRatings].sort((a, b) => b.defenseRating - a.defenseRating);
+      const sortedByWinRate = [...allRatings].sort((a, b) => b.ftWinRate - a.ftWinRate);
 
-      // Get validation data (use 20% of database for analysis)
-      const allMatches = await databaseStorage.getAllMatchStats();
-      const validMatches = allMatches.filter(m => 
-        m.ftResult && m.ftHomeScore !== null && m.ftAwayScore !== null
-      );
-
-      if (validMatches.length < 50) {
-        return res.status(400).json({
-          error: 'Insufficient data',
-          message: 'At least 50 completed matches required for analysis'
-        });
-      }
-
-      // Use last 20% as validation set for analysis
-      const validationSize = Math.floor(validMatches.length * 0.2);
-      const validationData = validMatches.slice(-validationSize);
-
-      // Run feature importance analysis
-      const { computePermutationImportance, printFeatureImportanceReport } = await import('./feature-importance');
-      const report = await computePermutationImportance(model, validationData, 3);
-
-      // Print report to console
-      printFeatureImportanceReport(report);
+      const stats = {
+        totalTeams: allRatings.length,
+        averageEloRating: allRatings.reduce((sum, r) => sum + r.eloRating, 0) / allRatings.length,
+        averageWinRate: allRatings.reduce((sum, r) => sum + r.ftWinRate, 0) / allRatings.length,
+        averageGoalsScored: allRatings.reduce((sum, r) => sum + r.avgGoalsScored, 0) / allRatings.length,
+        averageGoalsConceded: allRatings.reduce((sum, r) => sum + r.avgGoalsConceded, 0) / allRatings.length,
+        topByElo: sortedByElo.slice(0, 10).map(r => ({ 
+          teamId: r.teamId, 
+          eloRating: r.eloRating, 
+          winRate: r.ftWinRate 
+        })),
+        topByAttack: sortedByAttack.slice(0, 10).map(r => ({ 
+          teamId: r.teamId, 
+          attackRating: r.attackRating, 
+          avgGoalsScored: r.avgGoalsScored 
+        })),
+        topByDefense: sortedByDefense.slice(0, 10).map(r => ({ 
+          teamId: r.teamId, 
+          defenseRating: r.defenseRating, 
+          avgGoalsConceded: r.avgGoalsConceded 
+        })),
+        topByWinRate: sortedByWinRate.slice(0, 10).map(r => ({ 
+          teamId: r.teamId, 
+          winRate: r.ftWinRate, 
+          totalMatches: r.totalMatches 
+        }))
+      };
 
       res.json({
         success: true,
-        report
+        stats
       });
 
     } catch (error) {
-      console.error('Error analyzing features:', error);
+      console.error('Error analyzing team ratings:', error);
       res.status(500).json({
-        error: 'Failed to analyze features',
+        error: 'Failed to analyze team ratings',
         message: error instanceof Error ? error.message : 'Unknown error'
       });
     }
@@ -1066,10 +1047,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all predictions
+  // Get all rating predictions
   app.get("/api/ml/predictions", async (req, res) => {
     try {
-      const predictions = await testerStorage.getAllPredictions();
+      const predictions = await testerStorage.getAllRatingPredictions();
       res.json(predictions);
     } catch (error) {
       console.error('Error fetching predictions:', error);
