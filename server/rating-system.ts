@@ -122,6 +122,7 @@ export function calculateMatchProbabilities(
  */
 export function updateTeamRatingFromMatch(
   teamRating: TeamRating,
+  opponentRating: TeamRating,
   match: MatchStats,
   isHome: boolean
 ): Partial<InsertTeamRating> {
@@ -152,8 +153,10 @@ export function updateTeamRatingFromMatch(
     isLoss = true;
   }
   
-  // Calculate expected score (simplified - in real scenario we'd use opponent rating)
-  const expectedScore = 0.5; // Default expectation
+  // Calculate expected score based on team ratings (apply home advantage if home team)
+  const teamElo = isHome ? teamRating.eloRating + HOME_ADVANTAGE : teamRating.eloRating;
+  const opponentElo = !isHome ? opponentRating.eloRating + HOME_ADVANTAGE : opponentRating.eloRating;
+  const expectedScore = calculateExpectedScore(teamElo, opponentElo);
   
   // Update Elo rating
   const newEloRating = updateEloRating(teamRating.eloRating, expectedScore, actualScore);

@@ -741,8 +741,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const awayRating = await databaseStorage.getTeamRating(match.awayTeamId);
 
         if (homeRating && awayRating) {
-          const homeUpdate = updateTeamRatingFromMatch(homeRating, match, true);
-          const awayUpdate = updateTeamRatingFromMatch(awayRating, match, false);
+          const homeUpdate = updateTeamRatingFromMatch(homeRating, awayRating, match, true);
+          const awayUpdate = updateTeamRatingFromMatch(awayRating, homeRating, match, false);
 
           await databaseStorage.updateTeamRating(match.homeTeamId, homeUpdate);
           await databaseStorage.updateTeamRating(match.awayTeamId, awayUpdate);
