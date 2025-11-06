@@ -612,3 +612,119 @@ export const insertBasketballPredictionSchema = createInsertSchema(basketballPre
 
 export type BasketballPrediction = typeof basketballPredictions.$inferSelect;
 export type InsertBasketballPrediction = z.infer<typeof insertBasketballPredictionSchema>;
+
+// Team Ratings Table - Dynamic Rating System (replaces ML)
+export const teamRatings = sqliteTable("team_ratings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  teamId: integer("team_id").notNull().unique(),
+  
+  // Core Rating
+  eloRating: real("elo_rating").notNull().default(1500),
+  attackRating: real("attack_rating").notNull().default(1500),
+  defenseRating: real("defense_rating").notNull().default(1500),
+  
+  // Match Stats
+  totalMatches: integer("total_matches").notNull().default(0),
+  homeMatches: integer("home_matches").notNull().default(0),
+  awayMatches: integer("away_matches").notNull().default(0),
+  wins: integer("wins").notNull().default(0),
+  draws: integer("draws").notNull().default(0),
+  losses: integer("losses").notNull().default(0),
+  
+  // Situational Dynamics
+  performanceAsFavorite: real("performance_as_favorite").notNull().default(0),
+  performanceAsUnderdog: real("performance_as_underdog").notNull().default(0),
+  performanceInBadForm: real("performance_in_bad_form").notNull().default(0),
+  performanceAfterLoss: real("performance_after_loss").notNull().default(0),
+  performanceAfterWin: real("performance_after_win").notNull().default(0),
+  performanceInHighScoringGames: real("performance_in_high_scoring_games").notNull().default(0),
+  performanceInLowScoringGames: real("performance_in_low_scoring_games").notNull().default(0),
+  homeStreak: integer("home_streak").notNull().default(0),
+  awayStreak: integer("away_streak").notNull().default(0),
+  unbeatenStreak: integer("unbeaten_streak").notNull().default(0),
+  losingStreak: integer("losing_streak").notNull().default(0),
+  goalMarginAvg: real("goal_margin_avg").notNull().default(0),
+  winningMarginBy1: integer("winning_margin_by_1").notNull().default(0),
+  winningMarginBy2Plus: integer("winning_margin_by_2_plus").notNull().default(0),
+  lossMarginBy1: integer("loss_margin_by_1").notNull().default(0),
+  lossMarginBy2Plus: integer("loss_margin_by_2_plus").notNull().default(0),
+  
+  // Market Correlations
+  winRateVsOdds: real("win_rate_vs_odds").notNull().default(0),
+  over25VsOdds: real("over_2_5_vs_odds").notNull().default(0),
+  bttsVsOdds: real("btts_vs_odds").notNull().default(0),
+  varianceInMarketAccuracy: real("variance_in_market_accuracy").notNull().default(0),
+  underdogWinRate: real("underdog_win_rate").notNull().default(0),
+  highOddsAccuracy: real("high_odds_accuracy").notNull().default(0),
+  lowOddsAccuracy: real("low_odds_accuracy").notNull().default(0),
+  
+  // Halftime / Fulltime
+  htWinRate: real("ht_win_rate").notNull().default(0),
+  htDrawRate: real("ht_draw_rate").notNull().default(0),
+  htLossRate: real("ht_loss_rate").notNull().default(0),
+  ftWinRate: real("ft_win_rate").notNull().default(0),
+  ftDrawRate: real("ft_draw_rate").notNull().default(0),
+  ftLossRate: real("ft_loss_rate").notNull().default(0),
+  htFtConsistencyRate: real("ht_ft_consistency_rate").notNull().default(0),
+  htLeadToWinRate: real("ht_lead_to_win_rate").notNull().default(0),
+  htDrawToWinRate: real("ht_draw_to_win_rate").notNull().default(0),
+  htLossToWinRate: real("ht_loss_to_win_rate").notNull().default(0),
+  
+  // BTTS Dynamics
+  bttsYesRate: real("btts_yes_rate").notNull().default(0),
+  bttsNoRate: real("btts_no_rate").notNull().default(0),
+  bttsAndWinRate: real("btts_and_win_rate").notNull().default(0),
+  bttsAndLossRate: real("btts_and_loss_rate").notNull().default(0),
+  bttsAndOver25Rate: real("btts_and_over_2_5_rate").notNull().default(0),
+  bttsAndUnder25Rate: real("btts_and_under_2_5_rate").notNull().default(0),
+  
+  // Goals Stats
+  goalsScored: integer("goals_scored").notNull().default(0),
+  goalsConceded: integer("goals_conceded").notNull().default(0),
+  avgGoalsScored: real("avg_goals_scored").notNull().default(0),
+  avgGoalsConceded: real("avg_goals_conceded").notNull().default(0),
+  
+  updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+export const insertTeamRatingSchema = createInsertSchema(teamRatings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type TeamRating = typeof teamRatings.$inferSelect;
+export type InsertTeamRating = z.infer<typeof insertTeamRatingSchema>;
+
+// Match Predictions using Rating System
+export const ratingPredictions = sqliteTable("rating_predictions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  matchStatsId: integer("match_stats_id").notNull(),
+  
+  homeTeamRating: real("home_team_rating").notNull(),
+  awayTeamRating: real("away_team_rating").notNull(),
+  
+  homeWinProb: real("home_win_prob").notNull(),
+  drawProb: real("draw_prob").notNull(),
+  awayWinProb: real("away_win_prob").notNull(),
+  
+  predictedResult: text("predicted_result").notNull(),
+  predictedHomeScore: real("predicted_home_score").notNull(),
+  predictedAwayScore: real("predicted_away_score").notNull(),
+  
+  bttsProb: real("btts_prob").notNull(),
+  over25Prob: real("over_2_5_prob").notNull(),
+  
+  confidence: real("confidence").notNull(),
+  
+  createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
+export const insertRatingPredictionSchema = createInsertSchema(ratingPredictions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type RatingPrediction = typeof ratingPredictions.$inferSelect;
+export type InsertRatingPrediction = z.infer<typeof insertRatingPredictionSchema>;
