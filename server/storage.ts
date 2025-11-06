@@ -9,6 +9,8 @@ import {
   basketballStats,
   basketballModelMetadata,
   basketballPredictions,
+  teamRatings,
+  ratingPredictions,
   type User, 
   type InsertUser, 
   type MatchStats, 
@@ -25,7 +27,11 @@ import {
   type BasketballModelMetadata,
   type InsertBasketballModelMetadata,
   type BasketballPrediction,
-  type InsertBasketballPrediction
+  type InsertBasketballPrediction,
+  type TeamRating,
+  type InsertTeamRating,
+  type RatingPrediction,
+  type InsertRatingPrediction
 } from "@shared/schema";
 import { databaseDb, testerDb } from "./db";
 import { eq, desc } from "drizzle-orm";
@@ -83,6 +89,19 @@ export interface IStorage {
   getBasketballPredictionsByStatsId(basketballStatsId: number): Promise<BasketballPrediction[]>;
   getAllBasketballPredictions(): Promise<BasketballPrediction[]>;
   deleteAllBasketballPredictions(): Promise<boolean>;
+  
+  // Team Rating methods
+  getTeamRating(teamId: number): Promise<TeamRating | undefined>;
+  getAllTeamRatings(): Promise<TeamRating[]>;
+  createTeamRating(rating: InsertTeamRating): Promise<TeamRating>;
+  updateTeamRating(teamId: number, rating: Partial<InsertTeamRating>): Promise<TeamRating | undefined>;
+  deleteAllTeamRatings(): Promise<boolean>;
+  
+  // Rating Prediction methods
+  createRatingPrediction(prediction: InsertRatingPrediction): Promise<RatingPrediction>;
+  getRatingPredictionsByMatchStatsId(matchStatsId: number): Promise<RatingPrediction[]>;
+  getAllRatingPredictions(): Promise<RatingPrediction[]>;
+  deleteAllRatingPredictions(): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -576,6 +595,77 @@ export class DatabaseStorage implements IStorage {
       return true;
     } catch (error) {
       console.error('Error deleting all basketball predictions:', error);
+      return false;
+    }
+  }
+  
+  // Team Rating methods
+  async getTeamRating(teamId: number): Promise<TeamRating | undefined> {
+    const [rating] = await this.db
+      .select()
+      .from(teamRatings)
+      .where(eq(teamRatings.teamId, teamId));
+    return rating || undefined;
+  }
+  
+  async getAllTeamRatings(): Promise<TeamRating[]> {
+    return this.db.select().from(teamRatings).orderBy(desc(teamRatings.eloRating));
+  }
+  
+  async createTeamRating(rating: InsertTeamRating): Promise<TeamRating> {
+    const [created] = await this.db
+      .insert(teamRatings)
+      .values(rating)
+      .returning();
+    return created;
+  }
+  
+  async updateTeamRating(teamId: number, rating: Partial<InsertTeamRating>): Promise<TeamRating | undefined> {
+    const [updated] = await this.db
+      .update(teamRatings)
+      .set({ ...rating, updatedAt: new Date() })
+      .where(eq(teamRatings.teamId, teamId))
+      .returning();
+    return updated || undefined;
+  }
+  
+  async deleteAllTeamRatings(): Promise<boolean> {
+    try {
+      await this.db.delete(teamRatings);
+      return true;
+    } catch (error) {
+      console.error('Error deleting all team ratings:', error);
+      return false;
+    }
+  }
+  
+  // Rating Prediction methods
+  async createRatingPrediction(prediction: InsertRatingPrediction): Promise<RatingPrediction> {
+    const [created] = await this.db
+      .insert(ratingPredictions)
+      .values(prediction)
+      .returning();
+    return created;
+  }
+  
+  async getRatingPredictionsByMatchStatsId(matchStatsId: number): Promise<RatingPrediction[]> {
+    return this.db
+      .select()
+      .from(ratingPredictions)
+      .where(eq(ratingPredictions.matchStatsId, matchStatsId))
+      .orderBy(desc(ratingPredictions.createdAt));
+  }
+  
+  async getAllRatingPredictions(): Promise<RatingPrediction[]> {
+    return this.db.select().from(ratingPredictions).orderBy(desc(ratingPredictions.createdAt));
+  }
+  
+  async deleteAllRatingPredictions(): Promise<boolean> {
+    try {
+      await this.db.delete(ratingPredictions);
+      return true;
+    } catch (error) {
+      console.error('Error deleting all rating predictions:', error);
       return false;
     }
   }
