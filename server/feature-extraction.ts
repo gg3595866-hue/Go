@@ -375,9 +375,30 @@ export function validateBasketballMatchData(basketballMatchDetails: any): { vali
   // Check for team stats
   const homeWinsPercent = stats?.teamStats?.home?.winsPercent;
   const awayWinsPercent = stats?.teamStats?.away?.winsPercent;
+  const homeLossesPercent = stats?.teamStats?.home?.lossesPercent;
+  const awayLossesPercent = stats?.teamStats?.away?.lossesPercent;
   
   if (homeWinsPercent === undefined || awayWinsPercent === undefined) {
     return { valid: false, reason: 'Missing team win percentage stats' };
+  }
+
+  // Check for unrealistic percentage values (should be 0-100)
+  const percentageFields = [
+    { value: homeWinsPercent, name: 'Home wins %' },
+    { value: awayWinsPercent, name: 'Away wins %' },
+    { value: homeLossesPercent, name: 'Home losses %' },
+    { value: awayLossesPercent, name: 'Away losses %' }
+  ];
+
+  for (const field of percentageFields) {
+    if (field.value !== undefined && field.value !== null) {
+      if (field.value < 0 || field.value > 100) {
+        return { 
+          valid: false, 
+          reason: `Unrealistic percentage value for ${field.name}: ${field.value}% (should be 0-100)` 
+        };
+      }
+    }
   }
 
   return { valid: true };
@@ -417,6 +438,36 @@ export function validateFootballMatchData(matchDetails: MatchDetails): { valid: 
 
   if (homeStatsCount === 0 || awayStatsCount === 0) {
     return { valid: false, reason: 'Team statistics are all zeros - incomplete data' };
+  }
+
+  // Check for unrealistic percentage values (should be 0-100)
+  const checkPercentageRealistic = (value: number | undefined | null, name: string): boolean => {
+    if (value === undefined || value === null) return true; // Allow missing values
+    return value >= 0 && value <= 100;
+  };
+
+  const percentageFields = [
+    { value: homeTeamStats.winPercentage, name: 'Home win %' },
+    { value: homeTeamStats.drawPercentage, name: 'Home draw %' },
+    { value: homeTeamStats.lossPercentage, name: 'Home loss %' },
+    { value: awayTeamStats.winPercentage, name: 'Away win %' },
+    { value: awayTeamStats.drawPercentage, name: 'Away draw %' },
+    { value: awayTeamStats.lossPercentage, name: 'Away loss %' },
+    { value: homeTeamStats.over05Percentage, name: 'Home over 0.5 %' },
+    { value: homeTeamStats.over15Percentage, name: 'Home over 1.5 %' },
+    { value: homeTeamStats.over25Percentage, name: 'Home over 2.5 %' },
+    { value: awayTeamStats.over05Percentage, name: 'Away over 0.5 %' },
+    { value: awayTeamStats.over15Percentage, name: 'Away over 1.5 %' },
+    { value: awayTeamStats.over25Percentage, name: 'Away over 2.5 %' }
+  ];
+
+  for (const field of percentageFields) {
+    if (!checkPercentageRealistic(field.value, field.name)) {
+      return { 
+        valid: false, 
+        reason: `Unrealistic percentage value for ${field.name}: ${field.value}% (should be 0-100)` 
+      };
+    }
   }
 
   // Check if odds data exists (important for predictions)
