@@ -706,6 +706,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('Building team ratings from historical data...');
 
       const matchStatsArray = await databaseStorage.getAllMatchStats();
+      console.log(`Loaded ${matchStatsArray.length} matches from database`);
 
       if (matchStatsArray.length < 50) {
         return res.status(400).json({
@@ -716,6 +717,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { createDefaultTeamRating, updateTeamRatingFromMatch } = await import('./rating-system');
 
+      console.log('Clearing existing team ratings...');
       await databaseStorage.deleteAllTeamRatings();
 
       const uniqueTeams = new Set<number>();
@@ -724,6 +726,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         uniqueTeams.add(stats.awayTeamId);
       });
 
+      console.log(`Creating default ratings for ${uniqueTeams.size} teams...`);
       for (const teamId of uniqueTeams) {
         const defaultRating = createDefaultTeamRating(teamId);
         await databaseStorage.createTeamRating(defaultRating);
@@ -733,6 +736,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sortedMatches = matchStatsArray.sort((a, b) => 
         a.matchDate.getTime() - b.matchDate.getTime()
       );
+
+      console.log(`Processing ${sortedMatches.length} matches chronologically...`);
+      const totalMatches = sortedMatches.length;
 
       for (const match of sortedMatches) {
         if (match.ftHomeScore === null || match.ftAwayScore === null) continue;
@@ -747,8 +753,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await databaseStorage.updateTeamRating(match.homeTeamId, homeUpdate);
           await databaseStorage.updateTeamRating(match.awayTeamId, awayUpdate);
           processedMatches++;
+          
+          // Log progress every 100 matches
+          if (processedMatches % 100 === 0) {
+            console.log(`Progress: ${processedMatches}/${totalMatches} matches processed (${Math.round(processedMatches/totalMatches*100)}%)`);
+          }
         }
       }
+      
+      console.log(`Finished processing ${processedMatches} matches`)
 
       const allRatings = await databaseStorage.getAllTeamRatings();
 
