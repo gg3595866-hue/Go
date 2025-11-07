@@ -700,18 +700,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Build Team Ratings from Historical Data (replaces ML Training)
+  // Build Team Ratings and Train Neural Network
   app.post("/api/ml/train", async (req, res) => {
     try {
-      console.log('Building team ratings from historical data...');
+      const {
+        epochs = 30,
+        batchSize = 32,
+        validationSplit = 0.2,
+        learningRate = 0.001,
+        teamEmbeddingSize = 50,
+        leagueEmbeddingSize = 20,
+        countryEmbeddingSize = 10,
+        hiddenLayers = [128, 64]
+      } = req.body;
 
+      console.log('Building team ratings from historical data...');
       const matchStatsArray = await databaseStorage.getAllMatchStats();
       console.log(`Loaded ${matchStatsArray.length} matches from database`);
 
-      if (matchStatsArray.length < 50) {
+      if (matchStatsArray.length < 100) {
         return res.status(400).json({
           error: 'Insufficient data',
-          message: 'At least 50 completed matches are required to build ratings'
+          message: 'At least 100 completed matches are required'
         });
       }
 
@@ -754,54 +764,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await databaseStorage.updateTeamRating(match.awayTeamId, awayUpdate);
           processedMatches++;
           
-          // Log progress every 100 matches
           if (processedMatches % 100 === 0) {
             console.log(`Progress: ${processedMatches}/${totalMatches} matches processed (${Math.round(processedMatches/totalMatches*100)}%)`);
           }
         }
       }
-      
-      console.log(`Finished processing ${processedMatches} matches`)
 
+      console.log('Team ratings built successfully. Training neural network...');
+
+      // Build ratings map
       const allRatings = await databaseStorage.getAllTeamRatings();
+      const ratingsMap = new Map(allRatings.map(r => [r.teamId, r]));
 
-      console.log('Team ratings built successfully');
-
-      // Create a pseudo-model metadata entry for compatibility with frontend
-      const modelMetadata = await databaseStorage.createModel({
-        modelName: 'Rating System',
-        version: '1.0',
-        architecture: JSON.stringify({ type: 'elo-based-ratings' }),
-        trainingAccuracy: processedMatches / matchStatsArray.length,
-        validationAccuracy: processedMatches / matchStatsArray.length,
-        loss: 0,
-        trainingDate: new Date(),
-        totalEpochs: 1,
-        totalSamples: matchStatsArray.length,
-        isActive: true
+      const uniqueLeagues = new Set<number>();
+      const uniqueCountries = new Set<number>();
+      matchStatsArray.forEach(stats => {
+        uniqueLeagues.add(stats.leagueId);
+        uniqueCountries.add(stats.countryId);
       });
+
+      const archConfig = {
+        numTeams: Math.max(...Array.from(uniqueTeams)),
+        numLeagues: Math.max(...Array.from(uniqueLeagues)),
+        numCountries: Math.max(...Array.from(uniqueCountries)),
+        teamEmbeddingSize,
+        leagueEmbeddingSize,
+        countryEmbeddingSize,
+        hiddenLayers
+      };
+
+      const trainingConfig = {
+        epochs,
+        batchSize,
+        validationSplit,
+        learningRate
+      };
+
+      const { trainRatingModel, saveRatingModel } = await import('./ml-model-ratings');
+      const { model, result, normalizationStats } = await trainRatingModel(
+        matchStatsArray,
+        ratingsMap,
+        trainingConfig,
+        archConfig
+      );
+
+      const modelPath = `./rating-models/model_${Date.now()}`;
+      await saveRatingModel(model, modelPath, normalizationStats);
+
+      const modelMetadata = await databaseStorage.createModel({
+        modelName: 'Rating-Based Neural Network',
+        version: '1.0',
+        architecture: JSON.stringify({ trainingConfig, archConfig }),
+        trainingAccuracy: result.finalMetrics.trainingAccuracy,
+        validationAccuracy: result.finalMetrics.validationAccuracy,
+        loss: result.finalMetrics.loss,
+        trainingDate: new Date(),
+        totalEpochs: epochs,
+        totalSamples: matchStatsArray.length,
+        isActive: true,
+        modelPath
+      });
+
+      await databaseStorage.setActiveModel(modelMetadata.id);
 
       res.json({
         success: true,
         modelId: modelMetadata.id,
         totalSamples: matchStatsArray.length,
-        metrics: {
-          trainingAccuracy: processedMatches / matchStatsArray.length,
-          validationAccuracy: processedMatches / matchStatsArray.length,
-          loss: 0
-        },
+        metrics: result.finalMetrics,
+        history: result.history,
         totalMatches: matchStatsArray.length,
         processedMatches,
         totalTeams: allRatings.length,
-        averageRating: allRatings.reduce((sum, r) => sum + r.eloRating, 0) / allRatings.length,
-        topRating: Math.max(...allRatings.map(r => r.eloRating)),
-        bottomRating: Math.min(...allRatings.map(r => r.eloRating))
+        averageRating: allRatings.reduce((sum, r) => sum + r.eloRating, 0) / allRatings.length
       });
 
     } catch (error) {
-      console.error('Error building team ratings:', error);
+      console.error('Error training model:', error);
       res.status(500).json({
-        error: 'Failed to build team ratings',
+        error: 'Failed to train model',
         message: error instanceof Error ? error.message : 'Unknown error'
       });
     }
@@ -861,13 +902,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Predict matches using rating system
+  // Predict matches using neural network with rating features
   app.post("/api/ml/predict", async (req, res) => {
     try {
-      console.log('Starting predictions using rating system...');
+      console.log('Starting predictions using neural network...');
+
+      const activeModel = await databaseStorage.getActiveModel();
+      if (!activeModel || !activeModel.modelPath) {
+        return res.status(400).json({
+          error: 'No active model found',
+          message: 'Please train a model first'
+        });
+      }
 
       const testerMatches = await testerStorage.getAllMatchStats();
-
       if (testerMatches.length === 0) {
         return res.status(400).json({
           error: 'No matches to predict',
@@ -875,15 +923,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const allRatings = await databaseStorage.getAllTeamRatings();
-      if (allRatings.length === 0) {
-        return res.status(400).json({
-          error: 'No team ratings found',
-          message: 'Please build team ratings first (use the Train button)'
-        });
-      }
-
-      const { calculateMatchProbabilitiesHybrid } = await import('./rating-system');
+      const { loadRatingModel, predictWithRatingModel } = await import('./ml-model-ratings');
+      const { model, normalizationStats } = await loadRatingModel(activeModel.modelPath);
 
       await testerStorage.deleteAllRatingPredictions();
 
@@ -891,7 +932,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (const match of testerMatches) {
         try {
-          // Get team ratings for both teams
           const homeRating = await databaseStorage.getTeamRating(match.homeTeamId);
           const awayRating = await databaseStorage.getTeamRating(match.awayTeamId);
 
@@ -900,44 +940,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
 
-          // Validate that match has sufficient reliable data for prediction
-          const hasValidStats = 
-            match.homeTeamWinRateL8 !== null && match.homeTeamWinRateL8 >= 0 &&
-            match.awayTeamWinRateL8 !== null && match.awayTeamWinRateL8 >= 0 &&
-            match.odds1 !== null && match.odds1 > 1.0 &&
-            match.oddsX !== null && match.oddsX > 1.0 &&
-            match.odds2 !== null && match.odds2 > 1.0;
-
-          if (!hasValidStats) {
-            console.log(`Skipping match ${match.id}: insufficient reliable data for accurate prediction`);
-            continue;
-          }
-
-          // Only predict if team ratings are reasonable (have played enough matches)
           if (homeRating.totalMatches < 5 || awayRating.totalMatches < 5) {
-            console.log(`Skipping match ${match.id}: teams haven't played enough matches for reliable ratings`);
+            console.log(`Skipping match ${match.id}: insufficient match history`);
             continue;
           }
 
-          // Use the hybrid Poisson model with team ratings + match features
-          const prediction = calculateMatchProbabilitiesHybrid(match, homeRating, awayRating);
+          const prediction = await predictWithRatingModel(
+            model,
+            match,
+            homeRating,
+            awayRating,
+            normalizationStats
+          );
 
           const savedPrediction = await testerStorage.createRatingPrediction({
             matchStatsId: match.id,
             homeTeamRating: homeRating.eloRating,
             awayTeamRating: awayRating.eloRating,
-            homeWinProb: prediction.homeWinProb,
-            drawProb: prediction.drawProb,
-            awayWinProb: prediction.awayWinProb,
-            predictedResult: prediction.predictedResult,
-            predictedHomeScore: prediction.predictedHomeScore,
-            predictedAwayScore: prediction.predictedAwayScore,
-            predictedHtHomeScore: prediction.predictedHtHomeScore,
-            predictedHtAwayScore: prediction.predictedHtAwayScore,
-            bttsProb: prediction.bttsProb,
-            predictedBtts: prediction.predictedBtts,
-            over25Prob: prediction.over25Prob,
-            predictedOver25: prediction.predictedOver25,
+            homeWinProb: prediction.result.home,
+            drawProb: prediction.result.draw,
+            awayWinProb: prediction.result.away,
+            predictedResult: prediction.result.predicted,
+            predictedHomeScore: prediction.scores.homeScore,
+            predictedAwayScore: prediction.scores.awayScore,
+            predictedHtHomeScore: Math.round(prediction.scores.homeScore * 0.45),
+            predictedHtAwayScore: Math.round(prediction.scores.awayScore * 0.45),
+            bttsProb: prediction.btts.prob,
+            predictedBtts: prediction.btts.predicted,
+            over25Prob: prediction.overUnder25.prob,
+            predictedOver25: prediction.overUnder25.predicted,
             confidence: prediction.confidence
           });
 
