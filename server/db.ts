@@ -454,6 +454,40 @@ try {
   // Column already exists, ignore
 }
 
+// Add Pressure and Mistake Propensity metrics to team_ratings table
+try {
+  databaseSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN comeback_rate REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added comeback_rate column to team_ratings table');
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN performance_in_close_games REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added performance_in_close_games column to team_ratings table');
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN mental_strength REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added mental_strength column to team_ratings table');
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN performance_when_trailing REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added performance_when_trailing column to team_ratings table');
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN lead_blown_rate REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added lead_blown_rate column to team_ratings table');
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN clean_sheet_rate REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added clean_sheet_rate column to team_ratings table');
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN late_collapse_rate REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added late_collapse_rate column to team_ratings table');
+} catch (e) {}
+try {
+  databaseSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN defensive_errors INTEGER NOT NULL DEFAULT 0;`);
+  console.log('✅ Added defensive_errors column to team_ratings table');
+} catch (e) {}
+
 testerSqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -836,6 +870,40 @@ try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN home_team_win_margin
 try { testerSqlite.exec(`ALTER TABLE match_stats ADD COLUMN away_team_win_margin_ratio REAL NOT NULL DEFAULT 1.0;`); } catch (e) {}
 
 console.log('✅ All 39 new feature columns added to both database and tester');
+
+// Add Pressure and Mistake Propensity metrics to tester team_ratings table
+try {
+  testerSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN comeback_rate REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added comeback_rate column to tester team_ratings table');
+} catch (e) {}
+try {
+  testerSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN performance_in_close_games REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added performance_in_close_games column to tester team_ratings table');
+} catch (e) {}
+try {
+  testerSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN mental_strength REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added mental_strength column to tester team_ratings table');
+} catch (e) {}
+try {
+  testerSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN performance_when_trailing REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added performance_when_trailing column to tester team_ratings table');
+} catch (e) {}
+try {
+  testerSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN lead_blown_rate REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added lead_blown_rate column to tester team_ratings table');
+} catch (e) {}
+try {
+  testerSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN clean_sheet_rate REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added clean_sheet_rate column to tester team_ratings table');
+} catch (e) {}
+try {
+  testerSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN late_collapse_rate REAL NOT NULL DEFAULT 0;`);
+  console.log('✅ Added late_collapse_rate column to tester team_ratings table');
+} catch (e) {}
+try {
+  testerSqlite.exec(`ALTER TABLE team_ratings ADD COLUMN defensive_errors INTEGER NOT NULL DEFAULT 0;`);
+  console.log('✅ Added defensive_errors column to tester team_ratings table');
+} catch (e) {}
 
 export const databaseDb = drizzle(databaseSqlite, { schema });
 export const testerDb = drizzle(testerSqlite, { schema });

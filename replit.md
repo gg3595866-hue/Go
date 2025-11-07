@@ -116,6 +116,25 @@ Key insight: Sportstats365 uses non-predictable slugs ("premiership" not "premie
   - **Original features** (35): Form metrics, win/draw/loss rates, goal statistics, betting odds, league stats
   - **New advanced features** (35): Home/away-specific metrics, points per game, over/under goal rates (0.5, 1.5, 3.5), failed-to-score rates, goals-per-half ratios, comparative metrics (attack/defense strength, momentum), market-specific features (expected win ratios, value indices), league position (raw and normalized), win margin ratios
 
+**Team Rating System (Dynamic, Updated Every Game)**
+The application uses a sophisticated Elo-based rating system that tracks 50+ metrics per team:
+- **Core Ratings**: Elo rating, attack rating, defense rating
+- **Momentum Metrics**: Win/draw/loss streaks, home/away streaks, unbeaten/losing streaks
+- **Offensive/Defensive Capacity**: Goals scored/conceded, average goals, performance in high/low scoring games
+- **Pressure Performance** (NEW):
+  - `comebackRate`: Win/draw rate after losing at halftime
+  - `performanceInCloseGames`: Win rate in 1-goal margin games
+  - `mentalStrength`: Ability to hold leads and win when ahead at HT
+  - `performanceWhenTrailing`: Points gained when losing at halftime
+- **Mistake Propensity** (NEW):
+  - `leadBlownRate`: Rate of dropping points after leading at halftime
+  - `cleanSheetRate`: Rate of keeping clean sheets (not conceding)
+  - `lateCollapseRate`: Rate of losing narrow HT leads (1-goal margins)
+  - `defensiveErrors`: Count of goals conceded from winning positions
+- **Market Expectations**: Performance vs odds, underdog win rate, BTTS correlations
+- **Half-time Analysis**: HT win/draw/loss rates, HT-FT consistency, comeback rates
+- All ratings update automatically after each match result
+
 **Entity ID Mapping System (for Neural Network Embeddings)**
 The application uses a centralized ID mapping system to ensure each team, league, and country gets a unique, consistent ID across both databases:
 - **Teams Table**: Maps team names to unique team IDs

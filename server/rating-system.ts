@@ -308,6 +308,59 @@ export function updateTeamRatingFromMatch(
   const newPerformanceInHighScoringGames = ((teamRating.performanceInHighScoringGames * teamRating.totalMatches) + (highScoring && isWin ? 1 : 0)) / newTotalMatches;
   const newPerformanceInLowScoringGames = ((teamRating.performanceInLowScoringGames * teamRating.totalMatches) + (lowScoring && isWin ? 1 : 0)) / newTotalMatches;
   
+  // Calculate Pressure Metrics
+  let newComebackRate = teamRating.comebackRate;
+  let newPerformanceWhenTrailing = teamRating.performanceWhenTrailing;
+  let newPerformanceInCloseGames = teamRating.performanceInCloseGames;
+  let newMentalStrength = teamRating.mentalStrength;
+  
+  // Comeback rate - winning/drawing after losing at HT
+  if (htTeamScore !== null && htOpponentScore !== null && htTeamScore < htOpponentScore) {
+    const comeback = (isWin || isDraw) ? 1 : 0;
+    newComebackRate = ((teamRating.comebackRate * teamRating.totalMatches) + comeback) / newTotalMatches;
+    
+    // Performance when trailing (points gained: 3 for win, 1 for draw)
+    const pointsGained = isWin ? 3 : (isDraw ? 1 : 0);
+    newPerformanceWhenTrailing = ((teamRating.performanceWhenTrailing * teamRating.totalMatches) + pointsGained) / newTotalMatches;
+  }
+  
+  // Performance in close games (1-goal margin)
+  if (Math.abs(goalDiff) === 1) {
+    const closeGameWin = isWin ? 1 : 0;
+    newPerformanceInCloseGames = ((teamRating.performanceInCloseGames * teamRating.totalMatches) + closeGameWin) / newTotalMatches;
+  }
+  
+  // Mental strength - ability to hold leads (win when leading at HT)
+  if (htTeamScore !== null && htOpponentScore !== null && htTeamScore > htOpponentScore) {
+    const heldLead = isWin ? 1 : 0;
+    newMentalStrength = ((teamRating.mentalStrength * teamRating.totalMatches) + heldLead) / newTotalMatches;
+  }
+  
+  // Calculate Mistake Propensity Metrics
+  let newLeadBlownRate = teamRating.leadBlownRate;
+  let newLateCollapseRate = teamRating.lateCollapseRate;
+  let newDefensiveErrors = teamRating.defensiveErrors;
+  const newCleanSheetRate = opponentScore === 0 ? ((teamRating.cleanSheetRate * teamRating.totalMatches) + 1) / newTotalMatches : (teamRating.cleanSheetRate * teamRating.totalMatches) / newTotalMatches;
+  
+  // Lead blown rate - dropping points after leading at HT
+  if (htTeamScore !== null && htOpponentScore !== null && htTeamScore > htOpponentScore) {
+    const droppedPoints = (isDraw || isLoss) ? 1 : 0;
+    newLeadBlownRate = ((teamRating.leadBlownRate * teamRating.totalMatches) + droppedPoints) / newTotalMatches;
+    
+    // Late collapse - losing/drawing after leading by 1 at HT (narrow lead blown)
+    if ((htTeamScore - htOpponentScore) === 1 && (isDraw || isLoss)) {
+      newLateCollapseRate = ((teamRating.lateCollapseRate * teamRating.totalMatches) + 1) / newTotalMatches;
+    } else if ((htTeamScore - htOpponentScore) === 1) {
+      newLateCollapseRate = (teamRating.lateCollapseRate * teamRating.totalMatches) / newTotalMatches;
+    }
+  }
+  
+  // Defensive errors - goals conceded from winning positions
+  if (htTeamScore !== null && htOpponentScore !== null && htTeamScore > htOpponentScore && opponentScore > htOpponentScore) {
+    const errorsInSecondHalf = opponentScore - htOpponentScore;
+    newDefensiveErrors = teamRating.defensiveErrors + errorsInSecondHalf;
+  }
+  
   return {
     teamId: teamRating.teamId,
     eloRating: newEloRating,
@@ -350,6 +403,14 @@ export function updateTeamRatingFromMatch(
     avgGoalsConceded: newAvgGoalsConceded,
     performanceInHighScoringGames: newPerformanceInHighScoringGames,
     performanceInLowScoringGames: newPerformanceInLowScoringGames,
+    comebackRate: newComebackRate,
+    performanceInCloseGames: newPerformanceInCloseGames,
+    mentalStrength: newMentalStrength,
+    performanceWhenTrailing: newPerformanceWhenTrailing,
+    leadBlownRate: newLeadBlownRate,
+    cleanSheetRate: newCleanSheetRate,
+    lateCollapseRate: newLateCollapseRate,
+    defensiveErrors: newDefensiveErrors,
   };
 }
 
@@ -411,5 +472,13 @@ export function createDefaultTeamRating(teamId: number): InsertTeamRating {
     goalsConceded: 0,
     avgGoalsScored: 0,
     avgGoalsConceded: 0,
+    comebackRate: 0,
+    performanceInCloseGames: 0,
+    mentalStrength: 0,
+    performanceWhenTrailing: 0,
+    leadBlownRate: 0,
+    cleanSheetRate: 0,
+    lateCollapseRate: 0,
+    defensiveErrors: 0,
   };
 }

@@ -684,6 +684,18 @@ export const teamRatings = sqliteTable("team_ratings", {
   avgGoalsScored: real("avg_goals_scored").notNull().default(0),
   avgGoalsConceded: real("avg_goals_conceded").notNull().default(0),
 
+  // Pressure Metrics
+  comebackRate: real("comeback_rate").notNull().default(0), // Win/draw rate after losing at HT
+  performanceInCloseGames: real("performance_in_close_games").notNull().default(0), // Win rate in 1-goal games
+  mentalStrength: real("mental_strength").notNull().default(0), // Ability to hold leads
+  performanceWhenTrailing: real("performance_when_trailing").notNull().default(0), // Points gained when losing at HT
+
+  // Mistake Propensity Metrics
+  leadBlownRate: real("lead_blown_rate").notNull().default(0), // Rate of dropping points after leading at HT
+  cleanSheetRate: real("clean_sheet_rate").notNull().default(0), // Rate of not conceding
+  lateCollapseRate: real("late_collapse_rate").notNull().default(0), // Rate of losing narrow HT leads
+  defensiveErrors: integer("defensive_errors").notNull().default(0), // Count of goals conceded from winning positions
+
   updatedAt: integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
   createdAt: integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
