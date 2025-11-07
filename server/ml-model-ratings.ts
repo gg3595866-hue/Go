@@ -557,18 +557,23 @@ export async function predictWithRatingModel(
     (normalizationStats.numericalFeatures.max[i] - normalizationStats.numericalFeatures.min[i])
   );
   
-  // Create input tensors
-  const inputs = {
-    home_team_id: tf.tensor2d([[match.homeTeamId]]),
-    away_team_id: tf.tensor2d([[match.awayTeamId]]),
-    league_id: tf.tensor2d([[match.leagueId]]),
-    country_id: tf.tensor2d([[match.countryId]]),
-    rating_features: tf.tensor2d([normalizedRatingFeatures]),
-    numerical_features: tf.tensor2d([normalizedNumerical]),
-  };
+  // Create input tensors in the same order as model inputs
+  const homeTeamTensor = tf.tensor2d([[match.homeTeamId]]);
+  const awayTeamTensor = tf.tensor2d([[match.awayTeamId]]);
+  const leagueTensor = tf.tensor2d([[match.leagueId]]);
+  const countryTensor = tf.tensor2d([[match.countryId]]);
+  const ratingFeaturesTensor = tf.tensor2d([normalizedRatingFeatures]);
+  const numericalFeaturesTensor = tf.tensor2d([normalizedNumerical]);
   
-  // Make prediction
-  const outputs = model.predict(inputs) as tf.Tensor[];
+  // Make prediction - model expects an array of tensors
+  const outputs = model.predict([
+    homeTeamTensor,
+    awayTeamTensor,
+    leagueTensor,
+    countryTensor,
+    ratingFeaturesTensor,
+    numericalFeaturesTensor,
+  ]) as tf.Tensor[];
   
   const [result1x2Data, overUnderData, bttsData, homeScoreData, awayScoreData] = await Promise.all([
     outputs[0].data(),
@@ -578,8 +583,13 @@ export async function predictWithRatingModel(
     outputs[4].data(),
   ]);
   
-  // Cleanup
-  Object.values(inputs).forEach(tensor => tensor.dispose());
+  // Cleanup tensors
+  homeTeamTensor.dispose();
+  awayTeamTensor.dispose();
+  leagueTensor.dispose();
+  countryTensor.dispose();
+  ratingFeaturesTensor.dispose();
+  numericalFeaturesTensor.dispose();
   outputs.forEach(tensor => tensor.dispose());
   
   // Denormalize scores
