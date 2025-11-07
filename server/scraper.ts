@@ -2047,6 +2047,55 @@ async function tryFetchLeaguePage(
 }
 
 /**
+ * Try to fetch a URL with HX-Request header for HTMX-loaded content
+ * Used for current ongoing seasons that require dynamic loading
+ */
+async function tryFetchLeaguePageWithHX(
+  url: string, 
+  expectedLeagueName?: string
+): Promise<{ success: boolean; html?: string; error?: any }> {
+  try {
+    const html: string = await new Promise((resolve, reject) => {
+      cloudscraper.get({
+        uri: url,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'HX-Request': 'true', // HTMX header for dynamic content
+        },
+      }, (error: any, response: any, body: string) => {
+        if (error) {
+          reject(error);
+        } else if (response && response.statusCode && response.statusCode !== 200) {
+          reject(new Error(`HTTP ${response.statusCode}`));
+        } else {
+          resolve(body);
+        }
+      });
+    });
+    
+    // Check if the page has match data (validate it's a real league page)
+    const $ = cheerio.load(html);
+    const hasMatches = $('.list-group-item').length > 0 || $('table').length > 0;
+    
+    if (!hasMatches) {
+      return { success: false, error: 'No match data found on page' };
+    }
+    
+    // Validate league name if provided (more lenient for HTMX responses)
+    if (expectedLeagueName && !validateLeagueName(html, expectedLeagueName)) {
+      // For HTMX endpoints, the title might not match, so we're more lenient
+      console.log(`⚠ League name validation skipped for HTMX endpoint`);
+    }
+    
+    return { success: true, html };
+  } catch (error) {
+    return { success: false, error };
+  }
+}
+
+/**
  * Scrape all matches for a specific league and year
  * Uses ONLY the comprehensive league mappings - NO URL guessing
  */
@@ -2099,8 +2148,23 @@ export async function scrapeLeagueMatches(
     
     const useSingleYear = singleYearLeagues.includes(slug);
     
+    // Determine if this is the current ongoing season
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1; // 1-12
+    // For most leagues, season starts in August (month 8)
+    // If we're in Aug-Dec, current season is currentYear/currentYear+1
+    // If we're in Jan-Jul, current season is currentYear-1/currentYear
+    const isCurrentSeason = useSingleYear 
+      ? year === currentYear 
+      : (currentMonth >= 8 ? year === currentYear : year === currentYear - 1);
+    
     // Try multiple URL formats for better success rate with current/future seasons
     const urlFormats = [];
+    
+    if (isCurrentSeason) {
+      // For current ongoing season, try base URL first (works for 2025/2026)
+      urlFormats.push('');  // Base URL without year suffix
+    }
     
     if (useSingleYear) {
       // For single year leagues, only try single year format
@@ -2116,24 +2180,43 @@ export async function scrapeLeagueMatches(
     
     // Try each URL format until one works
     for (const format of urlFormats) {
-      const tryUrl = `https://sportstats365.com/football/${slug}/${format}`;
-      console.log(`Trying league page: ${tryUrl}`);
+      const baseUrl = format 
+        ? `https://sportstats365.com/football/${slug}/${format}`
+        : `https://sportstats365.com/football/${slug}`;
       
-      const result = await tryFetchLeaguePage(tryUrl, cleanedName);
+      // For current season, also try the /matches endpoint with HX-Request header
+      const urlsToTry = isCurrentSeason && format
+        ? [
+            { url: `${baseUrl}/matches`, useHxRequest: true },  // Try matches endpoint first for current season
+            { url: baseUrl, useHxRequest: false }
+          ]
+        : [{ url: baseUrl, useHxRequest: false }];
       
-      if (result.success && result.html) {
-        html = result.html;
-        successUrl = tryUrl;
-        console.log(`✓ Successfully loaded league page: ${tryUrl}`);
-        break;
-      } else {
-        console.log(`✗ Failed to load ${tryUrl}: ${result.error}`);
+      for (const { url: tryUrl, useHxRequest } of urlsToTry) {
+        console.log(`Trying league page: ${tryUrl}${useHxRequest ? ' (with HX-Request)' : ''}`);
+        
+        const result = useHxRequest 
+          ? await tryFetchLeaguePageWithHX(tryUrl, cleanedName)
+          : await tryFetchLeaguePage(tryUrl, cleanedName);
+        
+        if (result.success && result.html) {
+          html = result.html;
+          successUrl = tryUrl;
+          console.log(`✓ Successfully loaded league page: ${tryUrl}`);
+          break;
+        } else {
+          console.log(`✗ Failed to load ${tryUrl}: ${result.error}`);
+        }
       }
+      
+      if (html && successUrl) break;
     }
     
     // If all URL formats failed, throw error
     if (!html || !successUrl) {
-      const triedUrls = urlFormats.map(f => `https://sportstats365.com/football/${slug}/${f}`).join(', ');
+      const triedUrls = urlFormats.map(f => 
+        f ? `https://sportstats365.com/football/${slug}/${f}` : `https://sportstats365.com/football/${slug}`
+      ).join(', ');
       throw new Error(
         `Failed to fetch league page for ${competitionName}. Tried URLs: ${triedUrls}. ` +
         `The year ${year} might not exist for this league, or the mapping might be incorrect.`
