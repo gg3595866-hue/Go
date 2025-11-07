@@ -73,8 +73,166 @@ export function updateEloRating(
 }
 
 /**
- * Calculate match prediction probabilities based on team ratings
+ * Enhanced Poisson model that uses historical match data and features
+ * Generates more realistic and diverse predictions
+ */
+export function calculateMatchProbabilitiesEnhanced(match: MatchStats): MatchPrediction {
+  // Step 1: Calculate expected goals based on historical data and features
+  
+  // Use market expected goals as a strong baseline (bookmakers are good predictors)
+  let homeExpectedGoals = match.marketExpectedGoalsHome || 1.3;
+  let awayExpectedGoals = match.marketExpectedGoalsAway || 1.3;
+  
+  // Adjust based on failed to score rates (teams that often fail to score should have lower xG)
+  if (match.homeTeamFailedToScoreRate > 0.3) {
+    homeExpectedGoals *= (1 - match.homeTeamFailedToScoreRate * 0.3);
+  }
+  if (match.awayTeamFailedToScoreRate > 0.3) {
+    awayExpectedGoals *= (1 - match.awayTeamFailedToScoreRate * 0.3);
+  }
+  
+  // Adjust based on clean sheet tendencies (defensive strength)
+  // Teams that often keep clean sheets reduce opponent's xG
+  const homeCleanSheetFactor = match.homeTeamToNilRateL8;
+  const awayCleanSheetFactor = match.awayTeamToNilRateL8;
+  awayExpectedGoals *= (1 - homeCleanSheetFactor * 0.25);
+  homeExpectedGoals *= (1 - awayCleanSheetFactor * 0.25);
+  
+  // Adjust based on recent form and momentum
+  const formAdjustmentHome = (match.homeTeamFormOverallL5 - 50) / 100; // -0.5 to +0.5
+  const formAdjustmentAway = (match.awayTeamFormOverallL5 - 50) / 100;
+  homeExpectedGoals *= (1 + formAdjustmentHome * 0.2);
+  awayExpectedGoals *= (1 + formAdjustmentAway * 0.2);
+  
+  // Consider league average goals (some leagues are more attacking)
+  const leagueGoalsFactor = match.leagueAvgGoals / 2.7; // 2.7 is typical league average
+  homeExpectedGoals *= leagueGoalsFactor;
+  awayExpectedGoals *= leagueGoalsFactor;
+  
+  // Adjust for Over 3.5 rate (teams in high-scoring games)
+  if (match.homeTeamOver35Rate > 0.5) {
+    homeExpectedGoals *= 1.1;
+  }
+  if (match.awayTeamOver35Rate > 0.5) {
+    awayExpectedGoals *= 1.1;
+  }
+  
+  // Ensure minimum realistic values
+  homeExpectedGoals = Math.max(0.2, Math.min(4.0, homeExpectedGoals));
+  awayExpectedGoals = Math.max(0.2, Math.min(4.0, awayExpectedGoals));
+  
+  // Step 2: Use Poisson distribution to calculate probabilities for all reasonable scores
+  const maxGoals = 8;
+  let homeWinProb = 0;
+  let drawProb = 0;
+  let awayWinProb = 0;
+  let bttsProb = 0;
+  let over25Prob = 0;
+  
+  // Store all scoreline probabilities for more analysis
+  const scorelineProbs: { home: number; away: number; prob: number }[] = [];
+  
+  for (let homeGoals = 0; homeGoals < maxGoals; homeGoals++) {
+    const homeProb = poissonProbability(homeExpectedGoals, homeGoals);
+    
+    for (let awayGoals = 0; awayGoals < maxGoals; awayGoals++) {
+      const awayProb = poissonProbability(awayExpectedGoals, awayGoals);
+      const scoreProbability = homeProb * awayProb;
+      
+      scorelineProbs.push({ home: homeGoals, away: awayGoals, prob: scoreProbability });
+      
+      // Accumulate 1X2 probabilities
+      if (homeGoals > awayGoals) {
+        homeWinProb += scoreProbability;
+      } else if (homeGoals < awayGoals) {
+        awayWinProb += scoreProbability;
+      } else {
+        drawProb += scoreProbability;
+      }
+      
+      // BTTS: Both teams score at least 1
+      if (homeGoals >= 1 && awayGoals >= 1) {
+        bttsProb += scoreProbability;
+      }
+      
+      // Over 2.5: Total goals >= 3
+      if (homeGoals + awayGoals >= 3) {
+        over25Prob += scoreProbability;
+      }
+    }
+  }
+  
+  // Step 3: Calibrate probabilities using historical BTTS and Over/Under rates
+  // The model's BTTS probability should be influenced by historical BTTS rates
+  const historicalBttsRate = (match.homeTeamBttsRateL4 + match.awayTeamBttsRateL4) / 2;
+  bttsProb = bttsProb * 0.6 + historicalBttsRate * 0.4; // Blend model with history
+  
+  // Calibrate Over 2.5 with historical data
+  const historicalOver25Rate = (match.homeTeamOver15Rate + match.awayTeamOver15Rate) / 2;
+  // If both teams have high Over 1.5 rates, Over 2.5 is more likely
+  if (historicalOver25Rate > 0.6) {
+    over25Prob = Math.min(0.95, over25Prob * 1.2);
+  } else if (historicalOver25Rate < 0.3) {
+    over25Prob = Math.max(0.05, over25Prob * 0.8);
+  }
+  
+  // Normalize 1X2 probabilities
+  const total1X2 = homeWinProb + drawProb + awayWinProb;
+  const normalizedHomeWin = homeWinProb / total1X2;
+  const normalizedDraw = drawProb / total1X2;
+  const normalizedAwayWin = awayWinProb / total1X2;
+  
+  // Predict result based on highest probability
+  let predictedResult: '1' | 'X' | '2';
+  if (normalizedHomeWin > normalizedDraw && normalizedHomeWin > normalizedAwayWin) {
+    predictedResult = '1';
+  } else if (normalizedAwayWin > normalizedDraw) {
+    predictedResult = '2';
+  } else {
+    predictedResult = 'X';
+  }
+  
+  // Half-time predictions using historical half-time goal rates
+  const htHomeExpectedGoals = homeExpectedGoals * 0.45 * match.homeTeamGoalsPerHalfRatio;
+  const htAwayExpectedGoals = awayExpectedGoals * 0.45 * match.awayTeamGoalsPerHalfRatio;
+  
+  // Confidence based on probability spread and market efficiency
+  const maxProb = Math.max(normalizedHomeWin, normalizedDraw, normalizedAwayWin);
+  let confidence = Math.min(0.95, maxProb);
+  
+  // Reduce confidence for unpredictable scenarios
+  if (Math.abs(normalizedHomeWin - normalizedAwayWin) < 0.1) {
+    confidence *= 0.85; // Close match, less confident
+  }
+  if (normalizedDraw > 0.3) {
+    confidence *= 0.9; // High draw probability reduces confidence
+  }
+  
+  // Determine predictions based on probabilities
+  const predictedBtts = bttsProb > 0.5;
+  const predictedOver25 = over25Prob > 0.5;
+  
+  return {
+    homeWinProb: normalizedHomeWin,
+    drawProb: normalizedDraw,
+    awayWinProb: normalizedAwayWin,
+    predictedResult,
+    predictedHomeScore: Math.round(homeExpectedGoals * 10) / 10,
+    predictedAwayScore: Math.round(awayExpectedGoals * 10) / 10,
+    predictedHtHomeScore: Math.round(htHomeExpectedGoals * 10) / 10,
+    predictedHtAwayScore: Math.round(htAwayExpectedGoals * 10) / 10,
+    bttsProb,
+    predictedBtts,
+    over25Prob,
+    predictedOver25,
+    confidence,
+  };
+}
+
+/**
+ * LEGACY: Calculate match prediction probabilities based on team ratings
  * Uses Poisson distribution for goal-based market predictions
+ * NOTE: Use calculateMatchProbabilitiesEnhanced for better predictions with full match data
  */
 export function calculateMatchProbabilities(
   homeRating: number,
