@@ -81,82 +81,84 @@ export function calculateMatchProbabilitiesHybrid(
   homeRating: TeamRating,
   awayRating: TeamRating
 ): MatchPrediction {
-  // STEP 1: Build baseline expected goals from team ratings (long-term strength)
+  // STEP 1: Build baseline expected goals from team ratings and market
   
-  // Convert attack/defense ratings to goal expectation
+  // Start with market expected goals as they're very reliable
+  const marketHomeGoals = match.marketExpectedGoalsHome || 1.4;
+  const marketAwayGoals = match.marketExpectedGoalsAway || 1.1;
+  
+  // Calculate team strength from ratings
   const homeAttackStrength = homeRating.attackRating / 1500;
-  const homeDefenseStrength = homeRating.defenseRating / 1500;
   const awayAttackStrength = awayRating.attackRating / 1500;
+  const homeDefenseStrength = homeRating.defenseRating / 1500;
   const awayDefenseStrength = awayRating.defenseRating / 1500;
   
-  // Use team's actual average goals scored/conceded as strong baseline
-  let homeBaseGoals = homeRating.avgGoalsScored || (homeAttackStrength * LEAGUE_AVG_GOALS / 2);
-  let awayBaseGoals = awayRating.avgGoalsScored || (awayAttackStrength * LEAGUE_AVG_GOALS / 2);
+  // Use team's actual average goals scored as baseline (more realistic than ratings)
+  let homeRatingGoals = (homeRating.avgGoalsScored > 0) 
+    ? homeRating.avgGoalsScored * 1.15  // Home advantage
+    : (homeAttackStrength / awayDefenseStrength) * (LEAGUE_AVG_GOALS / 2) * 1.15;
+    
+  let awayRatingGoals = (awayRating.avgGoalsScored > 0)
+    ? awayRating.avgGoalsScored * 0.95  // Away disadvantage  
+    : (awayAttackStrength / homeDefenseStrength) * (LEAGUE_AVG_GOALS / 2) * 0.95;
   
-  // Apply home advantage
-  homeBaseGoals *= 1.15;
-  awayBaseGoals *= 0.95;
+  // STEP 2: Blend market and rating expectations
+  // Market gets high weight because bookmakers are very accurate
+  // Team ratings provide context about specific team characteristics
+  const marketWeight = 0.55;  // Market is primary
+  const ratingWeight = 0.45;   // Team ratings provide adjustments
   
-  // STEP 2: Apply defensive strength of opponent
-  // Teams with high clean sheet rates and low goals conceded reduce opponent's expected goals
-  const homeDefensiveFactor = 1 - (homeRating.cleanSheetRate * 0.3);
-  const awayDefensiveFactor = 1 - (awayRating.cleanSheetRate * 0.3);
+  let homeExpectedGoals = (marketHomeGoals * marketWeight) + (homeRatingGoals * ratingWeight);
+  let awayExpectedGoals = (marketAwayGoals * marketWeight) + (awayRatingGoals * ratingWeight);
   
-  awayBaseGoals *= homeDefensiveFactor;
-  homeBaseGoals *= awayDefensiveFactor;
+  // STEP 3: Apply team characteristic adjustments (subtle modifications)
   
-  // STEP 3: Apply mental strength and mistake propensity
-  // Teams with high mental strength score more when expected to win
+  // Clean sheet rate - very strong defenses reduce opponent's goals slightly
+  if (homeRating.cleanSheetRate > 0.4) {
+    awayExpectedGoals *= (1 - (homeRating.cleanSheetRate - 0.4) * 0.3); // Max -18% reduction
+  }
+  if (awayRating.cleanSheetRate > 0.4) {
+    homeExpectedGoals *= (1 - (awayRating.cleanSheetRate - 0.4) * 0.3);
+  }
+  
+  // Mental strength and pressure performance
   if (homeRating.mentalStrength > 0.6) {
-    homeBaseGoals *= 1.08;
+    homeExpectedGoals *= 1.05;
   }
   if (awayRating.mentalStrength > 0.6) {
-    awayBaseGoals *= 1.08;
+    awayExpectedGoals *= 1.05;
   }
   
-  // Teams with high lead blown rate concede more goals (defensive mistakes)
-  if (homeRating.leadBlownRate > 0.3) {
-    awayBaseGoals *= (1 + homeRating.leadBlownRate * 0.2);
+  // Defensive mistakes - teams that blow leads concede more
+  if (homeRating.leadBlownRate > 0.35) {
+    awayExpectedGoals *= 1.08;
   }
-  if (awayRating.leadBlownRate > 0.3) {
-    homeBaseGoals *= (1 + awayRating.leadBlownRate * 0.2);
+  if (awayRating.leadBlownRate > 0.35) {
+    homeExpectedGoals *= 1.08;
   }
   
-  // Teams with high comeback rate can score more when trailing
+  // Comeback ability
   if (homeRating.comebackRate > 0.4) {
-    homeBaseGoals *= 1.05;
+    homeExpectedGoals *= 1.04;
   }
   if (awayRating.comebackRate > 0.4) {
-    awayBaseGoals *= 1.05;
+    awayExpectedGoals *= 1.04;
   }
   
-  // STEP 4: Blend with market expected goals (bookmakers have good info)
-  const marketHomeGoals = match.marketExpectedGoalsHome || homeBaseGoals;
-  const marketAwayGoals = match.marketExpectedGoalsAway || awayBaseGoals;
+  // STEP 4: Apply recent form (short-term adjustment)
+  const formAdjustmentHome = (match.homeTeamFormOverallL5 - 50) / 200; // -0.25 to +0.25
+  const formAdjustmentAway = (match.awayTeamFormOverallL5 - 50) / 200;
+  homeExpectedGoals *= (1 + formAdjustmentHome);
+  awayExpectedGoals *= (1 + formAdjustmentAway);
   
-  // Adaptive weighting based on team rating confidence
-  const homeRatingWeight = Math.min(0.6, homeRating.totalMatches / 50); // Max 0.6 weight after 50 matches
-  const awayRatingWeight = Math.min(0.6, awayRating.totalMatches / 50);
-  const marketWeight = 0.3; // Market always gets 30% weight
-  const formWeight = 0.1; // Recent form gets 10% weight
-  
-  let homeExpectedGoals = (homeBaseGoals * homeRatingWeight) + (marketHomeGoals * marketWeight);
-  let awayExpectedGoals = (awayBaseGoals * awayRatingWeight) + (marketAwayGoals * marketWeight);
-  
-  // STEP 5: Apply recent form adjustments (short-term context)
-  const formAdjustmentHome = (match.homeTeamFormOverallL5 - 50) / 100; // -0.5 to +0.5
-  const formAdjustmentAway = (match.awayTeamFormOverallL5 - 50) / 100;
-  homeExpectedGoals += (homeExpectedGoals * formAdjustmentHome * formWeight);
-  awayExpectedGoals += (awayExpectedGoals * formAdjustmentAway * formWeight);
-  
-  // STEP 6: Apply league context
+  // STEP 5: Apply league context
   const leagueGoalsFactor = match.leagueAvgGoals / 2.7;
   homeExpectedGoals *= leagueGoalsFactor;
   awayExpectedGoals *= leagueGoalsFactor;
   
-  // Ensure realistic bounds
-  homeExpectedGoals = Math.max(0.2, Math.min(4.0, homeExpectedGoals));
-  awayExpectedGoals = Math.max(0.2, Math.min(4.0, awayExpectedGoals));
+  // Ensure realistic bounds (wider range to allow diversity)
+  homeExpectedGoals = Math.max(0.4, Math.min(3.5, homeExpectedGoals));
+  awayExpectedGoals = Math.max(0.3, Math.min(3.5, awayExpectedGoals));
   
   // Step 2: Use Poisson distribution to calculate probabilities for all reasonable scores
   const maxGoals = 8;
