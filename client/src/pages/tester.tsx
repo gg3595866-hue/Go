@@ -19,7 +19,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import type { MatchStats, MatchPrediction } from "@shared/schema";
+import type { MatchStats, RatingPrediction } from "@shared/schema";
 
 type EnrichedMatchStats = MatchStats & {
   homeTeamName: string;
@@ -45,7 +45,7 @@ export default function TesterPage() {
     );
   });
 
-  const { data: predictions } = useQuery<MatchPrediction[]>({
+  const { data: predictions } = useQuery<RatingPrediction[]>({
     queryKey: ['/api/ml/predictions'],
   });
 
@@ -422,7 +422,7 @@ export default function TesterPage() {
                             <div>{stat.prob1 != null ? `${(stat.prob1 * 100).toFixed(0)}%` : '-'}</div>
                             {prediction && (
                               <div className="text-xs text-primary" data-testid={`pred-prob-1-${stat.id}`}>
-                                Pred: {prediction.predictedHomeWinProb !== undefined ? (prediction.predictedHomeWinProb * 100).toFixed(0) + '%' : '-'}
+                                Pred: {prediction.homeWinProb !== undefined ? (prediction.homeWinProb * 100).toFixed(0) + '%' : '-'}
                               </div>
                             )}
                           </div>
@@ -432,7 +432,7 @@ export default function TesterPage() {
                             <div>{stat.probX != null ? `${(stat.probX * 100).toFixed(0)}%` : '-'}</div>
                             {prediction && (
                               <div className="text-xs text-primary" data-testid={`pred-prob-x-${stat.id}`}>
-                                Pred: {prediction.predictedDrawProb !== undefined ? (prediction.predictedDrawProb * 100).toFixed(0) + '%' : '-'}
+                                Pred: {prediction.drawProb !== undefined ? (prediction.drawProb * 100).toFixed(0) + '%' : '-'}
                               </div>
                             )}
                           </div>
@@ -442,7 +442,7 @@ export default function TesterPage() {
                             <div>{stat.prob2 != null ? `${(stat.prob2 * 100).toFixed(0)}%` : '-'}</div>
                             {prediction && (
                               <div className="text-xs text-primary" data-testid={`pred-prob-2-${stat.id}`}>
-                                Pred: {prediction.predictedAwayWinProb !== undefined ? (prediction.predictedAwayWinProb * 100).toFixed(0) + '%' : '-'}
+                                Pred: {prediction.awayWinProb !== undefined ? (prediction.awayWinProb * 100).toFixed(0) + '%' : '-'}
                               </div>
                             )}
                           </div>
@@ -468,7 +468,7 @@ export default function TesterPage() {
                                 ? `HT ${stat.htHomeScore}-${stat.htAwayScore}` 
                                 : '-'}
                             </div>
-                            {prediction && prediction.predictedHtHomeScore !== null && prediction.predictedHtAwayScore !== null && (
+                            {prediction && prediction.predictedHtHomeScore != null && prediction.predictedHtAwayScore != null && (
                               <div className="text-xs text-primary" data-testid={`pred-ht-score-${stat.id}`}>
                                 Pred: {prediction.predictedHtHomeScore.toFixed(1)}-{prediction.predictedHtAwayScore.toFixed(1)}
                               </div>

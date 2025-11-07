@@ -13,8 +13,12 @@ export interface MatchPrediction {
   predictedResult: '1' | 'X' | '2';
   predictedHomeScore: number;
   predictedAwayScore: number;
+  predictedHtHomeScore: number;
+  predictedHtAwayScore: number;
   bttsProb: number;
+  predictedBtts: boolean;
   over25Prob: number;
+  predictedOver25: boolean;
   confidence: number;
 }
 
