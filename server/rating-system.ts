@@ -129,8 +129,8 @@ export function calculateMatchProbabilitiesEnhanced(match: MatchStats): MatchPre
   let bttsProb = 0;
   let over25Prob = 0;
   
-  // Store all scoreline probabilities for more analysis
-  const scorelineProbs: { home: number; away: number; prob: number }[] = [];
+  // Track most likely scoreline
+  let mostLikelyScore = { home: 0, away: 0, prob: 0 };
   
   for (let homeGoals = 0; homeGoals < maxGoals; homeGoals++) {
     const homeProb = poissonProbability(homeExpectedGoals, homeGoals);
@@ -139,7 +139,10 @@ export function calculateMatchProbabilitiesEnhanced(match: MatchStats): MatchPre
       const awayProb = poissonProbability(awayExpectedGoals, awayGoals);
       const scoreProbability = homeProb * awayProb;
       
-      scorelineProbs.push({ home: homeGoals, away: awayGoals, prob: scoreProbability });
+      // Track most likely scoreline
+      if (scoreProbability > mostLikelyScore.prob) {
+        mostLikelyScore = { home: homeGoals, away: awayGoals, prob: scoreProbability };
+      }
       
       // Accumulate 1X2 probabilities
       if (homeGoals > awayGoals) {
@@ -196,6 +199,22 @@ export function calculateMatchProbabilitiesEnhanced(match: MatchStats): MatchPre
   const htHomeExpectedGoals = homeExpectedGoals * 0.45 * match.homeTeamGoalsPerHalfRatio;
   const htAwayExpectedGoals = awayExpectedGoals * 0.45 * match.awayTeamGoalsPerHalfRatio;
   
+  // Find most likely HT score using Poisson
+  let mostLikelyHtScore = { home: 0, away: 0, prob: 0 };
+  const maxHtGoals = 5; // Lower max for half-time
+  
+  for (let homeGoals = 0; homeGoals < maxHtGoals; homeGoals++) {
+    const homeProb = poissonProbability(htHomeExpectedGoals, homeGoals);
+    for (let awayGoals = 0; awayGoals < maxHtGoals; awayGoals++) {
+      const awayProb = poissonProbability(htAwayExpectedGoals, awayGoals);
+      const scoreProbability = homeProb * awayProb;
+      
+      if (scoreProbability > mostLikelyHtScore.prob) {
+        mostLikelyHtScore = { home: homeGoals, away: awayGoals, prob: scoreProbability };
+      }
+    }
+  }
+  
   // Confidence based on probability spread and market efficiency
   const maxProb = Math.max(normalizedHomeWin, normalizedDraw, normalizedAwayWin);
   let confidence = Math.min(0.95, maxProb);
@@ -217,10 +236,11 @@ export function calculateMatchProbabilitiesEnhanced(match: MatchStats): MatchPre
     drawProb: normalizedDraw,
     awayWinProb: normalizedAwayWin,
     predictedResult,
-    predictedHomeScore: Math.round(homeExpectedGoals * 10) / 10,
-    predictedAwayScore: Math.round(awayExpectedGoals * 10) / 10,
-    predictedHtHomeScore: Math.round(htHomeExpectedGoals * 10) / 10,
-    predictedHtAwayScore: Math.round(htAwayExpectedGoals * 10) / 10,
+    // Return most likely integer scores instead of decimal expected goals
+    predictedHomeScore: mostLikelyScore.home,
+    predictedAwayScore: mostLikelyScore.away,
+    predictedHtHomeScore: mostLikelyHtScore.home,
+    predictedHtAwayScore: mostLikelyHtScore.away,
     bttsProb,
     predictedBtts,
     over25Prob,
