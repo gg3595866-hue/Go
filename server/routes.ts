@@ -883,7 +883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const { calculateMatchProbabilitiesEnhanced } = await import('./rating-system');
+      const { calculateMatchProbabilitiesHybrid } = await import('./rating-system');
 
       await testerStorage.deleteAllRatingPredictions();
 
@@ -891,6 +891,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (const match of testerMatches) {
         try {
+          // Get team ratings for both teams
+          const homeRating = await databaseStorage.getTeamRating(match.homeTeamId);
+          const awayRating = await databaseStorage.getTeamRating(match.awayTeamId);
+
+          if (!homeRating || !awayRating) {
+            console.log(`Skipping match ${match.id}: missing team ratings`);
+            continue;
+          }
+
           // Validate that match has sufficient reliable data for prediction
           const hasValidStats = 
             match.homeTeamWinRateL8 !== null && match.homeTeamWinRateL8 >= 0 &&
@@ -904,13 +913,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
 
-          // Use the enhanced Poisson model with all features
-          const prediction = calculateMatchProbabilitiesEnhanced(match);
+          // Only predict if team ratings are reasonable (have played enough matches)
+          if (homeRating.totalMatches < 5 || awayRating.totalMatches < 5) {
+            console.log(`Skipping match ${match.id}: teams haven't played enough matches for reliable ratings`);
+            continue;
+          }
+
+          // Use the hybrid Poisson model with team ratings + match features
+          const prediction = calculateMatchProbabilitiesHybrid(match, homeRating, awayRating);
 
           const savedPrediction = await testerStorage.createRatingPrediction({
             matchStatsId: match.id,
-            homeTeamRating: 0, // Not using team ratings anymore
-            awayTeamRating: 0, // Not using team ratings anymore
+            homeTeamRating: homeRating.eloRating,
+            awayTeamRating: awayRating.eloRating,
             homeWinProb: prediction.homeWinProb,
             drawProb: prediction.drawProb,
             awayWinProb: prediction.awayWinProb,

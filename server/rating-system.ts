@@ -73,51 +73,88 @@ export function updateEloRating(
 }
 
 /**
- * Enhanced Poisson model that uses historical match data and features
- * Generates more realistic and diverse predictions
+ * Hybrid Poisson model that combines team ratings with match context
+ * Uses deep team characteristics (strengths, weaknesses, mental attributes) + recent form
  */
-export function calculateMatchProbabilitiesEnhanced(match: MatchStats): MatchPrediction {
-  // Step 1: Calculate expected goals based on historical data and features
+export function calculateMatchProbabilitiesHybrid(
+  match: MatchStats,
+  homeRating: TeamRating,
+  awayRating: TeamRating
+): MatchPrediction {
+  // STEP 1: Build baseline expected goals from team ratings (long-term strength)
   
-  // Use market expected goals as a strong baseline (bookmakers are good predictors)
-  let homeExpectedGoals = match.marketExpectedGoalsHome || 1.3;
-  let awayExpectedGoals = match.marketExpectedGoalsAway || 1.3;
+  // Convert attack/defense ratings to goal expectation
+  const homeAttackStrength = homeRating.attackRating / 1500;
+  const homeDefenseStrength = homeRating.defenseRating / 1500;
+  const awayAttackStrength = awayRating.attackRating / 1500;
+  const awayDefenseStrength = awayRating.defenseRating / 1500;
   
-  // Adjust based on failed to score rates (teams that often fail to score should have lower xG)
-  if (match.homeTeamFailedToScoreRate > 0.3) {
-    homeExpectedGoals *= (1 - match.homeTeamFailedToScoreRate * 0.3);
+  // Use team's actual average goals scored/conceded as strong baseline
+  let homeBaseGoals = homeRating.avgGoalsScored || (homeAttackStrength * LEAGUE_AVG_GOALS / 2);
+  let awayBaseGoals = awayRating.avgGoalsScored || (awayAttackStrength * LEAGUE_AVG_GOALS / 2);
+  
+  // Apply home advantage
+  homeBaseGoals *= 1.15;
+  awayBaseGoals *= 0.95;
+  
+  // STEP 2: Apply defensive strength of opponent
+  // Teams with high clean sheet rates and low goals conceded reduce opponent's expected goals
+  const homeDefensiveFactor = 1 - (homeRating.cleanSheetRate * 0.3);
+  const awayDefensiveFactor = 1 - (awayRating.cleanSheetRate * 0.3);
+  
+  awayBaseGoals *= homeDefensiveFactor;
+  homeBaseGoals *= awayDefensiveFactor;
+  
+  // STEP 3: Apply mental strength and mistake propensity
+  // Teams with high mental strength score more when expected to win
+  if (homeRating.mentalStrength > 0.6) {
+    homeBaseGoals *= 1.08;
   }
-  if (match.awayTeamFailedToScoreRate > 0.3) {
-    awayExpectedGoals *= (1 - match.awayTeamFailedToScoreRate * 0.3);
+  if (awayRating.mentalStrength > 0.6) {
+    awayBaseGoals *= 1.08;
   }
   
-  // Adjust based on clean sheet tendencies (defensive strength)
-  // Teams that often keep clean sheets reduce opponent's xG
-  const homeCleanSheetFactor = match.homeTeamToNilRateL8;
-  const awayCleanSheetFactor = match.awayTeamToNilRateL8;
-  awayExpectedGoals *= (1 - homeCleanSheetFactor * 0.25);
-  homeExpectedGoals *= (1 - awayCleanSheetFactor * 0.25);
+  // Teams with high lead blown rate concede more goals (defensive mistakes)
+  if (homeRating.leadBlownRate > 0.3) {
+    awayBaseGoals *= (1 + homeRating.leadBlownRate * 0.2);
+  }
+  if (awayRating.leadBlownRate > 0.3) {
+    homeBaseGoals *= (1 + awayRating.leadBlownRate * 0.2);
+  }
   
-  // Adjust based on recent form and momentum
+  // Teams with high comeback rate can score more when trailing
+  if (homeRating.comebackRate > 0.4) {
+    homeBaseGoals *= 1.05;
+  }
+  if (awayRating.comebackRate > 0.4) {
+    awayBaseGoals *= 1.05;
+  }
+  
+  // STEP 4: Blend with market expected goals (bookmakers have good info)
+  const marketHomeGoals = match.marketExpectedGoalsHome || homeBaseGoals;
+  const marketAwayGoals = match.marketExpectedGoalsAway || awayBaseGoals;
+  
+  // Adaptive weighting based on team rating confidence
+  const homeRatingWeight = Math.min(0.6, homeRating.totalMatches / 50); // Max 0.6 weight after 50 matches
+  const awayRatingWeight = Math.min(0.6, awayRating.totalMatches / 50);
+  const marketWeight = 0.3; // Market always gets 30% weight
+  const formWeight = 0.1; // Recent form gets 10% weight
+  
+  let homeExpectedGoals = (homeBaseGoals * homeRatingWeight) + (marketHomeGoals * marketWeight);
+  let awayExpectedGoals = (awayBaseGoals * awayRatingWeight) + (marketAwayGoals * marketWeight);
+  
+  // STEP 5: Apply recent form adjustments (short-term context)
   const formAdjustmentHome = (match.homeTeamFormOverallL5 - 50) / 100; // -0.5 to +0.5
   const formAdjustmentAway = (match.awayTeamFormOverallL5 - 50) / 100;
-  homeExpectedGoals *= (1 + formAdjustmentHome * 0.2);
-  awayExpectedGoals *= (1 + formAdjustmentAway * 0.2);
+  homeExpectedGoals += (homeExpectedGoals * formAdjustmentHome * formWeight);
+  awayExpectedGoals += (awayExpectedGoals * formAdjustmentAway * formWeight);
   
-  // Consider league average goals (some leagues are more attacking)
-  const leagueGoalsFactor = match.leagueAvgGoals / 2.7; // 2.7 is typical league average
+  // STEP 6: Apply league context
+  const leagueGoalsFactor = match.leagueAvgGoals / 2.7;
   homeExpectedGoals *= leagueGoalsFactor;
   awayExpectedGoals *= leagueGoalsFactor;
   
-  // Adjust for Over 3.5 rate (teams in high-scoring games)
-  if (match.homeTeamOver35Rate > 0.5) {
-    homeExpectedGoals *= 1.1;
-  }
-  if (match.awayTeamOver35Rate > 0.5) {
-    awayExpectedGoals *= 1.1;
-  }
-  
-  // Ensure minimum realistic values
+  // Ensure realistic bounds
   homeExpectedGoals = Math.max(0.2, Math.min(4.0, homeExpectedGoals));
   awayExpectedGoals = Math.max(0.2, Math.min(4.0, awayExpectedGoals));
   
@@ -165,18 +202,29 @@ export function calculateMatchProbabilitiesEnhanced(match: MatchStats): MatchPre
     }
   }
   
-  // Step 3: Calibrate probabilities using historical BTTS and Over/Under rates
-  // The model's BTTS probability should be influenced by historical BTTS rates
-  const historicalBttsRate = (match.homeTeamBttsRateL4 + match.awayTeamBttsRateL4) / 2;
-  bttsProb = bttsProb * 0.6 + historicalBttsRate * 0.4; // Blend model with history
+  // STEP 7: Calibrate BTTS using team rating BTTS patterns
+  // Use team's historical BTTS rate from ratings (more reliable than recent L4)
+  const teamBttsRate = (homeRating.bttsYesRate + awayRating.bttsYesRate) / 2;
+  const recentBttsRate = (match.homeTeamBttsRateL4 + match.awayTeamBttsRateL4) / 2;
   
-  // Calibrate Over 2.5 with historical data
+  // Blend: 50% from team ratings, 30% from model Poisson, 20% from recent form
+  bttsProb = (teamBttsRate * 0.5) + (bttsProb * 0.3) + (recentBttsRate * 0.2);
+  
+  // STEP 8: Calibrate Over 2.5 using performance in high-scoring games
+  // Teams that perform well in high-scoring games are more likely to have Over 2.5
+  const highScoringTendency = (homeRating.performanceInHighScoringGames + awayRating.performanceInHighScoringGames) / 2;
+  if (highScoringTendency > 0.5) {
+    over25Prob = Math.min(0.95, over25Prob * 1.15);
+  } else if (highScoringTendency < 0.3) {
+    over25Prob = Math.max(0.05, over25Prob * 0.85);
+  }
+  
+  // Also consider recent Over/Under patterns
   const historicalOver25Rate = (match.homeTeamOver15Rate + match.awayTeamOver15Rate) / 2;
-  // If both teams have high Over 1.5 rates, Over 2.5 is more likely
   if (historicalOver25Rate > 0.6) {
-    over25Prob = Math.min(0.95, over25Prob * 1.2);
+    over25Prob = Math.min(0.95, over25Prob * 1.1);
   } else if (historicalOver25Rate < 0.3) {
-    over25Prob = Math.max(0.05, over25Prob * 0.8);
+    over25Prob = Math.max(0.05, over25Prob * 0.9);
   }
   
   // Normalize 1X2 probabilities
