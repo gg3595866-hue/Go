@@ -940,8 +940,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
 
-          if (homeRating.totalMatches < 5 || awayRating.totalMatches < 5) {
-            console.log(`Skipping match ${match.id}: insufficient match history`);
+          // Allow predictions even with limited history - the model was trained on all available data
+          // Only skip if teams have absolutely no rating data at all
+          if (homeRating.totalMatches === 0 && awayRating.totalMatches === 0) {
+            console.log(`Skipping match ${match.id}: both teams have no match history`);
             continue;
           }
 
