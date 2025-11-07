@@ -25,6 +25,33 @@ export interface MatchPrediction {
 // K-factor for Elo rating changes (higher = more volatile)
 const K_FACTOR = 32;
 const HOME_ADVANTAGE = 100; // Home team gets +100 rating points
+const LEAGUE_AVG_GOALS = 2.7; // Average total goals per match in football
+
+/**
+ * Calculate Poisson probability: P(X = k) = (λ^k * e^-λ) / k!
+ * Used to calculate the probability of a team scoring exactly k goals
+ */
+function poissonProbability(lambda: number, k: number): number {
+  if (k < 0) return 0;
+  if (lambda <= 0) return k === 0 ? 1 : 0;
+  
+  // Calculate k! (factorial)
+  let factorial = 1;
+  for (let i = 2; i <= k; i++) {
+    factorial *= i;
+  }
+  
+  // P(X = k) = (λ^k * e^-λ) / k!
+  return Math.pow(lambda, k) * Math.exp(-lambda) / factorial;
+}
+
+/**
+ * Calculate factorial (helper for Poisson)
+ */
+function factorial(n: number): number {
+  if (n <= 1) return 1;
+  return n * factorial(n - 1);
+}
 
 /**
  * Calculate expected score using Elo formula
@@ -47,6 +74,7 @@ export function updateEloRating(
 
 /**
  * Calculate match prediction probabilities based on team ratings
+ * Uses Poisson distribution for goal-based market predictions
  */
 export function calculateMatchProbabilities(
   homeRating: number,
@@ -56,24 +84,68 @@ export function calculateMatchProbabilities(
   homeDefense: number,
   awayDefense: number
 ): MatchPrediction {
-  // Apply home advantage
-  const adjustedHomeRating = homeRating + HOME_ADVANTAGE;
+  // Step 1: Calculate expected goals using attack/defense ratings
+  // Convert ratings to strength indices (1500 is average)
+  const homeAttackStrength = homeAttack / 1500;
+  const homeDefenseStrength = homeDefense / 1500;
+  const awayAttackStrength = awayAttack / 1500;
+  const awayDefenseStrength = awayDefense / 1500;
   
-  // Calculate base win probabilities
-  const homeExpected = calculateExpectedScore(adjustedHomeRating, awayRating);
-  const awayExpected = 1 - homeExpected;
+  // Calculate expected goals using attack vs defense
+  // Home team benefits from playing at home (1.15x multiplier)
+  const homeExpectedGoals = Math.max(0.3, (homeAttackStrength / awayDefenseStrength) * (LEAGUE_AVG_GOALS / 2) * 1.15);
+  const awayExpectedGoals = Math.max(0.3, (awayAttackStrength / homeDefenseStrength) * (LEAGUE_AVG_GOALS / 2) * 0.95);
   
-  // Adjust for draw probability (football has ~27% draw rate)
-  const drawFactor = 0.27;
-  const homeWinProb = homeExpected * (1 - drawFactor);
-  const awayWinProb = awayExpected * (1 - drawFactor);
-  const drawProb = drawFactor;
+  // Step 2: Use Poisson distribution to calculate probabilities for all reasonable scores
+  // Calculate probabilities for scores from 0-5 goals for each team
+  const maxGoals = 6;
+  let homeWinProb = 0;
+  let drawProb = 0;
+  let awayWinProb = 0;
+  let bttsProb = 0;
+  let over25Prob = 0;
   
-  // Normalize probabilities
-  const total = homeWinProb + drawProb + awayWinProb;
-  const normalizedHomeWin = homeWinProb / total;
-  const normalizedDraw = drawProb / total;
-  const normalizedAwayWin = awayWinProb / total;
+  // Track most likely score
+  let mostLikelyScore = { home: 0, away: 0, prob: 0 };
+  
+  for (let homeGoals = 0; homeGoals < maxGoals; homeGoals++) {
+    const homeProb = poissonProbability(homeExpectedGoals, homeGoals);
+    
+    for (let awayGoals = 0; awayGoals < maxGoals; awayGoals++) {
+      const awayProb = poissonProbability(awayExpectedGoals, awayGoals);
+      const scoreProbability = homeProb * awayProb;
+      
+      // Track most likely scoreline
+      if (scoreProbability > mostLikelyScore.prob) {
+        mostLikelyScore = { home: homeGoals, away: awayGoals, prob: scoreProbability };
+      }
+      
+      // Accumulate 1X2 probabilities
+      if (homeGoals > awayGoals) {
+        homeWinProb += scoreProbability;
+      } else if (homeGoals < awayGoals) {
+        awayWinProb += scoreProbability;
+      } else {
+        drawProb += scoreProbability;
+      }
+      
+      // BTTS: Both teams score at least 1
+      if (homeGoals >= 1 && awayGoals >= 1) {
+        bttsProb += scoreProbability;
+      }
+      
+      // Over 2.5: Total goals >= 3
+      if (homeGoals + awayGoals >= 3) {
+        over25Prob += scoreProbability;
+      }
+    }
+  }
+  
+  // Normalize probabilities (they might not sum to exactly 1 due to truncation at maxGoals)
+  const total1X2 = homeWinProb + drawProb + awayWinProb;
+  const normalizedHomeWin = homeWinProb / total1X2;
+  const normalizedDraw = drawProb / total1X2;
+  const normalizedAwayWin = awayWinProb / total1X2;
   
   // Predict result based on highest probability
   let predictedResult: '1' | 'X' | '2';
@@ -85,44 +157,44 @@ export function calculateMatchProbabilities(
     predictedResult = 'X';
   }
   
-  // Calculate expected goals using attack/defense ratings
-  const homeAttackStrength = homeAttack / 1500;
-  const awayDefenseStrength = awayDefense / 1500;
-  const awayAttackStrength = awayAttack / 1500;
-  const homeDefenseStrength = homeDefense / 1500;
+  // Half-time predictions: Use 45% of full-time expected goals
+  // First half typically sees slightly fewer goals (42-45% of total)
+  const htHomeExpectedGoals = homeExpectedGoals * 0.45;
+  const htAwayExpectedGoals = awayExpectedGoals * 0.45;
   
-  const predictedHomeScore = Math.max(0, (homeAttackStrength / awayDefenseStrength) * 1.5);
-  const predictedAwayScore = Math.max(0, (awayAttackStrength / homeDefenseStrength) * 1.2);
+  // Find most likely HT score using Poisson
+  let mostLikelyHtScore = { home: 0, away: 0, prob: 0 };
+  const maxHtGoals = 4; // Lower max for half-time
   
-  // BTTS probability (both teams score)
-  const bttsProb = Math.min(
-    0.95,
-    (predictedHomeScore > 0.5 ? 0.5 : 0.2) + (predictedAwayScore > 0.5 ? 0.5 : 0.2)
-  );
+  for (let homeGoals = 0; homeGoals < maxHtGoals; homeGoals++) {
+    const homeProb = poissonProbability(htHomeExpectedGoals, homeGoals);
+    for (let awayGoals = 0; awayGoals < maxHtGoals; awayGoals++) {
+      const awayProb = poissonProbability(htAwayExpectedGoals, awayGoals);
+      const scoreProbability = homeProb * awayProb;
+      
+      if (scoreProbability > mostLikelyHtScore.prob) {
+        mostLikelyHtScore = { home: homeGoals, away: awayGoals, prob: scoreProbability };
+      }
+    }
+  }
+  
+  // Confidence based on probability spread
+  const maxProb = Math.max(normalizedHomeWin, normalizedDraw, normalizedAwayWin);
+  const confidence = Math.min(0.95, maxProb);
+  
+  // Determine predictions based on probabilities
   const predictedBtts = bttsProb > 0.5;
-  
-  // Over 2.5 goals probability
-  const totalExpectedGoals = predictedHomeScore + predictedAwayScore;
-  const over25Prob = 1 / (1 + Math.exp(-(totalExpectedGoals - 2.5)));
   const predictedOver25 = over25Prob > 0.5;
-  
-  // Half-time predictions (simplified - assume ~40% of goals in first half)
-  const predictedHtHomeScore = Math.round(predictedHomeScore * 0.4 * 10) / 10;
-  const predictedHtAwayScore = Math.round(predictedAwayScore * 0.4 * 10) / 10;
-  
-  // Confidence based on rating difference
-  const ratingDiff = Math.abs(adjustedHomeRating - awayRating);
-  const confidence = Math.min(0.95, ratingDiff / 400);
   
   return {
     homeWinProb: normalizedHomeWin,
     drawProb: normalizedDraw,
     awayWinProb: normalizedAwayWin,
     predictedResult,
-    predictedHomeScore: Math.round(predictedHomeScore * 10) / 10,
-    predictedAwayScore: Math.round(predictedAwayScore * 10) / 10,
-    predictedHtHomeScore,
-    predictedHtAwayScore,
+    predictedHomeScore: mostLikelyScore.home,
+    predictedAwayScore: mostLikelyScore.away,
+    predictedHtHomeScore: mostLikelyHtScore.home,
+    predictedHtAwayScore: mostLikelyHtScore.away,
     bttsProb,
     predictedBtts,
     over25Prob,

@@ -135,6 +135,47 @@ The application uses a sophisticated Elo-based rating system that tracks 50+ met
 - **Half-time Analysis**: HT win/draw/loss rates, HT-FT consistency, comeback rates
 - All ratings update automatically after each match result
 
+**Poisson Distribution Integration for Goal-Based Predictions**
+The rating system combines ELO ratings with Poisson distribution for accurate market predictions:
+
+1. **1X2 (Win/Draw/Loss) Prediction**:
+   - ELO rating difference between teams determines base win expectancy
+   - Home advantage added (+100 rating points for home team)
+   - Poisson distribution calculates probability of every possible scoreline (0-0 to 5-5)
+   - Win/draw/loss probabilities derived by summing all relevant score combinations
+   - Example: P(Home Win) = P(1-0) + P(2-0) + P(2-1) + P(3-0) + ... etc.
+
+2. **Expected Goals Calculation**:
+   - Attack rating vs opponent's defense rating determines goal expectancy
+   - Formula: `(AttackStrength / DefenseStrength) × (LeagueAvgGoals / 2) × HomeAdvantageMultiplier`
+   - Home advantage: 1.15x multiplier for home team, 0.95x for away team
+   - League average: 2.7 goals per match (1.35 per team)
+
+3. **BTTS (Both Teams to Score)**:
+   - Poisson calculates probability of each team scoring ≥1 goal
+   - BTTS probability = Sum of all scorelines where both teams score (1-1, 2-1, 1-2, etc.)
+   - Prediction: BTTS Yes if probability > 50%
+
+4. **Over/Under 2.5 Goals**:
+   - Sum probabilities of all scorelines with total goals ≥3 (2-1, 3-0, 2-2, etc.)
+   - Over 2.5 predicted if probability > 50%
+
+5. **FT Score (Full Time Score)**:
+   - Most likely scoreline = highest individual score probability from Poisson distribution
+   - Considers all combinations from 0-0 to 5-5
+   - Returns the score with maximum P(Home=h, Away=a)
+
+6. **HT Score (Half Time Score)**:
+   - First half expected goals = 45% of full-time expected goals
+   - Applies Poisson distribution with reduced goal expectancy (0-0 to 3-3 range)
+   - Returns most likely halftime scoreline based on first-half probabilities
+
+**Key Advantages of This Approach**:
+- Mathematically sound: Poisson distribution is proven for modeling rare events (goals)
+- Consistent probabilities: All markets derived from same underlying goal distributions
+- Dynamic updates: Ratings and predictions adjust after every match
+- Realistic modeling: Accounts for attack/defense balance, home advantage, and league context
+
 **Entity ID Mapping System (for Neural Network Embeddings)**
 The application uses a centralized ID mapping system to ensure each team, league, and country gets a unique, consistent ID across both databases:
 - **Teams Table**: Maps team names to unique team IDs
