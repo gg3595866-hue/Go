@@ -2098,27 +2098,54 @@ export async function scrapeLeagueMatches(
     ];
     
     const useSingleYear = singleYearLeagues.includes(slug);
-    const seasonFormat = useSingleYear ? `${year}` : `${year}-${year + 1}`;
-    const baseUrl = `https://sportstats365.com/football/${slug}/${seasonFormat}`;
     
-    console.log(`Fetching league page: ${baseUrl}`);
+    // Try multiple URL formats for better success rate with current/future seasons
+    const urlFormats = [];
     
-    // Fetch the league page
-    const result = await tryFetchLeaguePage(baseUrl, cleanedName);
+    if (useSingleYear) {
+      // For single year leagues, only try single year format
+      urlFormats.push(`${year}`);
+    } else {
+      // For two-year leagues, try both formats to handle current/future seasons
+      urlFormats.push(`${year}-${year + 1}`); // Standard format: 2024-2025
+      urlFormats.push(`${year}`);              // Fallback: 2025 (for current season)
+    }
     
-    if (!result.success || !result.html) {
+    let html: string | undefined;
+    let successUrl: string | undefined;
+    
+    // Try each URL format until one works
+    for (const format of urlFormats) {
+      const tryUrl = `https://sportstats365.com/football/${slug}/${format}`;
+      console.log(`Trying league page: ${tryUrl}`);
+      
+      const result = await tryFetchLeaguePage(tryUrl, cleanedName);
+      
+      if (result.success && result.html) {
+        html = result.html;
+        successUrl = tryUrl;
+        console.log(`✓ Successfully loaded league page: ${tryUrl}`);
+        break;
+      } else {
+        console.log(`✗ Failed to load ${tryUrl}: ${result.error}`);
+      }
+    }
+    
+    // If all URL formats failed, throw error
+    if (!html || !successUrl) {
+      const triedUrls = urlFormats.map(f => `https://sportstats365.com/football/${slug}/${f}`).join(', ');
       throw new Error(
-        `Failed to fetch league page for ${competitionName} at ${baseUrl}. ` +
-        `Error: ${result.error}. ` +
-        `The mapping might be incorrect or the year ${year} doesn't exist for this league.`
+        `Failed to fetch league page for ${competitionName}. Tried URLs: ${triedUrls}. ` +
+        `The year ${year} might not exist for this league, or the mapping might be incorrect.`
       );
     }
     
-    const html = result.html;
+    const baseUrl = successUrl;
+    const actualSeasonFormat = baseUrl.split('/').pop() || `${year}`;
     
-    console.log(`Starting league scrape for ${competitionName} ${seasonFormat}`);
+    console.log(`Starting league scrape for ${competitionName} ${actualSeasonFormat}`);
     console.log(`Using URL: ${baseUrl}`);
-    onProgress?.(`Fetching matches for ${competitionName} ${seasonFormat}...`, 0);
+    onProgress?.(`Fetching matches for ${competitionName} ${actualSeasonFormat}...`, 0);
     
     const $basePage = cheerio.load(html);
     const allMatches: Match[] = [];
@@ -2399,8 +2426,8 @@ export async function scrapeLeagueMatches(
       }
     }
     
-    console.log(`Successfully scraped ${allMatches.length} total matches for ${competitionName} ${seasonFormat}`);
-    onProgress?.(`Completed! Found ${allMatches.length} matches for ${competitionName} ${seasonFormat}`, allMatches.length);
+    console.log(`Successfully scraped ${allMatches.length} total matches for ${competitionName} ${actualSeasonFormat}`);
+    onProgress?.(`Completed! Found ${allMatches.length} matches for ${competitionName} ${actualSeasonFormat}`, allMatches.length);
     
     return allMatches;
   } catch (error) {

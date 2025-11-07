@@ -899,6 +899,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
 
+          // Validate that match has sufficient reliable data for prediction
+          const hasValidStats = 
+            match.homeTeamWinRateL8 !== null && match.homeTeamWinRateL8 >= 0 &&
+            match.awayTeamWinRateL8 !== null && match.awayTeamWinRateL8 >= 0 &&
+            match.odds1 !== null && match.odds1 > 1.0 &&
+            match.oddsX !== null && match.oddsX > 1.0 &&
+            match.odds2 !== null && match.odds2 > 1.0;
+
+          if (!hasValidStats) {
+            console.log(`Skipping match ${match.id}: insufficient reliable data for accurate prediction`);
+            continue;
+          }
+
+          // Only predict if team ratings are reasonable (have played enough matches)
+          if (homeRating.totalMatches < 5 || awayRating.totalMatches < 5) {
+            console.log(`Skipping match ${match.id}: teams haven't played enough matches for reliable ratings`);
+            continue;
+          }
+
           const prediction = calculateMatchProbabilities(
             homeRating.eloRating,
             awayRating.eloRating,
@@ -1515,6 +1534,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (const match of testerMatches) {
         try {
+          // Validate that match has sufficient reliable data for prediction
+          const hasValidStats = 
+            match.homePointsScoredPerGame !== null && match.homePointsScoredPerGame > 0 &&
+            match.awayPointsScoredPerGame !== null && match.awayPointsScoredPerGame > 0 &&
+            match.homeWon !== null && match.homeWon >= 0 &&
+            match.awayWon !== null && match.awayWon >= 0;
+
+          if (!hasValidStats) {
+            console.log(`Skipping basketball match ${match.id}: insufficient reliable data for accurate prediction`);
+            continue;
+          }
+
           const prediction = await predictBasketball(model, match, normalizationStats);
 
           const savedPrediction = await testerStorage.createBasketballPrediction({
