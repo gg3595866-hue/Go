@@ -95,10 +95,16 @@ export function calculateMatchProbabilities(
     0.95,
     (predictedHomeScore > 0.5 ? 0.5 : 0.2) + (predictedAwayScore > 0.5 ? 0.5 : 0.2)
   );
+  const predictedBtts = bttsProb > 0.5;
   
   // Over 2.5 goals probability
   const totalExpectedGoals = predictedHomeScore + predictedAwayScore;
   const over25Prob = 1 / (1 + Math.exp(-(totalExpectedGoals - 2.5)));
+  const predictedOver25 = over25Prob > 0.5;
+  
+  // Half-time predictions (simplified - assume ~40% of goals in first half)
+  const predictedHtHomeScore = Math.round(predictedHomeScore * 0.4 * 10) / 10;
+  const predictedHtAwayScore = Math.round(predictedAwayScore * 0.4 * 10) / 10;
   
   // Confidence based on rating difference
   const ratingDiff = Math.abs(adjustedHomeRating - awayRating);
@@ -111,8 +117,12 @@ export function calculateMatchProbabilities(
     predictedResult,
     predictedHomeScore: Math.round(predictedHomeScore * 10) / 10,
     predictedAwayScore: Math.round(predictedAwayScore * 10) / 10,
+    predictedHtHomeScore,
+    predictedHtAwayScore,
     bttsProb,
+    predictedBtts,
     over25Prob,
+    predictedOver25,
     confidence,
   };
 }

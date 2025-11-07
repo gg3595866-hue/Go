@@ -918,8 +918,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             predictedResult: prediction.predictedResult,
             predictedHomeScore: prediction.predictedHomeScore,
             predictedAwayScore: prediction.predictedAwayScore,
+            predictedHtHomeScore: prediction.predictedHtHomeScore,
+            predictedHtAwayScore: prediction.predictedHtAwayScore,
             bttsProb: prediction.bttsProb,
+            predictedBtts: prediction.predictedBtts,
             over25Prob: prediction.over25Prob,
+            predictedOver25: prediction.predictedOver25,
             confidence: prediction.confidence
           });
 
