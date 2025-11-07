@@ -428,6 +428,32 @@ try {
   // Column already exists, ignore
 }
 
+// Add half-time score prediction columns to rating_predictions table
+try {
+  databaseSqlite.exec(`ALTER TABLE rating_predictions ADD COLUMN predicted_ht_home_score REAL;`);
+  console.log('✅ Added predicted_ht_home_score column to rating_predictions table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  databaseSqlite.exec(`ALTER TABLE rating_predictions ADD COLUMN predicted_ht_away_score REAL;`);
+  console.log('✅ Added predicted_ht_away_score column to rating_predictions table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  databaseSqlite.exec(`ALTER TABLE rating_predictions ADD COLUMN predicted_btts INTEGER;`);
+  console.log('✅ Added predicted_btts column to rating_predictions table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  databaseSqlite.exec(`ALTER TABLE rating_predictions ADD COLUMN predicted_over_2_5 INTEGER;`);
+  console.log('✅ Added predicted_over_2_5 column to rating_predictions table');
+} catch (e) {
+  // Column already exists, ignore
+}
+
 testerSqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -666,6 +692,32 @@ try {
 try {
   testerSqlite.exec(`ALTER TABLE match_predictions ADD COLUMN pred_ht_away_score REAL NOT NULL DEFAULT 0;`);
   console.log('✅ Added pred_ht_away_score column to tester match_predictions table');
+} catch (e) {
+  // Column already exists, ignore
+}
+
+// Add half-time score prediction columns to tester rating_predictions table
+try {
+  testerSqlite.exec(`ALTER TABLE rating_predictions ADD COLUMN predicted_ht_home_score REAL;`);
+  console.log('✅ Added predicted_ht_home_score column to tester rating_predictions table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  testerSqlite.exec(`ALTER TABLE rating_predictions ADD COLUMN predicted_ht_away_score REAL;`);
+  console.log('✅ Added predicted_ht_away_score column to tester rating_predictions table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  testerSqlite.exec(`ALTER TABLE rating_predictions ADD COLUMN predicted_btts INTEGER;`);
+  console.log('✅ Added predicted_btts column to tester rating_predictions table');
+} catch (e) {
+  // Column already exists, ignore
+}
+try {
+  testerSqlite.exec(`ALTER TABLE rating_predictions ADD COLUMN predicted_over_2_5 INTEGER;`);
+  console.log('✅ Added predicted_over_2_5 column to tester rating_predictions table');
 } catch (e) {
   // Column already exists, ignore
 }
