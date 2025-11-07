@@ -97,8 +97,8 @@ export function calculateMatchProbabilities(
   const awayExpectedGoals = Math.max(0.3, (awayAttackStrength / homeDefenseStrength) * (LEAGUE_AVG_GOALS / 2) * 0.95);
   
   // Step 2: Use Poisson distribution to calculate probabilities for all reasonable scores
-  // Calculate probabilities for scores from 0-5 goals for each team
-  const maxGoals = 6;
+  // Calculate probabilities for scores from 0-7 goals for each team
+  const maxGoals = 8;
   let homeWinProb = 0;
   let drawProb = 0;
   let awayWinProb = 0;
@@ -191,10 +191,11 @@ export function calculateMatchProbabilities(
     drawProb: normalizedDraw,
     awayWinProb: normalizedAwayWin,
     predictedResult,
-    predictedHomeScore: mostLikelyScore.home,
-    predictedAwayScore: mostLikelyScore.away,
-    predictedHtHomeScore: mostLikelyHtScore.home,
-    predictedHtAwayScore: mostLikelyHtScore.away,
+    // Return expected goals rounded to 1 decimal instead of most likely integer score
+    predictedHomeScore: Math.round(homeExpectedGoals * 10) / 10,
+    predictedAwayScore: Math.round(awayExpectedGoals * 10) / 10,
+    predictedHtHomeScore: Math.round(htHomeExpectedGoals * 10) / 10,
+    predictedHtAwayScore: Math.round(htAwayExpectedGoals * 10) / 10,
     bttsProb,
     predictedBtts,
     over25Prob,

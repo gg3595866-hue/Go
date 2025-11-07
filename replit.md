@@ -161,14 +161,15 @@ The rating system combines ELO ratings with Poisson distribution for accurate ma
    - Over 2.5 predicted if probability > 50%
 
 5. **FT Score (Full Time Score)**:
-   - Most likely scoreline = highest individual score probability from Poisson distribution
-   - Considers all combinations from 0-0 to 5-5
-   - Returns the score with maximum P(Home=h, Away=a)
+   - Returns **expected goals** for each team (e.g., 1.7-1.3)
+   - More informative than most likely integer score
+   - Calculated from attack/defense ratings using Poisson model
+   - Example: Home team with 1600 attack vs 1400 defense → 1.7 expected goals
 
 6. **HT Score (Half Time Score)**:
    - First half expected goals = 45% of full-time expected goals
-   - Applies Poisson distribution with reduced goal expectancy (0-0 to 3-3 range)
-   - Returns most likely halftime scoreline based on first-half probabilities
+   - Returns expected goals for first half (e.g., 0.8-0.6)
+   - Typically lower scoring than full-time due to more cautious play
 
 **Key Advantages of This Approach**:
 - Mathematically sound: Poisson distribution is proven for modeling rare events (goals)

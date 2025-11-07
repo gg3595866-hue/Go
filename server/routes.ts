@@ -1114,6 +1114,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: 'Failed to fetch predictions' });
     }
   });
+  
+  // Debug endpoint: Get team ratings stats
+  app.get("/api/debug/team-ratings-stats", async (req, res) => {
+    try {
+      const allRatings = await databaseStorage.getAllTeamRatings();
+      
+      const stats = {
+        totalTeams: allRatings.length,
+        teamsWithMatches: allRatings.filter(r => r.totalMatches > 0).length,
+        defaultRatings: allRatings.filter(r => 
+          r.eloRating === 1500 && r.attackRating === 1500 && r.defenseRating === 1500
+        ).length,
+        averageElo: allRatings.reduce((sum, r) => sum + r.eloRating, 0) / (allRatings.length || 1),
+        averageAttack: allRatings.reduce((sum, r) => sum + r.attackRating, 0) / (allRatings.length || 1),
+        averageDefense: allRatings.reduce((sum, r) => sum + r.defenseRating, 0) / (allRatings.length || 1),
+        sampleRatings: allRatings.slice(0, 5).map(r => ({
+          teamId: r.teamId,
+          elo: r.eloRating,
+          attack: r.attackRating,
+          defense: r.defenseRating,
+          matches: r.totalMatches
+        }))
+      };
+      
+      res.json(stats);
+    } catch (error) {
+      console.error('Error fetching team ratings stats:', error);
+      res.status(500).json({ error: 'Failed to fetch ratings stats' });
+    }
+  });
 
   // Test endpoint to examine league page HTML structure
   app.get("/api/test/league-page", async (req, res) => {
