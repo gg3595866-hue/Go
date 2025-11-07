@@ -115,9 +115,13 @@ export async function scrapeFixtures(date: Date): Promise<Match[]> {
         const homeTeamImg = homeTeamSpan.find('img');
         const awayTeamImg = awayTeamSpan.find('img');
         
-        // Clean team names to remove "logo" and other artifacts
-        const homeTeam = cleanTeamName(homeTeamImg.attr('alt') || homeTeamSpan.text());
-        const awayTeam = cleanTeamName(awayTeamImg.attr('alt') || awayTeamSpan.text());
+        // Extract team names - prefer text content over image alt attribute
+        // This matches the approach used in scrapeMatchDetails for consistency
+        const homeTeamText = homeTeamSpan.clone().children().remove().end().text().trim();
+        const awayTeamText = awayTeamSpan.clone().children().remove().end().text().trim();
+        
+        const homeTeam = cleanTeamName(homeTeamText || homeTeamImg.attr('alt') || '');
+        const awayTeam = cleanTeamName(awayTeamText || awayTeamImg.attr('alt') || '');
         const homeTeamLogo = homeTeamImg.attr('src');
         const awayTeamLogo = awayTeamImg.attr('src');
         
@@ -297,9 +301,13 @@ export async function scrapeBasketballFixtures(date: Date): Promise<Match[]> {
         const homeTeamImg = homeTeamSpan.find('img');
         const awayTeamImg = awayTeamSpan.find('img');
         
-        // Clean team names to remove "logo" and other artifacts
-        const homeTeam = cleanTeamName(homeTeamImg.attr('alt') || homeTeamSpan.text());
-        const awayTeam = cleanTeamName(awayTeamImg.attr('alt') || awayTeamSpan.text());
+        // Extract team names - prefer text content over image alt attribute
+        // This matches the approach used in scrapeMatchDetails for consistency
+        const homeTeamText = homeTeamSpan.clone().children().remove().end().text().trim();
+        const awayTeamText = awayTeamSpan.clone().children().remove().end().text().trim();
+        
+        const homeTeam = cleanTeamName(homeTeamText || homeTeamImg.attr('alt') || '');
+        const awayTeam = cleanTeamName(awayTeamText || awayTeamImg.attr('alt') || '');
         const homeTeamLogo = homeTeamImg.attr('src');
         const awayTeamLogo = awayTeamImg.attr('src');
         
