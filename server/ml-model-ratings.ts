@@ -457,13 +457,17 @@ export async function trainRatingModel(
     validationSplit: trainingConfig.validationSplit,
     callbacks: {
       onEpochEnd: (epoch, logs) => {
-        console.log(`Epoch ${epoch + 1}: loss=${logs?.loss.toFixed(4)}, acc=${logs?.acc?.toFixed(4)}, val_loss=${logs?.val_loss?.toFixed(4)}, val_acc=${logs?.val_acc?.toFixed(4)}`);
+        // Extract accuracy from the primary classification task (result_1x2)
+        const trainAcc = logs?.result_1x2_acc || 0;
+        const valAcc = logs?.val_result_1x2_acc || 0;
+        
+        console.log(`Epoch ${epoch + 1}: loss=${logs?.loss.toFixed(4)}, result_acc=${trainAcc.toFixed(4)}, val_loss=${logs?.val_loss?.toFixed(4)}, val_result_acc=${valAcc.toFixed(4)}`);
         history.push({
           epoch: epoch + 1,
           loss: logs?.loss || 0,
-          accuracy: logs?.acc || 0,
+          accuracy: trainAcc,
           valLoss: logs?.val_loss || 0,
-          valAccuracy: logs?.val_acc || 0,
+          valAccuracy: valAcc,
         });
       },
     },
