@@ -4,7 +4,7 @@ import type { MatchStats, TeamRating } from '@shared/schema';
 import { writeFile, readFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 
-interface ModelArchitecture {
+export interface ModelArchitecture {
   numTeams: number;
   numLeagues: number;
   numCountries: number;
@@ -14,14 +14,14 @@ interface ModelArchitecture {
   hiddenLayers: number[];
 }
 
-interface TrainingConfig {
+export interface TrainingConfig {
   epochs: number;
   batchSize: number;
   validationSplit: number;
   learningRate: number;
 }
 
-interface NormalizationStats {
+export interface NormalizationStats {
   ratingFeatures: {
     mean: number[];
     std: number[];
@@ -54,7 +54,7 @@ interface TrainingResult {
 /**
  * Extract all 50+ rating features from TeamRating objects
  */
-function extractRatingFeatures(homeRating: TeamRating, awayRating: TeamRating): number[] {
+export function extractRatingFeatures(homeRating: TeamRating, awayRating: TeamRating): number[] {
   return [
     // Core ratings (6 features)
     homeRating.eloRating,
@@ -228,7 +228,7 @@ export function computeRatingNormalizationStats(
 /**
  * Build multi-task neural network with rating features
  */
-function buildRatingModel(config: ModelArchitecture): tf.LayersModel {
+export function buildRatingModel(config: ModelArchitecture): tf.LayersModel {
   // Input layers
   const homeTeamInput = tf.input({ shape: [1], name: 'home_team_id', dtype: 'int32' });
   const awayTeamInput = tf.input({ shape: [1], name: 'away_team_id', dtype: 'int32' });
