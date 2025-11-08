@@ -202,3 +202,74 @@ The application uses a centralized ID mapping system to ensure each team, league
 **Date/Time Handling**
 - date-fns for date formatting and manipulation
 - No timezone conversion (matches displayed in source timezone)
+
+## Machine Learning System
+
+### Enhanced Training Pipeline (November 2025)
+
+The ML system was comprehensively upgraded with five critical enhancements to address training/validation accuracy discrepancy and improve model reliability:
+
+**1. Stratified Data Splitting**
+- 70% training, 15% validation, 15% test splits
+- Stratification keys: `{outcome}_L{leagueId}_{strengthBucket}`
+  - Outcome: Match result (1, X, 2)
+  - League ID: Preserves league distribution
+  - Strength: Team strength buckets (low/medium/high based on Elo)
+- Prevents data leakage between sets
+- Ensures balanced representation across all dimensions
+
+**2. K-Fold Cross-Validation**
+- 5-fold stratified cross-validation
+- Each match appears in exactly ONE validation fold (verified)
+- Shuffles data once before fold assignment (deterministic)
+- Provides robust performance estimates with confidence intervals
+- Reports: Mean ± Std deviation across folds
+
+**3. Optimized Regularization**
+- **Batch Normalization**: Applied after each hidden layer for stable training
+- **Dropout (30%)**: Prevents overfitting during training
+- **L2 Regularization**: Weight penalty on kernels and embeddings
+- **He Initialization**: Optimized for ReLU activation functions
+- **Why validation > training accuracy**: Dropout disabled during validation gives full network capacity
+
+**4. Learning Curve Visualization**
+- Epoch-by-epoch metrics tracking (loss, accuracy, BTTS, Over/Under)
+- ASCII plots for train/validation curves
+- Exports comprehensive JSON with all metrics
+- Located in: `server/visualize-learning-curves.ts`
+
+**5. Separate Test Set Evaluation**
+- Held-out test set (15% of data)
+- Never seen during training or validation
+- Unbiased performance metrics for all tasks:
+  - 1X2 accuracy
+  - BTTS accuracy
+  - Over/Under 2.5 accuracy
+  - Mean Squared Error for score predictions
+
+**Implementation Files:**
+- `server/ml-model-enhanced-training.ts` - Core enhanced training pipeline
+- `server/ml-model-enhanced.ts` - Enhanced model architecture with batch norm
+- `server/visualize-learning-curves.ts` - Learning curve visualization
+- `server/train-enhanced-demo.ts` - Demo script showing all enhancements
+- `server/ml-model-ratings.ts` - Base model and utilities
+
+**Key Bug Fixes:**
+- Stratification now balances outcome + league + team strength (not just outcome)
+- Division-by-zero protection: Added epsilon (1e-8) to normalization for constant features
+- K-fold data leakage: Shuffle once, assign deterministically (verified uniqueness)
+- Duplicate validation detection: Throws error if any match appears in multiple folds
+
+**Usage:**
+```bash
+tsx server/train-enhanced-demo.ts
+```
+
+This will:
+1. Load matches and ratings from database
+2. Perform stratified split
+3. Run 5-fold cross-validation
+4. Train final model with best practices
+5. Evaluate on test set
+6. Export learning curves and metrics
+7. Save trained model with normalization stats
