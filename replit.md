@@ -2,21 +2,7 @@
 
 ## Overview
 
-A real-time football fixtures tracking application that displays live scores, match schedules, and betting odds from leagues worldwide. The app scrapes data from sportstats365.com and presents it in a clean, dark-themed interface optimized for quick scanning and data comprehension.
-
-**Core Functionality:**
-- Browse football fixtures by date with intuitive date navigation
-- View matches grouped by competition or time range
-- Display live scores, team logos, and betting odds
-- Responsive design with dark mode optimization
-
-**Tech Stack:**
-- Frontend: React + TypeScript with Vite
-- Backend: Express.js + Node.js
-- Styling: Tailwind CSS + shadcn/ui components
-- Data: Web scraping with Cheerio and Axios
-- State Management: TanStack Query (React Query)
-- Routing: Wouter (lightweight React router)
+A real-time football fixtures tracking application displaying live scores, match schedules, and betting odds from global leagues. It scrapes data from sportstats365.com and presents it in a dark-themed, responsive interface. The app incorporates a sophisticated machine learning system for predicting match outcomes based on dynamically updated team ratings and Poisson distribution modeling.
 
 ## User Preferences
 
@@ -24,252 +10,47 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-### Frontend Architecture
+### Frontend
 
-**Component-Based React Application**
-- Single-page application (SPA) using Vite as the build tool and development server
-- Component library based on shadcn/ui (Radix UI primitives with Tailwind CSS styling)
-- Custom design system inspired by modern sports platforms (ESPN, FotMob) with emphasis on data density and scanability
+The frontend is a React SPA using Vite, Tailwind CSS, and shadcn/ui. It emphasizes a dark-themed, data-dense design for quick information scanning. Key components include `DateNavigator`, `MatchCard`, and views for grouping matches. State management uses TanStack Query for server state and local component state for UI interactions.
 
-**State Management Strategy**
-- TanStack Query for server state management and API data fetching
-- Local component state for UI interactions (date selection, view toggles)
-- No global state management library needed due to simple data flow
+### Backend
 
-**Key UI Components**
-- `DateNavigator`: Sticky header for date selection with prev/next navigation
-- `ViewToggle`: Switch between competition-based and time-based grouping
-- `MatchCard`: Individual match display with team info, scores, and odds
-- `CompetitionGroup`/`TimeGroup`: Organizational containers for matches
-- `LoadingState`/`EmptyState`: Feedback components for async operations
-- `DatabasePage`: Displays all match statistics from the training database with pagination (92 columns including all 35 new ML features)
-- `TesterPage`: Displays match statistics for prediction with team name search (93 columns including team names and all 35 new ML features)
+The backend is an Express.js REST API that scrapes sportstats365.com using Cheerio and Axios. It features a robust, self-maintaining verified league URL mapping system to ensure accurate data extraction. The system does not persist fixture data but fetches it on-demand. Development uses Vite middleware, and production serves static files. Shared schemas and Zod ensure type safety between client and server.
 
-**Design Principles**
-- Dark mode by default for reduced eye strain
-- Tabular numbers for score alignment
-- Sticky positioning for navigation elements
-- Utility-first CSS approach with Tailwind
-- Mobile-first responsive design
+### Machine Learning System
 
-### Backend Architecture
+The application incorporates a machine learning system for match prediction, utilizing Drizzle ORM with SQLite for two databases: `database.db` for training and `tester.db` for prediction. Match statistics include 70+ features, comprising original and 35 new advanced features (e.g., home/away-specific metrics, points per game, over/under goal rates, mental strength indicators, mistake propensity).
 
-**Express.js REST API**
-- Minimal API surface with single endpoint pattern: `/api/fixtures/:date`
-- Web scraping implementation using Cheerio to parse HTML from sportstats365.com
-- No database persistence - data fetched on-demand from external source
+A dynamic, Elo-based rating system tracks 50+ metrics per team, including core ratings, momentum, offensive/defensive capacity, and new metrics like `comebackRate`, `performanceInCloseGames`, `mentalStrength`, and `leadBlownRate`. These ratings update after every game.
 
-**Scraping Strategy**
-- Axios for HTTP requests with browser-like headers to avoid blocking
-- Cheerio for DOM parsing and data extraction
-- Timeout handling (10s) for reliability
-- Structured data transformation from HTML to typed Match objects
+The system integrates Poisson distribution for goal-based predictions, calculating probabilities for 1X2 outcomes, BTTS, Over/Under 2.5 goals, and expected full-time and half-time scores. It accurately models attack/defense balance, home advantage, and league context.
 
-**Verified League URL Mapping System**
-Solves the league-based bulk upload problem (previously 85% failure rate):
-- **Scrapes real league URLs** from Sportstats365 fixtures instead of guessing
-- **121+ verified league slugs** extracted from 30+ days of fixtures (`server/verified-league-mappings.ts`)
-- **Robust normalization** in `getVerifiedLeagueSlug()`:
-  - Removes country/confederation prefixes (England, Spain, UEFA, etc.)
-  - Removes leading numbers ("1. HNL" → "HNL")
-  - Normalizes accents and special characters
-  - Case-insensitive matching
-- **100% accuracy** on test leagues (50/50 leagues mapped correctly)
-- **Self-maintaining**: Re-run `server/extract-league-urls-from-fixtures.ts` to update mappings
-- **No manual aliases needed**: Normalization handles variations automatically
+An enhanced training pipeline addresses temporal data leakage by using time-aware training. This processes matches chronologically, capturing team ratings before each match, and splitting data chronologically (oldest 70% for training, middle 15% for validation, most recent 15% for testing). It also includes stratified data splitting, 5-fold cross-validation, optimized regularization (Batch Normalization, Dropout, L2), and learning curve visualization.
 
-Key insight: Sportstats365 uses non-predictable slugs ("premiership" not "premier-league"), so we scrape them from the site's own fixture pages.
+An entity ID mapping system ensures consistent unique IDs for teams, leagues, and countries across both databases, facilitating neural network embedding layers.
 
-**Development vs Production**
-- Vite middleware in development for HMR and fast refresh
-- Static file serving in production from compiled dist directory
-- Environment-based configuration via NODE_ENV
+## External Dependencies
 
-**Type Safety**
-- Shared schema definitions between client and server (`shared/schema.ts`)
-- Zod for runtime validation and type inference
-- TypeScript strict mode enabled across codebase
+**UI/Styling:**
+- Radix UI primitives
+- shadcn/ui
+- Lucide React (iconography)
+- Tailwind CSS
+- PostCSS
+- Google Fonts (Inter)
+- date-fns
 
-### External Dependencies
+**Data Fetching/Scraping:**
+- TanStack Query
+- Axios
+- Cheerio
 
-**UI Component Library**
-- Radix UI primitives for accessible, unstyled components
-- shadcn/ui configuration for pre-styled component variants
-- Lucide React for iconography
+**Database/ORM:**
+- Drizzle ORM
+- SQLite (Better-SQLite3)
 
-**Styling System**
-- Tailwind CSS for utility-first styling
-- PostCSS for CSS processing
-- Custom CSS variables for theme tokens (defined in index.css)
-- Google Fonts (Inter) for typography
-
-**Data Fetching**
-- TanStack Query for caching, background updates, and request deduplication
-- Axios for HTTP client with custom headers and timeout configuration
-- Cheerio for HTML parsing and web scraping
-
-**Database/ORM Setup**
-- Drizzle ORM with SQLite (Better-SQLite3)
-- Two separate databases: `database.db` (for training data) and `tester.db` (for prediction data)
-- Shared entity mapping tables ensure consistent IDs across both databases
-- Match statistics stored with 70+ features for neural network training, including:
-  - **Original features** (35): Form metrics, win/draw/loss rates, goal statistics, betting odds, league stats
-  - **New advanced features** (35): Home/away-specific metrics, points per game, over/under goal rates (0.5, 1.5, 3.5), failed-to-score rates, goals-per-half ratios, comparative metrics (attack/defense strength, momentum), market-specific features (expected win ratios, value indices), league position (raw and normalized), win margin ratios
-
-**Team Rating System (Dynamic, Updated Every Game)**
-The application uses a sophisticated Elo-based rating system that tracks 50+ metrics per team:
-- **Core Ratings**: Elo rating, attack rating, defense rating
-- **Momentum Metrics**: Win/draw/loss streaks, home/away streaks, unbeaten/losing streaks
-- **Offensive/Defensive Capacity**: Goals scored/conceded, average goals, performance in high/low scoring games
-- **Pressure Performance** (NEW):
-  - `comebackRate`: Win/draw rate after losing at halftime
-  - `performanceInCloseGames`: Win rate in 1-goal margin games
-  - `mentalStrength`: Ability to hold leads and win when ahead at HT
-  - `performanceWhenTrailing`: Points gained when losing at halftime
-- **Mistake Propensity** (NEW):
-  - `leadBlownRate`: Rate of dropping points after leading at halftime
-  - `cleanSheetRate`: Rate of keeping clean sheets (not conceding)
-  - `lateCollapseRate`: Rate of losing narrow HT leads (1-goal margins)
-  - `defensiveErrors`: Count of goals conceded from winning positions
-- **Market Expectations**: Performance vs odds, underdog win rate, BTTS correlations
-- **Half-time Analysis**: HT win/draw/loss rates, HT-FT consistency, comeback rates
-- All ratings update automatically after each match result
-
-**Poisson Distribution Integration for Goal-Based Predictions**
-The rating system combines ELO ratings with Poisson distribution for accurate market predictions:
-
-1. **1X2 (Win/Draw/Loss) Prediction**:
-   - ELO rating difference between teams determines base win expectancy
-   - Home advantage added (+100 rating points for home team)
-   - Poisson distribution calculates probability of every possible scoreline (0-0 to 5-5)
-   - Win/draw/loss probabilities derived by summing all relevant score combinations
-   - Example: P(Home Win) = P(1-0) + P(2-0) + P(2-1) + P(3-0) + ... etc.
-
-2. **Expected Goals Calculation**:
-   - Attack rating vs opponent's defense rating determines goal expectancy
-   - Formula: `(AttackStrength / DefenseStrength) × (LeagueAvgGoals / 2) × HomeAdvantageMultiplier`
-   - Home advantage: 1.15x multiplier for home team, 0.95x for away team
-   - League average: 2.7 goals per match (1.35 per team)
-
-3. **BTTS (Both Teams to Score)**:
-   - Poisson calculates probability of each team scoring ≥1 goal
-   - BTTS probability = Sum of all scorelines where both teams score (1-1, 2-1, 1-2, etc.)
-   - Prediction: BTTS Yes if probability > 50%
-
-4. **Over/Under 2.5 Goals**:
-   - Sum probabilities of all scorelines with total goals ≥3 (2-1, 3-0, 2-2, etc.)
-   - Over 2.5 predicted if probability > 50%
-
-5. **FT Score (Full Time Score)**:
-   - Returns **expected goals** for each team (e.g., 1.7-1.3)
-   - More informative than most likely integer score
-   - Calculated from attack/defense ratings using Poisson model
-   - Example: Home team with 1600 attack vs 1400 defense → 1.7 expected goals
-
-6. **HT Score (Half Time Score)**:
-   - First half expected goals = 45% of full-time expected goals
-   - Returns expected goals for first half (e.g., 0.8-0.6)
-   - Typically lower scoring than full-time due to more cautious play
-
-**Key Advantages of This Approach**:
-- Mathematically sound: Poisson distribution is proven for modeling rare events (goals)
-- Consistent probabilities: All markets derived from same underlying goal distributions
-- Dynamic updates: Ratings and predictions adjust after every match
-- Realistic modeling: Accounts for attack/defense balance, home advantage, and league context
-
-**Entity ID Mapping System (for Neural Network Embeddings)**
-The application uses a centralized ID mapping system to ensure each team, league, and country gets a unique, consistent ID across both databases:
-- **Teams Table**: Maps team names to unique team IDs
-- **Leagues Table**: Maps competition names to unique league IDs  
-- **Countries Table**: Maps extracted country names to unique country IDs
-- All entity names are normalized (lowercase, trimmed, spaces collapsed) before lookup/insert
-- The main database (`database.db`) stores all entity mappings
-- Both database and tester storage use the same mapping tables, ensuring consistency
-- This approach enables proper neural network embedding layers where:
-  - Each team_id has its own learned vector representation
-  - Each league_id has its own embedding vector
-  - Each country_id has its own embedding vector
-  - IDs remain stable across training and prediction datasets
-
-**Previous Implementation:** Previously used hash-based ID generation which could cause collisions and inconsistencies. Now uses database-backed get-or-create operations with race condition handling.
-
-**Build & Development Tools**
-- Vite for fast development and optimized production builds
-- esbuild for server-side bundling
-- TypeScript compiler for type checking
-- Replit-specific plugins for development experience
-
-**Date/Time Handling**
-- date-fns for date formatting and manipulation
-- No timezone conversion (matches displayed in source timezone)
-
-## Machine Learning System
-
-### Enhanced Training Pipeline (November 2025)
-
-The ML system was comprehensively upgraded with five critical enhancements to address training/validation accuracy discrepancy and improve model reliability:
-
-**1. Stratified Data Splitting**
-- 70% training, 15% validation, 15% test splits
-- Stratification keys: `{outcome}_L{leagueId}_{strengthBucket}`
-  - Outcome: Match result (1, X, 2)
-  - League ID: Preserves league distribution
-  - Strength: Team strength buckets (low/medium/high based on Elo)
-- Prevents data leakage between sets
-- Ensures balanced representation across all dimensions
-
-**2. K-Fold Cross-Validation**
-- 5-fold stratified cross-validation
-- Each match appears in exactly ONE validation fold (verified)
-- Shuffles data once before fold assignment (deterministic)
-- Provides robust performance estimates with confidence intervals
-- Reports: Mean ± Std deviation across folds
-
-**3. Optimized Regularization**
-- **Batch Normalization**: Applied after each hidden layer for stable training
-- **Dropout (30%)**: Prevents overfitting during training
-- **L2 Regularization**: Weight penalty on kernels and embeddings
-- **He Initialization**: Optimized for ReLU activation functions
-- **Why validation > training accuracy**: Dropout disabled during validation gives full network capacity
-
-**4. Learning Curve Visualization**
-- Epoch-by-epoch metrics tracking (loss, accuracy, BTTS, Over/Under)
-- ASCII plots for train/validation curves
-- Exports comprehensive JSON with all metrics
-- Located in: `server/visualize-learning-curves.ts`
-
-**5. Separate Test Set Evaluation**
-- Held-out test set (15% of data)
-- Never seen during training or validation
-- Unbiased performance metrics for all tasks:
-  - 1X2 accuracy
-  - BTTS accuracy
-  - Over/Under 2.5 accuracy
-  - Mean Squared Error for score predictions
-
-**Implementation Files:**
-- `server/ml-model-enhanced-training.ts` - Core enhanced training pipeline
-- `server/ml-model-enhanced.ts` - Enhanced model architecture with batch norm
-- `server/visualize-learning-curves.ts` - Learning curve visualization
-- `server/train-enhanced-demo.ts` - Demo script showing all enhancements
-- `server/ml-model-ratings.ts` - Base model and utilities
-
-**Key Bug Fixes:**
-- Stratification now balances outcome + league + team strength (not just outcome)
-- Division-by-zero protection: Added epsilon (1e-8) to normalization for constant features
-- K-fold data leakage: Shuffle once, assign deterministically (verified uniqueness)
-- Duplicate validation detection: Throws error if any match appears in multiple folds
-
-**Usage:**
-```bash
-tsx server/train-enhanced-demo.ts
-```
-
-This will:
-1. Load matches and ratings from database
-2. Perform stratified split
-3. Run 5-fold cross-validation
-4. Train final model with best practices
-5. Evaluate on test set
-6. Export learning curves and metrics
-7. Save trained model with normalization stats
+**Build & Development Tools:**
+- Vite
+- esbuild
+- TypeScript
