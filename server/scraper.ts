@@ -739,14 +739,50 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
       }
     });
     
-    const homeGoalsScored = extractStat(/Racing Club scored.*?on average \((\d+\.?\d*)\)/);
-    const awayGoalsScored = extractStat(/Flamengo.*?\((\d+\.?\d*)\)/);
+    // Extract goals scored/conceded from "Goal Stats" section (has tabs for Home/Overall/Away)
+    // Helper to parse numeric value from span
+    const parseNumericValue = (colElement: any): number => {
+      const spans = $(colElement).find('span');
+      for (let i = 0; i < spans.length; i++) {
+        const text = $(spans[i]).text().trim();
+        const num = parseFloat(text);
+        if (!isNaN(num) && text.match(/^\d+\.?\d*$/)) {
+          return num;
+        }
+      }
+      return 0;
+    };
     
-    const homeGoalsConceded = extractStat(/Racing Club conceded.*?\(\s*(\d+\.?\d*)\s*\)/);
-    const awayGoalsConceded = extractStat(/Flamengo conceded.*?\(\s*(\d+\.?\d*)\s*\)/);
+    let homeGoalsScored = 0;
+    let awayGoalsScored = 0;
+    let homeGoalsConceded = 0;
+    let awayGoalsConceded = 0;
     
-    const homeCleanSheet = extractStat(/Racing Club kept a clean sheet in (\d+)/);
-    const awayCleanSheet = extractStat(/Flamengo kept a clean sheet in (\d+)/);
+    const goalStatsSection = findStatSection('Goal Stats');
+    // Find the "Overall" tab content (has class "active" or the tab without _home_ or _away_ in ID)
+    const overallTabContent = goalStatsSection.find('.tab-pane').filter(function() {
+      const id = $(this).attr('id') || '';
+      // Overall tab typically has an ID like "gs_4252" without "home" or "away"
+      return id.includes('gs_') && !id.includes('home') && !id.includes('away');
+    });
+    
+    overallTabContent.find('.list-group-item').each((i, row) => {
+      const cols = $(row).find('.col-4');
+      if (cols.length >= 3) {
+        const label = $(cols[1]).text().trim();
+        
+        if (label.includes('Goals Scored/Game') || label.includes('Goals Scored / Game')) {
+          homeGoalsScored = parseNumericValue(cols[0]);
+          awayGoalsScored = parseNumericValue(cols[2]);
+        } else if (label.includes('Goals Received/Game') || label.includes('Goals Received / Game')) {
+          homeGoalsConceded = parseNumericValue(cols[0]);
+          awayGoalsConceded = parseNumericValue(cols[2]);
+        }
+      }
+    });
+    
+    const homeCleanSheet = 0;
+    const awayCleanSheet = 0;
     
     // Parse Double Chance statistics
     let homeDoubleChance1X, homeDoubleChanceX2, homeDoubleChance12;
@@ -868,76 +904,95 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
       }
     });
     
-    // NEW: Parse Over/Under statistics
+    // NEW: Parse Over/Under statistics from "Number of Goals" section
     let homeOver05, homeOver15, homeOver25, homeOver35;
     let awayOver05, awayOver15, awayOver25, awayOver35;
     let homeUnder05, homeUnder15, homeUnder25, homeUnder35;
     let awayUnder05, awayUnder15, awayUnder25, awayUnder35;
     
-    const overUnderSection = findStatSection('Over/Under');
-    overUnderSection.find('.list-group-item').each((i, row) => {
+    // The Over/Under data is in the "Number of Goals" section
+    const goalsSection = findStatSection('Number of Goals');
+    goalsSection.find('.list-group-item').each((i, row) => {
       const stat = parseStatRow(row);
+      
+      // Helper to extract percentage from stat object
+      const getPercentage = (statData: any): number => {
+        if (!statData) return 0;
+        if (typeof statData.percentage === 'number') return statData.percentage;
+        return 0;
+      };
+      
       if (stat.label.includes('Over 0.5')) {
-        homeOver05 = stat.home?.percentage || 0;
-        awayOver05 = stat.away?.percentage || 0;
+        homeOver05 = getPercentage(stat.home);
+        awayOver05 = getPercentage(stat.away);
       } else if (stat.label.includes('Over 1.5')) {
-        homeOver15 = stat.home?.percentage || 0;
-        awayOver15 = stat.away?.percentage || 0;
+        homeOver15 = getPercentage(stat.home);
+        awayOver15 = getPercentage(stat.away);
       } else if (stat.label.includes('Over 2.5')) {
-        homeOver25 = stat.home?.percentage || 0;
-        awayOver25 = stat.away?.percentage || 0;
+        homeOver25 = getPercentage(stat.home);
+        awayOver25 = getPercentage(stat.away);
       } else if (stat.label.includes('Over 3.5')) {
-        homeOver35 = stat.home?.percentage || 0;
-        awayOver35 = stat.away?.percentage || 0;
+        homeOver35 = getPercentage(stat.home);
+        awayOver35 = getPercentage(stat.away);
       } else if (stat.label.includes('Under 0.5')) {
-        homeUnder05 = stat.home?.percentage || 0;
-        awayUnder05 = stat.away?.percentage || 0;
+        homeUnder05 = getPercentage(stat.home);
+        awayUnder05 = getPercentage(stat.away);
       } else if (stat.label.includes('Under 1.5')) {
-        homeUnder15 = stat.home?.percentage || 0;
-        awayUnder15 = stat.away?.percentage || 0;
+        homeUnder15 = getPercentage(stat.home);
+        awayUnder15 = getPercentage(stat.away);
       } else if (stat.label.includes('Under 2.5')) {
-        homeUnder25 = stat.home?.percentage || 0;
-        awayUnder25 = stat.away?.percentage || 0;
+        homeUnder25 = getPercentage(stat.home);
+        awayUnder25 = getPercentage(stat.away);
       } else if (stat.label.includes('Under 3.5')) {
-        homeUnder35 = stat.home?.percentage || 0;
-        awayUnder35 = stat.away?.percentage || 0;
+        homeUnder35 = getPercentage(stat.home);
+        awayUnder35 = getPercentage(stat.away);
       }
     });
     
-    // NEW: Extract Home/Away-specific win rates
-    // These may be in separate tabs/sections - attempt to find them
+    // NEW: Extract Home/Away-specific win rates from Team Statistics tabs
     let homeWinPercentHome, homeWinPercentAway, homeDrawPercentHome, homeDrawPercentAway, homeLossPercentHome, homeLossPercentAway;
     let awayWinPercentHome, awayWinPercentAway, awayDrawPercentHome, awayDrawPercentAway, awayLossPercentHome, awayLossPercentAway;
     
-    // Look for "Home" and "Away" sections or tabs
-    const homeSection = findStatSection('Home Statistics').length > 0 ? findStatSection('Home Statistics') : findStatSection('Home');
-    const awaySection = findStatSection('Away Statistics').length > 0 ? findStatSection('Away Statistics') : findStatSection('Away');
+    // Team Statistics section has tabs for Home/Overall/Away
+    const teamStatsTabSection = findStatSection('Team Statistics');
     
-    homeSection.find('.list-group-item').each((i, row) => {
+    // Find Home tab content
+    const homeTabContent = teamStatsTabSection.find('.tab-pane').filter(function() {
+      const id = $(this).attr('id') || '';
+      return id.includes('home') && !id.includes('away');
+    });
+    
+    homeTabContent.find('.list-group-item').each((i, row) => {
       const stat = parseStatRow(row);
       if (stat.label.includes('Wins')) {
-        homeWinPercentHome = stat.home?.percentage || 0;
-        awayWinPercentHome = stat.away?.percentage || 0;
+        homeWinPercentHome = stat.home?.percentage;
+        awayWinPercentHome = stat.away?.percentage;
       } else if (stat.label.includes('Draws')) {
-        homeDrawPercentHome = stat.home?.percentage || 0;
-        awayDrawPercentHome = stat.away?.percentage || 0;
+        homeDrawPercentHome = stat.home?.percentage;
+        awayDrawPercentHome = stat.away?.percentage;
       } else if (stat.label.includes('Losses')) {
-        homeLossPercentHome = stat.home?.percentage || 0;
-        awayLossPercentHome = stat.away?.percentage || 0;
+        homeLossPercentHome = stat.home?.percentage;
+        awayLossPercentHome = stat.away?.percentage;
       }
     });
     
-    awaySection.find('.list-group-item').each((i, row) => {
+    // Find Away tab content
+    const awayTabContent = teamStatsTabSection.find('.tab-pane').filter(function() {
+      const id = $(this).attr('id') || '';
+      return id.includes('away');
+    });
+    
+    awayTabContent.find('.list-group-item').each((i, row) => {
       const stat = parseStatRow(row);
       if (stat.label.includes('Wins')) {
-        homeWinPercentAway = stat.home?.percentage || 0;
-        awayWinPercentAway = stat.away?.percentage || 0;
+        homeWinPercentAway = stat.home?.percentage;
+        awayWinPercentAway = stat.away?.percentage;
       } else if (stat.label.includes('Draws')) {
-        homeDrawPercentAway = stat.home?.percentage || 0;
-        awayDrawPercentAway = stat.away?.percentage || 0;
+        homeDrawPercentAway = stat.home?.percentage;
+        awayDrawPercentAway = stat.away?.percentage;
       } else if (stat.label.includes('Losses')) {
-        homeLossPercentAway = stat.home?.percentage || 0;
-        awayLossPercentAway = stat.away?.percentage || 0;
+        homeLossPercentAway = stat.home?.percentage;
+        awayLossPercentAway = stat.away?.percentage;
       }
     });
     
