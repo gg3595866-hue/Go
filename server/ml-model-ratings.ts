@@ -440,11 +440,7 @@ export async function trainRatingModel(
       home_score: 'meanSquaredError',
       away_score: 'meanSquaredError',
     },
-    metrics: {
-      result_1x2: ['accuracy'],
-      over_under_2_5: ['accuracy'],
-      btts: ['accuracy'],
-    },
+    metrics: ['accuracy'],
   });
   
   // Train model

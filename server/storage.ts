@@ -55,6 +55,7 @@ export interface IStorage {
   getTeamById(id: number): Promise<Team | undefined>;
   getLeagueById(id: number): Promise<League | undefined>;
   getCountryById(id: number): Promise<Country | undefined>;
+  getAllTeams(): Promise<Team[]>;
   
   // ML Model methods
   getAllModels(): Promise<ModelMetadata[]>;
@@ -401,6 +402,10 @@ export class DatabaseStorage implements IStorage {
       .from(countries)
       .where(eq(countries.id, id));
     return country || undefined;
+  }
+
+  async getAllTeams(): Promise<Team[]> {
+    return this.mappingDb.select().from(teams);
   }
 
   // ML Model methods
