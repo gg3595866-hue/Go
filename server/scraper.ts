@@ -3,6 +3,24 @@ import * as cheerio from 'cheerio';
 import { type Match, type MatchDetails } from '@shared/schema';
 import { VERIFIED_LEAGUE_MAPPINGS, getVerifiedLeagueSlug } from './verified-league-mappings';
 
+// Configuration flag to use calculated stats instead of website pre-calculated stats
+const USE_CALCULATED_STATS = true;
+
+// In-memory cache for team matches (per scrape run)
+const teamMatchesCache = new Map<string, TeamMatchSummary[]>();
+
+// Type for individual team match summary
+export interface TeamMatchSummary {
+  opponent: string;
+  isHome: boolean;
+  goalsScored: number;
+  goalsConceded: number;
+  htGoalsScored: number | null;
+  htGoalsConceded: number | null;
+  result: 'W' | 'D' | 'L';
+  date?: string;
+}
+
 // Helper function to clean team names by removing artifacts like "logo", extra spaces, etc.
 function cleanTeamName(name: string): string {
   if (!name) return '';
@@ -2840,5 +2858,229 @@ export async function scrapeBasketballLeagueMatches(
     console.error(`Failed to scrape basketball league matches for ${competitionName}:`, error);
     throw error;
   }
+}
+
+/**
+ * Scrapes a team's recent matches from the /matches HTMX endpoint with pagination
+ * Returns up to maxMatches completed matches (default: 7)
+ */
+export async function scrapeTeamMatches(
+  teamName: string,
+  matchesUrl: string,
+  baseUrl: string,
+  maxMatches: number = 7,
+  maxRounds: number = 12
+): Promise<TeamMatchSummary[]> {
+  const cacheKey = `${teamName}-${matchesUrl}`;
+  
+  // Check cache first
+  if (teamMatchesCache.has(cacheKey)) {
+    console.log(`Using cached matches for ${teamName}`);
+    return teamMatchesCache.get(cacheKey)!;
+  }
+  
+  try {
+    const allMatches: TeamMatchSummary[] = [];
+    let round = 1;
+    
+    console.log(`Scraping matches for ${teamName} from ${matchesUrl}`);
+    
+    while (allMatches.length < maxMatches && round <= maxRounds) {
+      try {
+        // Build the round URL
+        const separator = matchesUrl.includes('?') ? '&' : '?';
+        const roundUrl = round === 1 ? matchesUrl : `${matchesUrl}${separator}round=${round}`;
+        const fullUrl = roundUrl.startsWith('http') ? roundUrl : `https://sportstats365.com${roundUrl}`;
+        
+        console.log(`Fetching round ${round} for ${teamName}: ${fullUrl}`);
+        
+        const html: string = await new Promise((resolve, reject) => {
+          cloudscraper.get({
+            uri: fullUrl,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'HX-Request': 'true',
+              'HX-Current-URL': baseUrl,
+              'Referer': baseUrl,
+            },
+          }, (error: any, response: any, body: string) => {
+            if (error) {
+              console.warn(`Failed to fetch round ${round} for ${teamName}:`, error.message);
+              resolve('');
+            } else {
+              resolve(body);
+            }
+          });
+        });
+        
+        if (!html) {
+          break;
+        }
+        
+        const $ = cheerio.load(html);
+        let foundMatches = 0;
+        
+        // Parse matches from the response
+        // Look for list-group-item elements that contain match data
+        $('.list-group-item').each((_, element) => {
+          const $item = $(element);
+          
+          // Skip headers
+          if ($item.hasClass('text-muted') || $item.hasClass('border-0')) {
+            return;
+          }
+          
+          // Look for team names
+          const teamSpans = $item.find('.event-team');
+          if (teamSpans.length < 2) return;
+          
+          const homeTeamText = $(teamSpans[0]).clone().children().remove().end().text().trim();
+          const awayTeamText = $(teamSpans[1]).clone().children().remove().end().text().trim();
+          
+          const homeTeam = cleanTeamName(homeTeamText || $(teamSpans[0]).find('img').attr('alt') || '');
+          const awayTeam = cleanTeamName(awayTeamText || $(teamSpans[1]).find('img').attr('alt') || '');
+          
+          // Check if this match involves our team
+          const isHomeMatch = homeTeam.toLowerCase().includes(teamName.toLowerCase()) || 
+                            teamName.toLowerCase().includes(homeTeam.toLowerCase());
+          const isAwayMatch = awayTeam.toLowerCase().includes(teamName.toLowerCase()) || 
+                            teamName.toLowerCase().includes(awayTeam.toLowerCase());
+          
+          if (!isHomeMatch && !isAwayMatch) {
+            return;
+          }
+          
+          // Extract scores
+          const scoreDiv = $item.find('.score-list');
+          let homeScore: number | null = null;
+          let awayScore: number | null = null;
+          let homeHalfScore: number | null = null;
+          let awayHalfScore: number | null = null;
+          
+          if (scoreDiv.length > 0) {
+            const mainScores = scoreDiv.find('.fw-bold, .fw-strong');
+            if (mainScores.length >= 2) {
+              const homeScoreText = $(mainScores[0]).text().trim();
+              const awayScoreText = $(mainScores[1]).text().trim();
+              
+              if (homeScoreText && !isNaN(parseInt(homeScoreText))) {
+                homeScore = parseInt(homeScoreText);
+              }
+              if (awayScoreText && !isNaN(parseInt(awayScoreText))) {
+                awayScore = parseInt(awayScoreText);
+              }
+            }
+            
+            // Extract half-time scores
+            const halfScores = scoreDiv.find('.score-period');
+            if (halfScores.length > 0) {
+              const halfText = halfScores.text();
+              const halfMatches = halfText.match(/\((\d+)\)[^\d]*\((\d+)\)/);
+              if (halfMatches) {
+                homeHalfScore = parseInt(halfMatches[1]);
+                awayHalfScore = parseInt(halfMatches[2]);
+              }
+            }
+          }
+          
+          // Only include finished matches (FT status)
+          const eventTime = $item.find('.event-time small').text().trim();
+          const isFT = eventTime === 'FT' || eventTime.includes('FT') || (homeScore !== null && awayScore !== null);
+          
+          if (!isFT || homeScore === null || awayScore === null) {
+            return;
+          }
+          
+          // Determine result from team's perspective
+          let result: 'W' | 'D' | 'L';
+          let goalsScored: number;
+          let goalsConceded: number;
+          let htGoalsScored: number | null = null;
+          let htGoalsConceded: number | null = null;
+          let opponent: string;
+          
+          if (isHomeMatch) {
+            goalsScored = homeScore;
+            goalsConceded = awayScore;
+            htGoalsScored = homeHalfScore;
+            htGoalsConceded = awayHalfScore;
+            opponent = awayTeam;
+            
+            if (homeScore > awayScore) result = 'W';
+            else if (homeScore < awayScore) result = 'L';
+            else result = 'D';
+          } else {
+            goalsScored = awayScore;
+            goalsConceded = homeScore;
+            htGoalsScored = awayHalfScore;
+            htGoalsConceded = homeHalfScore;
+            opponent = homeTeam;
+            
+            if (awayScore > homeScore) result = 'W';
+            else if (awayScore < homeScore) result = 'L';
+            else result = 'D';
+          }
+          
+          // Extract date if available
+          const dateText = $item.find('.text-muted, small').filter(function() {
+            return $(this).text().match(/\d{1,2}\/\d{1,2}\/\d{2,4}/);
+          }).text();
+          
+          allMatches.push({
+            opponent,
+            isHome: isHomeMatch,
+            goalsScored,
+            goalsConceded,
+            htGoalsScored,
+            htGoalsConceded,
+            result,
+            date: dateText || undefined,
+          });
+          
+          foundMatches++;
+        });
+        
+        console.log(`Round ${round}: Found ${foundMatches} matches for ${teamName} (${allMatches.length} total)`);
+        
+        // If we didn't find any matches this round, we've reached the end
+        if (foundMatches === 0 && round > 1) {
+          break;
+        }
+        
+        // Add delay between requests to avoid rate limiting
+        if (round < maxRounds && allMatches.length < maxMatches) {
+          await new Promise(resolve => setTimeout(resolve, 750));
+        }
+        
+        round++;
+      } catch (error) {
+        console.error(`Error fetching round ${round} for ${teamName}:`, error);
+        break;
+      }
+    }
+    
+    // Take only the most recent maxMatches
+    const recentMatches = allMatches.slice(0, maxMatches);
+    
+    // Cache the results
+    teamMatchesCache.set(cacheKey, recentMatches);
+    
+    console.log(`Successfully scraped ${recentMatches.length} matches for ${teamName}`);
+    return recentMatches;
+    
+  } catch (error) {
+    console.error(`Failed to scrape matches for ${teamName}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Clear the team matches cache (useful between different bulk upload runs)
+ */
+export function clearTeamMatchesCache(): void {
+  teamMatchesCache.clear();
+  console.log('Team matches cache cleared');
 }
 
