@@ -205,16 +205,8 @@ export async function trainConfidenceAwareModel(
       away_score: 'meanSquaredError',
       confidence: confidenceLoss as any,
     },
-    lossWeights: {
-      result_1x2: 1.0,
-      over_under_2_5: 0.8,
-      btts: 0.8,
-      home_score: 0.5,
-      away_score: 0.5,
-      confidence: 1.5,
-    },
     metrics: ['accuracy'],
-  });
+  } as any);
   
   // Train model
   console.log('Training confidence-aware model...');

@@ -923,8 +923,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const { loadRatingModel, predictWithRatingModel } = await import('./ml-model-ratings');
-      const { model, normalizationStats } = await loadRatingModel(activeModel.modelPath);
+      // Try to load confidence-aware model first, fallback to regular model
+      const { existsSync } = await import('fs');
+      const { join } = await import('path');
+      const modelTypeFile = join(activeModel.modelPath, 'model_type.txt');
+      const isConfidenceAware = existsSync(modelTypeFile);
+
+      let model, normalizationStats, predictFn;
+      
+      if (isConfidenceAware) {
+        console.log('✨ Using confidence-aware model (learned confidence)');
+        const { loadConfidenceModel, predictWithConfidence } = await import('./ml-model-confidence-training');
+        const loaded = await loadConfidenceModel(activeModel.modelPath);
+        model = loaded.model;
+        normalizationStats = loaded.normalizationStats;
+        predictFn = predictWithConfidence;
+      } else {
+        console.log('Using standard model (max probability confidence)');
+        const { loadRatingModel, predictWithRatingModel } = await import('./ml-model-ratings');
+        const loaded = await loadRatingModel(activeModel.modelPath);
+        model = loaded.model;
+        normalizationStats = loaded.normalizationStats;
+        predictFn = predictWithRatingModel;
+      }
 
       await testerStorage.deleteAllRatingPredictions();
 
@@ -947,13 +968,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
 
-          const prediction = await predictWithRatingModel(
+          const prediction = await predictFn(
             model,
             match,
             homeRating,
             awayRating,
             normalizationStats
           );
+
+          // Handle both regular confidence and learned confidence
+          const confidenceValue = 'learnedConfidence' in prediction 
+            ? prediction.learnedConfidence 
+            : prediction.confidence;
 
           const savedPrediction = await testerStorage.createRatingPrediction({
             matchStatsId: match.id,
@@ -971,7 +997,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             predictedBtts: prediction.btts.predicted,
             over25Prob: prediction.overUnder25.prob,
             predictedOver25: prediction.overUnder25.predicted,
-            confidence: prediction.confidence
+            confidence: confidenceValue
           });
 
           predictions.push({

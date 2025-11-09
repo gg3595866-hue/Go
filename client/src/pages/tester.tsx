@@ -170,10 +170,44 @@ export default function TesterPage() {
               </div>
             </div>
             {predictions && predictions.length > 0 && (
-              <div className="mt-3 p-3 bg-primary/10 rounded-md">
-                <p className="text-sm text-muted-foreground">
-                  {predictions.length} prediction(s) available. Predictions shown alongside match statistics below.
-                </p>
+              <div className="mt-3 space-y-2">
+                <div className="p-3 bg-primary/10 rounded-md">
+                  <p className="text-sm text-muted-foreground">
+                    {predictions.length} prediction(s) available. Predictions shown alongside match statistics below.
+                  </p>
+                </div>
+                <div className="p-3 bg-muted/50 rounded-md">
+                  <p className="text-xs font-medium mb-2">Confidence Levels:</p>
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <div className="px-2 py-0.5 rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 font-medium">
+                        80-100%
+                      </div>
+                      <span className="text-muted-foreground">High Trust</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 font-medium">
+                        60-79%
+                      </div>
+                      <span className="text-muted-foreground">Medium Trust</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="px-2 py-0.5 rounded bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 font-medium">
+                        40-59%
+                      </div>
+                      <span className="text-muted-foreground">Low Trust</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="px-2 py-0.5 rounded bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 font-medium">
+                        0-39%
+                      </div>
+                      <span className="text-muted-foreground">Very Low Trust</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    The model learns when to trust its predictions - focus on high confidence matches for best results.
+                  </p>
+                </div>
               </div>
             )}
             <div className="mt-4">
@@ -506,7 +540,30 @@ export default function TesterPage() {
                           </div>
                         </TableCell>
                         <TableCell className="bg-primary/5" data-testid={`pred-confidence-${stat.id}`}>
-                          {prediction ? `${(prediction.confidence * 100).toFixed(0)}%` : '-'}
+                          {prediction ? (
+                            <div className="flex items-center gap-2">
+                              <div className={`px-2 py-1 rounded text-xs font-medium ${
+                                prediction.confidence >= 0.8 
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                  : prediction.confidence >= 0.6
+                                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                  : prediction.confidence >= 0.4
+                                  ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+                                  : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                              }`}>
+                                {(prediction.confidence * 100).toFixed(0)}%
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {prediction.confidence >= 0.8 
+                                  ? 'High'
+                                  : prediction.confidence >= 0.6
+                                  ? 'Medium'
+                                  : prediction.confidence >= 0.4
+                                  ? 'Low'
+                                  : 'Very Low'}
+                              </span>
+                            </div>
+                          ) : '-'}
                         </TableCell>
                       </TableRow>;
                     })
