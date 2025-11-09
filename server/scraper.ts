@@ -2,9 +2,13 @@ import cloudscraper from 'cloudscraper';
 import * as cheerio from 'cheerio';
 import { type Match, type MatchDetails } from '@shared/schema';
 import { VERIFIED_LEAGUE_MAPPINGS, getVerifiedLeagueSlug } from './verified-league-mappings';
+import { calculateTeamStats, calculateTeamForm } from './team-stats-calculator';
 
 // Configuration flag to use calculated stats instead of website pre-calculated stats
 const USE_CALCULATED_STATS = true;
+
+// Minimum matches required for reliable calculated stats
+const MIN_MATCHES_FOR_CALCULATION = 3;
 
 // In-memory cache for team matches (per scrape run)
 const teamMatchesCache = new Map<string, TeamMatchSummary[]>();
@@ -460,6 +464,10 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     const formButton = $('button[hx-get*="/form"]').first();
     const formUrl = formButton.attr('hx-get');
     
+    // Extract the matches URL from HTMX attributes (for calculating team stats)
+    const matchesButton = $('button[hx-get*="/matches"]').first();
+    const matchesUrl = matchesButton.attr('hx-get');
+    
     // Fetch the stats content from HTMX endpoint
     let statsHtml = '';
     if (statsUrl) {
@@ -556,6 +564,41 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
         competition = linkText; // Use HTML text if available (more accurate)
       }
       competitionLogo = competitionLink.find('img').attr('src') || '';
+    }
+    
+    // Scrape team matches and calculate stats (if enabled and matches URL available)
+    let homeTeamMatches: TeamMatchSummary[] = [];
+    let awayTeamMatches: TeamMatchSummary[] = [];
+    let useCalculatedStats = false;
+    
+    if (USE_CALCULATED_STATS && matchesUrl) {
+      console.log('Attempting to calculate stats from team matches...');
+      
+      try {
+        // Scrape matches for both teams in parallel
+        [homeTeamMatches, awayTeamMatches] = await Promise.all([
+          scrapeTeamMatches(homeTeam, matchesUrl, matchUrl, 7, 12),
+          scrapeTeamMatches(awayTeam, matchesUrl, matchUrl, 7, 12),
+        ]);
+        
+        console.log(`Scraped ${homeTeamMatches.length} matches for ${homeTeam}`);
+        console.log(`Scraped ${awayTeamMatches.length} matches for ${awayTeam}`);
+        
+        // Only use calculated stats if we have enough data
+        if (homeTeamMatches.length >= MIN_MATCHES_FOR_CALCULATION && 
+            awayTeamMatches.length >= MIN_MATCHES_FOR_CALCULATION) {
+          useCalculatedStats = true;
+          console.log('✓ Using calculated stats from team match data');
+        } else {
+          console.log(`⚠ Insufficient match data (home: ${homeTeamMatches.length}, away: ${awayTeamMatches.length}). Falling back to website stats.`);
+        }
+      } catch (error) {
+        console.error('✗ Error scraping team matches:', error);
+        console.log('→ Falling back to website pre-calculated stats');
+      }
+    } else {
+      const reason = !USE_CALCULATED_STATS ? 'disabled by configuration' : 'matches URL not found';
+      console.log(`→ Using website pre-calculated stats (${reason})`);
     }
     
     // Extract score - try .display-4 first, fallback to first score pattern in body
@@ -738,6 +781,7 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     // Extract all table rows for parsing statistics
     const allRows = $('tr, .row, div[class*="stat"]').toArray();
     
+    // Initialize variables for team statistics (will be populated from HTML or calculations)
     // Parse Team Statistics (Wins, Draws, Losses)
     let homeWinPercent = 0, homeDrawPercent = 0, homeLossPercent = 0;
     let awayWinPercent = 0, awayDrawPercent = 0, awayLossPercent = 0;
@@ -1131,6 +1175,127 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
         insights.push(text);
       }
     });
+    
+    // Calculate team stats from scraped matches if available
+    if (useCalculatedStats && homeTeamMatches.length > 0 && awayTeamMatches.length > 0) {
+      console.log('→ Applying calculated stats to match details');
+      
+      const homeCalculated = calculateTeamStats(homeTeamMatches);
+      const awayCalculated = calculateTeamStats(awayTeamMatches);
+      const homeFormCalculated = calculateTeamForm(homeTeamMatches);
+      const awayFormCalculated = calculateTeamForm(awayTeamMatches);
+      
+      // Override form data with calculated values
+      homeFormSequence = homeFormCalculated.last5;
+      awayFormSequence = awayFormCalculated.last5;
+      homeFormHome = homeFormCalculated.homeForm;
+      homeFormAway = homeFormCalculated.awayForm;
+      homeFormOverall = homeFormCalculated.overallForm;
+      awayFormHome = awayFormCalculated.homeForm;
+      awayFormAway = awayFormCalculated.awayForm;
+      awayFormOverall = awayFormCalculated.overallForm;
+      
+      // Override team stats with calculated values
+      homeWinPercent = homeCalculated.winPercentage;
+      homeDrawPercent = homeCalculated.drawPercentage;
+      homeLossPercent = homeCalculated.lossPercentage;
+      awayWinPercent = awayCalculated.winPercentage;
+      awayDrawPercent = awayCalculated.drawPercentage;
+      awayLossPercent = awayCalculated.lossPercentage;
+      
+      homeGoalsScored = homeCalculated.goalsScored;
+      homeGoalsConceded = homeCalculated.goalsConceded;
+      awayGoalsScored = awayCalculated.goalsScored;
+      awayGoalsConceded = awayCalculated.goalsConceded;
+      
+      homeCleanSheet = homeCalculated.cleanSheetPercentage;
+      awayCleanSheet = awayCalculated.cleanSheetPercentage;
+      
+      // Home/Away-specific win rates
+      homeWinPercentHome = homeCalculated.winPercentageHome;
+      homeWinPercentAway = homeCalculated.winPercentageAway;
+      homeDrawPercentHome = homeCalculated.drawPercentageHome;
+      homeDrawPercentAway = homeCalculated.drawPercentageAway;
+      homeLossPercentHome = homeCalculated.lossPercentageHome;
+      homeLossPercentAway = homeCalculated.lossPercentageAway;
+      
+      awayWinPercentHome = awayCalculated.winPercentageHome;
+      awayWinPercentAway = awayCalculated.winPercentageAway;
+      awayDrawPercentHome = awayCalculated.drawPercentageHome;
+      awayDrawPercentAway = awayCalculated.drawPercentageAway;
+      awayLossPercentHome = awayCalculated.lossPercentageHome;
+      awayLossPercentAway = awayCalculated.lossPercentageAway;
+      
+      // Over/Under percentages
+      homeOver05 = homeCalculated.over05Percentage;
+      homeOver15 = homeCalculated.over15Percentage;
+      homeOver25 = homeCalculated.over25Percentage;
+      homeOver35 = homeCalculated.over35Percentage;
+      homeUnder05 = homeCalculated.under05Percentage;
+      homeUnder15 = homeCalculated.under15Percentage;
+      homeUnder25 = homeCalculated.under25Percentage;
+      homeUnder35 = homeCalculated.under35Percentage;
+      
+      awayOver05 = awayCalculated.over05Percentage;
+      awayOver15 = awayCalculated.over15Percentage;
+      awayOver25 = awayCalculated.over25Percentage;
+      awayOver35 = awayCalculated.over35Percentage;
+      awayUnder05 = awayCalculated.under05Percentage;
+      awayUnder15 = awayCalculated.under15Percentage;
+      awayUnder25 = awayCalculated.under25Percentage;
+      awayUnder35 = awayCalculated.under35Percentage;
+      
+      // Double Chance, To Nil, Winning Margin
+      homeDoubleChance1X = homeCalculated.doubleChance1X;
+      homeDoubleChanceX2 = homeCalculated.doubleChanceX2;
+      homeDoubleChance12 = homeCalculated.doubleChance12;
+      awayDoubleChance1X = awayCalculated.doubleChance1X;
+      awayDoubleChanceX2 = awayCalculated.doubleChanceX2;
+      awayDoubleChance12 = awayCalculated.doubleChance12;
+      
+      homeWinToNil = homeCalculated.winToNil;
+      homeLoseToNil = homeCalculated.loseToNil;
+      awayWinToNil = awayCalculated.winToNil;
+      awayLoseToNil = awayCalculated.loseToNil;
+      
+      homeWinByOne = homeCalculated.winByOneGoal;
+      homeWinByTwoPlus = homeCalculated.winByTwoPlusGoals;
+      awayWinByOne = awayCalculated.winByOneGoal;
+      awayWinByTwoPlus = awayCalculated.winByTwoPlusGoals;
+      
+      // BTTS stats
+      homeBTTS = homeCalculated.btts;
+      homeBTTSAndOver25 = homeCalculated.bttsAndOver25;
+      homeBTTSAndWin = homeCalculated.bttsAndWin;
+      homeBTTSAndLoss = homeCalculated.bttsAndLoss;
+      
+      awayBTTS = awayCalculated.btts;
+      awayBTTSAndOver25 = awayCalculated.bttsAndOver25;
+      awayBTTSAndWin = awayCalculated.bttsAndWin;
+      awayBTTSAndLoss = awayCalculated.bttsAndLoss;
+      
+      // Goals Scored stats
+      homeScoredPercent = homeCalculated.scoredPercent;
+      homeAgainstPercent = homeCalculated.scoredAgainstPercent;
+      awayScoredPercent = awayCalculated.scoredPercent;
+      awayAgainstPercent = awayCalculated.scoredAgainstPercent;
+      
+      // Goals in Halves
+      homeFirstHalfGoals = homeCalculated.goalsInFirstHalf;
+      homeSecondHalfGoals = homeCalculated.goalsInSecondHalf;
+      awayFirstHalfGoals = awayCalculated.goalsInFirstHalf;
+      awaySecondHalfGoals = awayCalculated.goalsInSecondHalf;
+      
+      // Halftime Stats
+      homeHalftimeWon = homeCalculated.halftimeStats.wonFirstHalf;
+      homeHalftimeTied = homeCalculated.halftimeStats.tiedFirstHalf;
+      homeHalftimeLost = homeCalculated.halftimeStats.lostFirstHalf;
+      awayHalftimeWon = awayCalculated.halftimeStats.wonFirstHalf;
+      awayHalftimeTied = awayCalculated.halftimeStats.tiedFirstHalf;
+      awayHalftimeLost = awayCalculated.halftimeStats.lostFirstHalf;
+      
+      console.log('✓ Successfully applied all calculated team statistics');
+    }
     
     const matchDetails: MatchDetails = {
       matchId,
