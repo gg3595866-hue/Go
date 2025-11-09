@@ -386,10 +386,11 @@ export async function trainRatingModel(
       match.awayTeamFormOverallL5 || 50,
       match.leagueAvgGoals || 2.7,
     ];
-    const normalizedNumerical = numericalFeatures.map((val, i) =>
-      (val - normalizationStats.numericalFeatures.min[i]) / 
-      (normalizationStats.numericalFeatures.max[i] - normalizationStats.numericalFeatures.min[i])
-    );
+    const normalizedNumerical = numericalFeatures.map((val, i) => {
+      const range = normalizationStats.numericalFeatures.max[i] - normalizationStats.numericalFeatures.min[i];
+      // Prevent division by zero when all values are the same
+      return range === 0 ? 0 : (val - normalizationStats.numericalFeatures.min[i]) / range;
+    });
     numericalFeaturesList.push(normalizedNumerical);
     
     // 1x2 result (one-hot encoded)
@@ -548,10 +549,11 @@ export async function predictWithRatingModel(
     match.awayTeamFormOverallL5 || 50,
     match.leagueAvgGoals || 2.7,
   ];
-  const normalizedNumerical = numericalFeatures.map((val, i) =>
-    (val - normalizationStats.numericalFeatures.min[i]) /
-    (normalizationStats.numericalFeatures.max[i] - normalizationStats.numericalFeatures.min[i])
-  );
+  const normalizedNumerical = numericalFeatures.map((val, i) => {
+    const range = normalizationStats.numericalFeatures.max[i] - normalizationStats.numericalFeatures.min[i];
+    // Prevent division by zero when all values are the same
+    return range === 0 ? 0 : (val - normalizationStats.numericalFeatures.min[i]) / range;
+  });
   
   // Create input tensors in the same order as model inputs
   const homeTeamTensor = tf.tensor2d([[match.homeTeamId]]);
