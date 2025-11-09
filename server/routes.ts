@@ -293,6 +293,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Fetch league statistics
           const leagueStats = await scrapeLeagueStats(matchDetails.competition);
 
+          // Validate match data before extraction
+          const { validateFootballMatchData } = await import('./feature-extraction');
+          const validation = validateFootballMatchData(matchDetails);
+          
+          if (!validation.valid) {
+            console.log(`Skipping ${match.homeTeam} vs ${match.awayTeam} - ${validation.reason}`);
+            processed++;
+            continue;
+          }
+
           // Extract features
           const features = extractFeaturesForDatabase(
             matchDetails,
