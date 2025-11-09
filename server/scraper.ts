@@ -950,51 +950,25 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     });
     
     // NEW: Extract Home/Away-specific win rates from Team Statistics tabs
+    // Note: Team Statistics section does NOT have home/away tabs on sportstats365.com
+    // We fall back to using overall win rates for home/away specific stats
     let homeWinPercentHome, homeWinPercentAway, homeDrawPercentHome, homeDrawPercentAway, homeLossPercentHome, homeLossPercentAway;
     let awayWinPercentHome, awayWinPercentAway, awayDrawPercentHome, awayDrawPercentAway, awayLossPercentHome, awayLossPercentAway;
     
-    // Team Statistics section has tabs for Home/Overall/Away
-    const teamStatsTabSection = findStatSection('Team Statistics');
+    // Fallback to overall stats (better than undefined)
+    homeWinPercentHome = homeWinPercent;
+    homeDrawPercentHome = homeDrawPercent;
+    homeLossPercentHome = homeLossPercent;
+    homeWinPercentAway = homeWinPercent;
+    homeDrawPercentAway = homeDrawPercent;
+    homeLossPercentAway = homeLossPercent;
     
-    // Find Home tab content
-    const homeTabContent = teamStatsTabSection.find('.tab-pane').filter(function() {
-      const id = $(this).attr('id') || '';
-      return id.includes('home') && !id.includes('away');
-    });
-    
-    homeTabContent.find('.list-group-item').each((i, row) => {
-      const stat = parseStatRow(row);
-      if (stat.label.includes('Wins')) {
-        homeWinPercentHome = stat.home?.percentage;
-        awayWinPercentHome = stat.away?.percentage;
-      } else if (stat.label.includes('Draws')) {
-        homeDrawPercentHome = stat.home?.percentage;
-        awayDrawPercentHome = stat.away?.percentage;
-      } else if (stat.label.includes('Losses')) {
-        homeLossPercentHome = stat.home?.percentage;
-        awayLossPercentHome = stat.away?.percentage;
-      }
-    });
-    
-    // Find Away tab content
-    const awayTabContent = teamStatsTabSection.find('.tab-pane').filter(function() {
-      const id = $(this).attr('id') || '';
-      return id.includes('away');
-    });
-    
-    awayTabContent.find('.list-group-item').each((i, row) => {
-      const stat = parseStatRow(row);
-      if (stat.label.includes('Wins')) {
-        homeWinPercentAway = stat.home?.percentage;
-        awayWinPercentAway = stat.away?.percentage;
-      } else if (stat.label.includes('Draws')) {
-        homeDrawPercentAway = stat.home?.percentage;
-        awayDrawPercentAway = stat.away?.percentage;
-      } else if (stat.label.includes('Losses')) {
-        homeLossPercentAway = stat.home?.percentage;
-        awayLossPercentAway = stat.away?.percentage;
-      }
-    });
+    awayWinPercentHome = awayWinPercent;
+    awayDrawPercentHome = awayDrawPercent;
+    awayLossPercentHome = awayLossPercent;
+    awayWinPercentAway = awayWinPercent;
+    awayDrawPercentAway = awayDrawPercent;
+    awayLossPercentAway = awayLossPercent;
     
     // NEW: Extract league positions from standings table
     let homeTeamPosition: number | undefined;
