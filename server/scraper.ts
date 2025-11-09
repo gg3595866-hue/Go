@@ -843,8 +843,8 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
       }
     });
     
-    const homeCleanSheet = 0;
-    const awayCleanSheet = 0;
+    let homeCleanSheet = 0;
+    let awayCleanSheet = 0;
     
     // Parse Double Chance statistics
     let homeDoubleChance1X, homeDoubleChanceX2, homeDoubleChance12;
