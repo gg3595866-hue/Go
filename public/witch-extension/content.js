@@ -12,7 +12,13 @@ function log(message, data) {
 }
 
 function sendGameEvent(eventData) {
-  chrome.runtime.sendMessage({ type: 'game_event', data: eventData });
+  try {
+    if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'game_event', data: eventData });
+    }
+  } catch (e) {
+    console.log('[Witch Extension] Failed to send message:', e.message);
+  }
 }
 
 function findGameCells() {
@@ -198,68 +204,85 @@ document.addEventListener('click', (event) => {
   }
 }, true);
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'ws_connected') {
-    log('WebSocket connected to server');
-    const gameState = detectGameElements();
-    sendGameEvent({ type: 'game_state', state: gameState });
-    sendResponse({ success: true });
-    
-  } else if (message.type === 'server_command') {
-    const { data } = message;
-    log('Received command from server:', data);
-    
-    switch (data.action) {
-      case 'click_cell':
-        const clicked = clickCell(data.row, data.cell);
-        if (clicked) {
-          sendGameEvent({
-            type: 'cell_selected',
-            row: data.row,
-            cell: data.cell,
-            autoClicked: true
-          });
-        }
-        break;
-        
-      case 'start_play':
-        const playBtn = document.querySelector('[class*="play"], [class*="start"], button[class*="green"]');
-        if (playBtn && !isPlaying) {
-          playBtn.click();
-          isPlaying = true;
-          currentRow = 1;
-          sendGameEvent({ type: 'play_started' });
-        }
-        break;
-        
-      case 'stop_play':
-        const takeBtn = document.querySelector('[class*="take"], [class*="collect"], [class*="cashout"]');
-        if (takeBtn && isPlaying) {
-          takeBtn.click();
-          isPlaying = false;
-          sendGameEvent({ type: 'play_stopped' });
-        }
-        break;
-        
-      case 'set_auto_play':
-        autoPlay = data.enabled;
-        log(`Auto-play ${autoPlay ? 'enabled' : 'disabled'}`);
-        break;
-        
-      case 'get_state':
-        const state = detectGameElements();
-        sendGameEvent({ type: 'game_state', state });
-        break;
+function setupMessageListener() {
+  try {
+    if (!chrome || !chrome.runtime || !chrome.runtime.onMessage) {
+      log('Chrome runtime not available, retrying in 1s...');
+      setTimeout(setupMessageListener, 1000);
+      return;
     }
     
-    sendResponse({ success: true });
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.type === 'ws_connected') {
+        log('WebSocket connected to server');
+        const gameState = detectGameElements();
+        sendGameEvent({ type: 'game_state', state: gameState });
+        sendResponse({ success: true });
+        
+      } else if (message.type === 'server_command') {
+        const { data } = message;
+        log('Received command from server:', data);
+        
+        switch (data.action) {
+          case 'click_cell':
+            const clicked = clickCell(data.row, data.cell);
+            if (clicked) {
+              sendGameEvent({
+                type: 'cell_selected',
+                row: data.row,
+                cell: data.cell,
+                autoClicked: true
+              });
+            }
+            break;
+            
+          case 'start_play':
+            const playBtn = document.querySelector('[class*="play"], [class*="start"], button[class*="green"]');
+            if (playBtn && !isPlaying) {
+              playBtn.click();
+              isPlaying = true;
+              currentRow = 1;
+              sendGameEvent({ type: 'play_started' });
+            }
+            break;
+            
+          case 'stop_play':
+            const takeBtn = document.querySelector('[class*="take"], [class*="collect"], [class*="cashout"]');
+            if (takeBtn && isPlaying) {
+              takeBtn.click();
+              isPlaying = false;
+              sendGameEvent({ type: 'play_stopped' });
+            }
+            break;
+            
+          case 'set_auto_play':
+            autoPlay = data.enabled;
+            log(`Auto-play ${autoPlay ? 'enabled' : 'disabled'}`);
+            break;
+            
+          case 'get_state':
+            const state = detectGameElements();
+            sendGameEvent({ type: 'game_state', state });
+            break;
+        }
+        
+        sendResponse({ success: true });
+      }
+      
+      return true;
+    });
+    
+    log('Message listener setup complete');
+  } catch (e) {
+    log('Error setting up message listener:', e.message);
+    setTimeout(setupMessageListener, 1000);
   }
-  
-  return true;
-});
+}
 
 function init() {
   log('Witch Extension content script loaded on ' + window.location.href);
+  
+  setupMessageListener();
   
   setTimeout(() => {
     observeGameChanges();
