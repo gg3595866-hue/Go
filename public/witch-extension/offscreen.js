@@ -9,19 +9,22 @@ let heartbeatInterval = null;
 console.log('[Witch Offscreen] Document loaded');
 
 function buildWebSocketUrl(httpUrl) {
-  let wsUrl = httpUrl;
-  
-  if (wsUrl.startsWith('https://')) {
-    wsUrl = 'wss://' + wsUrl.substring(8);
-  } else if (wsUrl.startsWith('http://')) {
-    wsUrl = 'ws://' + wsUrl.substring(7);
-  } else {
-    wsUrl = 'wss://' + wsUrl;
+  try {
+    // Parse the URL properly
+    const url = new URL(httpUrl);
+    
+    // Get protocol - https becomes wss, http becomes ws
+    const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    
+    // Build the WebSocket URL with just the host
+    const wsUrl = `${protocol}//${url.host}/ws/witch?source=extension`;
+    
+    console.log('[Witch Offscreen] Built WS URL:', wsUrl, 'from:', httpUrl);
+    return wsUrl;
+  } catch (error) {
+    console.error('[Witch Offscreen] Invalid URL:', httpUrl, error);
+    return null;
   }
-  
-  wsUrl = wsUrl.replace(/\/$/, '');
-  
-  return wsUrl + '/ws/witch?source=extension';
 }
 
 function connectWebSocket() {
@@ -33,6 +36,7 @@ function connectWebSocket() {
   
   if (ws?.readyState === WebSocket.OPEN) {
     console.log('[Witch Offscreen] Already connected');
+    notifyBackground({ type: 'status_update', connected: true });
     return;
   }
   
@@ -43,6 +47,11 @@ function connectWebSocket() {
   
   try {
     const wsUrl = buildWebSocketUrl(serverUrl);
+    if (!wsUrl) {
+      notifyBackground({ type: 'status_update', connected: false, reason: 'invalid_url' });
+      return;
+    }
+    
     console.log('[Witch Offscreen] Connecting to:', wsUrl);
     notifyBackground({ type: 'status_update', connected: false, reason: 'connecting' });
     
@@ -89,11 +98,11 @@ function connectWebSocket() {
     ws.onerror = (error) => {
       console.error('[Witch Offscreen] WebSocket error:', error);
       isConnected = false;
-      notifyBackground({ type: 'status_update', connected: false, reason: 'ws_error', error: error?.message });
+      notifyBackground({ type: 'status_update', connected: false, reason: 'ws_error', errorMsg: error?.message });
     };
   } catch (error) {
     console.error('[Witch Offscreen] Failed to create WebSocket:', error);
-    notifyBackground({ type: 'status_update', connected: false, reason: 'exception' });
+    notifyBackground({ type: 'status_update', connected: false, reason: 'exception', errorMsg: error?.message });
   }
 }
 
@@ -120,14 +129,16 @@ function sendToServer(message) {
     console.log('[Witch Offscreen] Sent:', message);
     return true;
   } else {
-    console.warn('[Witch Offscreen] Not connected, message not sent');
+    console.warn('[Witch Offscreen] Not connected, message not sent. WS state:', ws?.readyState);
     return false;
   }
 }
 
 function notifyBackground(message) {
   try {
-    chrome.runtime.sendMessage(message).catch(() => {});
+    chrome.runtime.sendMessage(message).catch((error) => {
+      console.log('[Witch Offscreen] Could not notify background:', error.message);
+    });
   } catch (e) {
     console.log('[Witch Offscreen] Could not notify background:', e.message);
   }
@@ -140,6 +151,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'connect':
       serverUrl = message.url;
       reconnectAttempts = 0;
+      console.log('[Witch Offscreen] Received connect request with URL:', serverUrl);
       if (ws) {
         ws.close();
         ws = null;
@@ -154,6 +166,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         ws = null;
       }
       stopHeartbeat();
+      isConnected = false;
       sendResponse({ success: true });
       break;
       
@@ -163,7 +176,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
       
     case 'get_status':
-      sendResponse({ connected: isConnected, serverUrl });
+      sendResponse({ connected: isConnected, serverUrl, wsState: ws?.readyState });
       break;
       
     case 'reconnect':
