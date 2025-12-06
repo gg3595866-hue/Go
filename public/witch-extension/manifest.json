@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Witch Game Analyzer",
-  "version": "5.2",
+  "version": "5.3",
   "description": "Connects to the Witch Analyzer webapp for real-time game monitoring and control",
   "permissions": [
     "activeTab",
@@ -14,7 +14,9 @@
     "*://1x-bet.mobi/*",
     "*://localhost/*",
     "*://*.replit.dev/*",
-    "*://*.replit.app/*"
+    "*://*.replit.app/*",
+    "*://*.repl.co/*",
+    "*://*.id.repl.co/*"
   ],
   "action": {
     "default_popup": "popup.html",
