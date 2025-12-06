@@ -3,58 +3,70 @@ let autoPlay = false;
 let currentRow = 1;
 let observer = null;
 
-function log(message) {
-  console.log('[Witch Extension]', message);
+function log(message, data) {
+  if (data) {
+    console.log('[Witch Extension]', message, data);
+  } else {
+    console.log('[Witch Extension]', message);
+  }
 }
 
 function sendGameEvent(eventData) {
   chrome.runtime.sendMessage({ type: 'game_event', data: eventData });
 }
 
+function findGameCells() {
+  return Array.from(document.querySelectorAll('[class*="witch-game__box"]'));
+}
+
+function findGameRows() {
+  return Array.from(document.querySelectorAll('[class*="witch-game__row"]'));
+}
+
+function isGameActive() {
+  const pageText = document.body.innerText || '';
+  const cells = findGameCells();
+  return cells.length > 0 && pageText.includes('Choose a cell');
+}
+
+function isGameEnded() {
+  const pageText = document.body.innerText || '';
+  return pageText.includes('Better luck next time') || 
+         pageText.includes('GAME LOSS') || 
+         pageText.includes('game is over');
+}
+
+function getCellState(cell) {
+  const classList = cell.classList.toString();
+  if (classList.includes('poison') || classList.includes('w-lose')) {
+    return 'lose';
+  }
+  if (classList.includes('wine') || classList.includes('w-win')) {
+    return 'win';
+  }
+  return 'unrevealed';
+}
+
 function detectGameElements() {
-  const gameContainer = document.querySelector('[class*="witch"], [class*="game"], .game-container, [class*="ladder"]');
-  const cells = document.querySelectorAll('[class*="cell"], [class*="item"], [class*="card"], [class*="tile"]');
-  const rows = document.querySelectorAll('[class*="row"], [class*="level"], [class*="step"]');
-  const playButton = document.querySelector('[class*="play"], [class*="start"], [class*="bet"], button[class*="green"]');
-  const takeWinningsBtn = document.querySelector('[class*="take"], [class*="collect"], [class*="cashout"]');
+  const cells = findGameCells();
+  const rows = findGameRows();
+  const gameActive = isGameActive();
+  const gameEnded = isGameEnded();
   
-  log(`Detected: ${rows.length} rows, ${cells.length} cells, playBtn: ${!!playButton}, takeBtn: ${!!takeWinningsBtn}`);
+  const revealedCells = cells.filter(c => getCellState(c) !== 'unrevealed');
+  const unrevealedCells = cells.filter(c => getCellState(c) === 'unrevealed');
+  
+  log(`Detected: ${rows.length} rows, ${cells.length} cells (${unrevealedCells.length} unrevealed), active: ${gameActive}, ended: ${gameEnded}`);
   
   return {
     rows: rows.length,
     cells: cells.length,
-    hasPlayButton: !!playButton,
-    hasTakeWinnings: !!takeWinningsBtn,
-    hasGameContainer: !!gameContainer
+    unrevealedCells: unrevealedCells.length,
+    revealedCells: revealedCells.length,
+    isGameActive: gameActive,
+    isGameEnded: gameEnded,
+    hasGameContainer: cells.length > 0
   };
-}
-
-function findGameCells() {
-  const allCells = [];
-  
-  const possibleSelectors = [
-    '[class*="cell"]:not([class*="header"])',
-    '[class*="item"][class*="game"]',
-    '[class*="card"]:not([class*="info"])',
-    '[class*="tile"]',
-    '.game-field [class*="btn"]',
-    '[class*="choice"]',
-    '[class*="option"]'
-  ];
-  
-  for (const selector of possibleSelectors) {
-    const elements = document.querySelectorAll(selector);
-    if (elements.length >= 5) {
-      return Array.from(elements);
-    }
-  }
-  
-  const clickableInGame = document.querySelectorAll('[class*="game"] [onclick], [class*="game"] [class*="click"]');
-  if (clickableInGame.length >= 5) {
-    return Array.from(clickableInGame);
-  }
-  
-  return allCells;
 }
 
 function getRowAndCellFromElement(element) {
@@ -75,7 +87,7 @@ function clickCell(row, cell) {
   
   if (targetIndex >= 0 && targetIndex < cells.length) {
     const targetCell = cells[targetIndex];
-    if (targetCell) {
+    if (targetCell && getCellState(targetCell) === 'unrevealed') {
       targetCell.click();
       log(`Clicked cell ${cell} in row ${row}`);
       return true;
@@ -87,51 +99,29 @@ function clickCell(row, cell) {
 }
 
 function observeGameChanges() {
-  const gameContainer = document.querySelector('[class*="game"], [class*="witch"], body');
-  
-  if (!gameContainer) {
-    log('No game container found, observing body');
-  }
+  const gameContainer = document.querySelector('[class*="witch-game"]') || document.body;
   
   observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       const target = mutation.target;
       
       if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-        const classList = target.className || '';
+        const classList = target.classList?.toString() || '';
         
-        if (classList.includes('success') || classList.includes('win') || classList.includes('correct')) {
-          const position = getRowAndCellFromElement(target);
-          if (position) {
-            sendGameEvent({
-              type: 'row_result',
-              row: position.row,
-              success: true,
-              cellClicked: position.cell
-            });
-          }
-        }
-        
-        if (classList.includes('fail') || classList.includes('lose') || classList.includes('wrong') || classList.includes('bomb')) {
-          const position = getRowAndCellFromElement(target);
-          if (position) {
-            sendGameEvent({
-              type: 'row_result',
-              row: position.row,
-              success: false,
-              cellClicked: position.cell
-            });
-          }
-        }
-        
-        if (classList.includes('active') || classList.includes('selected') || classList.includes('current')) {
-          const position = getRowAndCellFromElement(target);
-          if (position && position.row !== currentRow) {
-            currentRow = position.row;
-            sendGameEvent({
-              type: 'game_state',
-              state: { currentRow }
-            });
+        if (classList.includes('witch-game__box')) {
+          const state = getCellState(target);
+          if (state !== 'unrevealed') {
+            const position = getRowAndCellFromElement(target);
+            if (position) {
+              sendGameEvent({
+                type: 'row_result',
+                row: position.row,
+                success: state === 'win',
+                cellClicked: position.cell,
+                cellState: state
+              });
+              log(`Cell revealed: row ${position.row}, cell ${position.cell}, state: ${state}`);
+            }
           }
         }
       }
@@ -140,11 +130,14 @@ function observeGameChanges() {
         mutation.addedNodes.forEach(node => {
           if (node.nodeType === 1) {
             const text = node.textContent || '';
-            if (text.includes('WIN') || text.includes('won')) {
-              sendGameEvent({ type: 'game_state', state: { status: 'win' } });
+            if (text.includes('Better luck next time') || text.includes('GAME LOSS')) {
+              isPlaying = false;
+              sendGameEvent({ type: 'game_state', state: { status: 'lose', isGameEnded: true } });
+              log('Game ended - LOSS');
             }
-            if (text.includes('LOSE') || text.includes('lost') || text.includes('GAME OVER')) {
-              sendGameEvent({ type: 'game_state', state: { status: 'lose' } });
+            if (text.includes('WIN') || text.includes('Congratulations')) {
+              sendGameEvent({ type: 'game_state', state: { status: 'win' } });
+              log('Game win detected');
             }
           }
         });
@@ -152,21 +145,21 @@ function observeGameChanges() {
     });
   });
   
-  observer.observe(gameContainer || document.body, {
+  observer.observe(gameContainer, {
     attributes: true,
     childList: true,
     subtree: true,
-    attributeFilter: ['class', 'style', 'data-state']
+    attributeFilter: ['class', 'style']
   });
   
-  log('Game observer started');
+  log('Game observer started on', gameContainer.className || 'body');
 }
 
 document.addEventListener('click', (event) => {
   const target = event.target;
   const cells = findGameCells();
   
-  const clickedCell = cells.find(cell => cell === target || cell.contains(target));
+  const clickedCell = cells.find(cell => cell === target || cell.contains(target) || target.closest('[class*="witch-game__box"]') === cell);
   
   if (clickedCell) {
     const position = getRowAndCellFromElement(clickedCell);
@@ -183,11 +176,11 @@ document.addEventListener('click', (event) => {
   
   const targetClasses = target.className || '';
   const parentClasses = target.parentElement?.className || '';
+  const buttonText = target.textContent?.toLowerCase() || '';
   
   if (targetClasses.includes('play') || targetClasses.includes('start') || 
       parentClasses.includes('play') || parentClasses.includes('start') ||
-      target.textContent?.toLowerCase().includes('play') ||
-      target.textContent?.toLowerCase().includes('bet')) {
+      buttonText.includes('play') || buttonText.includes('bet')) {
     if (!isPlaying) {
       isPlaying = true;
       currentRow = 1;
@@ -198,8 +191,7 @@ document.addEventListener('click', (event) => {
   
   if (targetClasses.includes('take') || targetClasses.includes('collect') ||
       parentClasses.includes('take') || parentClasses.includes('collect') ||
-      target.textContent?.toLowerCase().includes('take') ||
-      target.textContent?.toLowerCase().includes('collect')) {
+      buttonText.includes('take') || buttonText.includes('collect')) {
     isPlaying = false;
     sendGameEvent({ type: 'play_stopped' });
     log('Player took winnings');
@@ -252,6 +244,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'set_auto_play':
         autoPlay = data.enabled;
         log(`Auto-play ${autoPlay ? 'enabled' : 'disabled'}`);
+        break;
+        
+      case 'get_state':
+        const state = detectGameElements();
+        sendGameEvent({ type: 'game_state', state });
         break;
     }
     
