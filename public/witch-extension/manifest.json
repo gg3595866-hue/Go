@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Witch Game Analyzer",
-  "version": "5.4",
+  "version": "5.5",
   "description": "Connects to the Witch Analyzer webapp for real-time game monitoring and control",
   "permissions": [
     "activeTab",
     "storage",
-    "alarms"
+    "alarms",
+    "offscreen"
   ],
   "host_permissions": [
     "*://*.1xbet.com/*",
