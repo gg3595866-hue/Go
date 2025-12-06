@@ -24,17 +24,22 @@ function sendGameEvent(eventData) {
 }
 
 function findGameCells() {
-  return Array.from(document.querySelectorAll('[class*="witch-game__box"]'));
+  return Array.from(document.querySelectorAll('.witch-game__box'));
 }
 
 function findGameRows() {
-  return Array.from(document.querySelectorAll('[class*="witch-game__row"]'));
+  return Array.from(document.querySelectorAll('.witch-game__row'));
+}
+
+function findActiveRow() {
+  return document.querySelector('.witch-game__row--is-active');
 }
 
 function isGameActive() {
   const pageText = document.body.innerText || '';
   const cells = findGameCells();
-  return cells.length > 0 && pageText.includes('Choose a cell');
+  const activeRow = findActiveRow();
+  return cells.length > 0 && (pageText.includes('Choose a cell') || activeRow !== null);
 }
 
 function isGameEnded() {
@@ -45,12 +50,16 @@ function isGameEnded() {
 }
 
 function getCellState(cell) {
-  const classList = cell.classList.toString();
-  if (classList.includes('poison') || classList.includes('w-lose')) {
+  const dataResult = cell.getAttribute('data-result');
+  if (dataResult === 'lose') {
     return 'lose';
   }
-  if (classList.includes('wine') || classList.includes('w-win')) {
+  if (dataResult === 'win') {
     return 'win';
+  }
+  const classList = cell.classList.toString();
+  if (classList.includes('--is-open')) {
+    return 'revealed';
   }
   return 'unrevealed';
 }
@@ -58,17 +67,24 @@ function getCellState(cell) {
 function detectGameElements() {
   const cells = findGameCells();
   const rows = findGameRows();
+  const activeRow = findActiveRow();
   const gameActive = isGameActive();
   const gameEnded = isGameEnded();
   
   const revealedCells = cells.filter(c => getCellState(c) !== 'unrevealed');
   const unrevealedCells = cells.filter(c => getCellState(c) === 'unrevealed');
   
+  let activeRowIndex = -1;
+  if (activeRow) {
+    activeRowIndex = rows.indexOf(activeRow) + 1;
+  }
+  
   return {
     rows: rows.length,
     cells: cells.length,
     unrevealedCells: unrevealedCells.length,
     revealedCells: revealedCells.length,
+    activeRow: activeRowIndex,
     isGameActive: gameActive,
     isGameEnded: gameEnded,
     hasGameContainer: cells.length > 0
@@ -80,7 +96,7 @@ function getRowAndCellFromElement(element) {
   
   for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
     const rowElement = rows[rowIdx];
-    const rowCells = Array.from(rowElement.querySelectorAll('[class*="witch-game__box"]'));
+    const rowCells = Array.from(rowElement.querySelectorAll('.witch-game__box'));
     const cellIdx = rowCells.indexOf(element);
     if (cellIdx !== -1) {
       return { row: rowIdx + 1, cell: cellIdx + 1 };
@@ -99,15 +115,17 @@ function getRowAndCellFromElement(element) {
 }
 
 function clickCell(row, cell) {
-  const cells = findGameCells();
-  const targetIndex = (row - 1) * 5 + (cell - 1);
-  
-  if (targetIndex >= 0 && targetIndex < cells.length) {
-    const targetCell = cells[targetIndex];
-    if (targetCell && getCellState(targetCell) === 'unrevealed') {
-      targetCell.click();
-      log(`Clicked cell ${cell} in row ${row}`);
-      return true;
+  const rows = findGameRows();
+  if (row > 0 && row <= rows.length) {
+    const rowElement = rows[row - 1];
+    const rowCells = Array.from(rowElement.querySelectorAll('.witch-game__box'));
+    if (cell > 0 && cell <= rowCells.length) {
+      const targetCell = rowCells[cell - 1];
+      if (targetCell && getCellState(targetCell) === 'unrevealed') {
+        targetCell.click();
+        log(`Clicked cell ${cell} in row ${row}`);
+        return true;
+      }
     }
   }
   
@@ -142,7 +160,7 @@ function setupCellClickCapture() {
   document.addEventListener('click', (event) => {
     const target = event.target;
     
-    const clickedBox = target.closest('[class*="witch-game__box"]');
+    const clickedBox = target.closest('.witch-game__box');
     if (clickedBox) {
       const position = getRowAndCellFromElement(clickedBox);
       if (position) {
@@ -179,18 +197,18 @@ function setupCellClickCapture() {
 }
 
 function observeGameChanges() {
-  const gameContainer = document.querySelector('[class*="witch-game"]') || document.body;
+  const gameContainer = document.querySelector('.witch-game') || 
+                        document.querySelector('[class*="witch"]') || 
+                        document.body;
   
   observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       const target = mutation.target;
       
-      if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-        const classList = target.classList?.toString() || '';
-        
-        if (classList.includes('witch-game__box')) {
+      if (mutation.type === 'attributes') {
+        if (mutation.attributeName === 'data-result') {
           const state = getCellState(target);
-          if (state !== 'unrevealed') {
+          if (state === 'win' || state === 'lose') {
             const position = getRowAndCellFromElement(target);
             if (position) {
               sendGameEvent({
@@ -201,6 +219,26 @@ function observeGameChanges() {
                 cellState: state
               });
               log(`Cell revealed: row ${position.row}, cell ${position.cell}, state: ${state}`);
+            }
+          }
+        }
+        
+        if (mutation.attributeName === 'class') {
+          const classList = target.classList?.toString() || '';
+          if (classList.includes('witch-game__box') && classList.includes('--is-open')) {
+            const state = getCellState(target);
+            if (state !== 'unrevealed') {
+              const position = getRowAndCellFromElement(target);
+              if (position) {
+                sendGameEvent({
+                  type: 'row_result',
+                  row: position.row,
+                  success: state === 'win',
+                  cellClicked: position.cell,
+                  cellState: state
+                });
+                log(`Cell opened: row ${position.row}, cell ${position.cell}, state: ${state}`);
+              }
             }
           }
         }
@@ -225,10 +263,10 @@ function observeGameChanges() {
     attributes: true,
     childList: true,
     subtree: true,
-    attributeFilter: ['class', 'style']
+    attributeFilter: ['class', 'data-result']
   });
   
-  log('Game observer started');
+  log('Game observer started on:', gameContainer.className || 'body');
 }
 
 function setupMessageListener() {
