@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { WebSocketServer, WebSocket } from "ws";
 import { scrapeFixtures, scrapeBasketballFixtures, scrapeMatchDetails, scrapeBasketballMatchDetails, scrapeLeagueStats } from "./scraper";
 import { storage, databaseStorage, testerStorage } from "./storage";
 import { insertMatchStatsSchema } from "@shared/schema";
@@ -7,6 +8,9 @@ import {
   extractFeaturesForDatabase,
   extractFeaturesForTester,
 } from "./feature-extraction";
+import archiver from "archiver";
+import path from "path";
+import fs from "fs";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get fixtures for a specific date
@@ -2130,6 +2134,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Extension download route
+  app.get("/api/witch/extension/download", (req, res) => {
+    const extensionDir = path.join(process.cwd(), "public", "witch-extension");
+    
+    if (!fs.existsSync(extensionDir)) {
+      return res.status(404).json({ error: "Extension files not found" });
+    }
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", "attachment; filename=witch-extension-v5.0.zip");
+
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    
+    archive.on("error", (err) => {
+      console.error("Archive error:", err);
+      res.status(500).json({ error: "Failed to create extension archive" });
+    });
+
+    archive.pipe(res);
+    archive.directory(extensionDir, false);
+    archive.finalize();
+  });
+
   const httpServer = createServer(app);
+
+  // WebSocket server for Witch Analyzer
+  const witchWss = new WebSocketServer({ noServer: true });
+  const witchClients = new Set<WebSocket>();
+  const extensionClients = new Set<WebSocket>();
+
+  witchWss.on("connection", (ws, request) => {
+    const url = request.url || "";
+    const isExtension = url.includes("source=extension");
+    
+    if (isExtension) {
+      extensionClients.add(ws);
+      console.log("Witch extension connected");
+      
+      // Notify webapp clients that extension connected
+      witchClients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: "extension_connected" }));
+        }
+      });
+    } else {
+      witchClients.add(ws);
+      console.log("Witch webapp connected");
+    }
+
+    ws.on("message", (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        
+        if (isExtension) {
+          // Forward extension messages to webapp clients
+          witchClients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify(message));
+            }
+          });
+        } else {
+          // Forward webapp messages to extension clients
+          extensionClients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify(message));
+            }
+          });
+        }
+      } catch (error) {
+        console.error("Failed to parse WebSocket message:", error);
+      }
+    });
+
+    ws.on("close", () => {
+      if (isExtension) {
+        extensionClients.delete(ws);
+        console.log("Witch extension disconnected");
+        
+        // Notify webapp clients that extension disconnected
+        witchClients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: "extension_disconnected" }));
+          }
+        });
+      } else {
+        witchClients.delete(ws);
+        console.log("Witch webapp disconnected");
+      }
+    });
+
+    ws.on("error", (error) => {
+      console.error("WebSocket error:", error);
+    });
+  });
+
+  // Handle upgrade requests for WebSocket
+  httpServer.on("upgrade", (request, socket, head) => {
+    const pathname = request.url?.split("?")[0] || "";
+    
+    if (pathname === "/ws/witch") {
+      witchWss.handleUpgrade(request, socket, head, (ws) => {
+        witchWss.emit("connection", ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  });
+
   return httpServer;
 }

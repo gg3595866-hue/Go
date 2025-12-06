@@ -14,6 +14,7 @@ import BasketballTesterPage from "@/pages/basketball-tester";
 import BasketballTrainingPage from "@/pages/basketball-training";
 import BasketballProcessingPage from "@/pages/basketball-processing";
 import MatchDetailsPage from "@/pages/match-details";
+import WitchAnalyzerPage from "@/pages/witch-analyzer";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -31,6 +32,7 @@ function Router() {
       <Route path="/basketball/training" component={BasketballTrainingPage} />
       <Route path="/basketball/processing" component={BasketballProcessingPage} />
       <Route path="/match/:url" component={MatchDetailsPage} />
+      <Route path="/witch" component={WitchAnalyzerPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -41,10 +43,12 @@ function NavigationTabs() {
   
   const isFootball = location === '/' || location.startsWith('/football');
   const isBasketball = location.startsWith('/basketball');
+  const isWitch = location.startsWith('/witch');
   
   const sportTabs = [
     { name: "Football", path: "/football" },
     { name: "Basketball", path: "/basketball" },
+    { name: "Witch", path: "/witch" },
   ];
   
   const footballSubTabs = [
@@ -63,13 +67,13 @@ function NavigationTabs() {
     { name: "Processing", path: "/basketball/processing" },
   ];
   
-  const currentSubTabs = isBasketball ? basketballSubTabs : footballSubTabs;
+  const currentSubTabs = isWitch ? [] : isBasketball ? basketballSubTabs : footballSubTabs;
   
   return (
     <div className="border-b bg-background">
       <div className="flex items-center px-4 border-b">
         {sportTabs.map((tab) => {
-          const isActive = (tab.path === '/football' && isFootball) || (tab.path === '/basketball' && isBasketball);
+          const isActive = (tab.path === '/football' && isFootball) || (tab.path === '/basketball' && isBasketball) || (tab.path === '/witch' && isWitch);
           return (
             <Link key={tab.path} href={tab.path}>
               <button
@@ -86,25 +90,27 @@ function NavigationTabs() {
           );
         })}
       </div>
-      <div className="flex items-center px-4">
-        {currentSubTabs.map((tab) => {
-          const isActive = location === tab.path;
-          return (
-            <Link key={tab.path} href={tab.path}>
-              <button
-                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                  isActive
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-                }`}
-                data-testid={`button-subtab-${tab.name.toLowerCase()}`}
-              >
-                {tab.name}
-              </button>
-            </Link>
-          );
-        })}
-      </div>
+      {currentSubTabs.length > 0 && (
+        <div className="flex items-center px-4">
+          {currentSubTabs.map((tab) => {
+            const isActive = location === tab.path;
+            return (
+              <Link key={tab.path} href={tab.path}>
+                <button
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    isActive
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                  }`}
+                  data-testid={`button-subtab-${tab.name.toLowerCase()}`}
+                >
+                  {tab.name}
+                </button>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

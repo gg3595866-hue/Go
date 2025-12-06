@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Witch Game Analyzer",
+  "version": "5.0",
+  "description": "Connects to the Witch Analyzer webapp for real-time game monitoring and control",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.betwitchgame.com/*",
+    "*://localhost/*",
+    "*://*.replit.dev/*",
+    "*://*.replit.app/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.betwitchgame.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
