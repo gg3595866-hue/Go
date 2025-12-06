@@ -12,43 +12,69 @@ function sendGameEvent(eventData) {
 }
 
 function detectGameElements() {
-  const rows = document.querySelectorAll('.game-row, .row, [class*="row"]');
-  const cells = document.querySelectorAll('.cell, .game-cell, [class*="cell"]');
-  const playButton = document.querySelector('.play-button, .start-button, [class*="play"], button[class*="start"]');
+  const gameContainer = document.querySelector('[class*="witch"], [class*="game"], .game-container, [class*="ladder"]');
+  const cells = document.querySelectorAll('[class*="cell"], [class*="item"], [class*="card"], [class*="tile"]');
+  const rows = document.querySelectorAll('[class*="row"], [class*="level"], [class*="step"]');
+  const playButton = document.querySelector('[class*="play"], [class*="start"], [class*="bet"], button[class*="green"]');
+  const takeWinningsBtn = document.querySelector('[class*="take"], [class*="collect"], [class*="cashout"]');
+  
+  log(`Detected: ${rows.length} rows, ${cells.length} cells, playBtn: ${!!playButton}, takeBtn: ${!!takeWinningsBtn}`);
   
   return {
     rows: rows.length,
     cells: cells.length,
-    hasPlayButton: !!playButton
+    hasPlayButton: !!playButton,
+    hasTakeWinnings: !!takeWinningsBtn,
+    hasGameContainer: !!gameContainer
   };
 }
 
-function getCellFromClick(event) {
-  const target = event.target;
-  const cellElement = target.closest('.cell, .game-cell, [class*="cell"]');
+function findGameCells() {
+  const allCells = [];
   
-  if (cellElement) {
-    const rowElement = cellElement.closest('.game-row, .row, [class*="row"]');
-    const allRows = document.querySelectorAll('.game-row, .row, [class*="row"]');
-    const rowIndex = Array.from(allRows).indexOf(rowElement) + 1;
-    
-    const allCells = rowElement?.querySelectorAll('.cell, .game-cell, [class*="cell"]') || [];
-    const cellIndex = Array.from(allCells).indexOf(cellElement) + 1;
-    
-    return { row: rowIndex, cell: cellIndex };
+  const possibleSelectors = [
+    '[class*="cell"]:not([class*="header"])',
+    '[class*="item"][class*="game"]',
+    '[class*="card"]:not([class*="info"])',
+    '[class*="tile"]',
+    '.game-field [class*="btn"]',
+    '[class*="choice"]',
+    '[class*="option"]'
+  ];
+  
+  for (const selector of possibleSelectors) {
+    const elements = document.querySelectorAll(selector);
+    if (elements.length >= 5) {
+      return Array.from(elements);
+    }
   }
   
-  return null;
+  const clickableInGame = document.querySelectorAll('[class*="game"] [onclick], [class*="game"] [class*="click"]');
+  if (clickableInGame.length >= 5) {
+    return Array.from(clickableInGame);
+  }
+  
+  return allCells;
+}
+
+function getRowAndCellFromElement(element) {
+  const cells = findGameCells();
+  const cellIndex = cells.indexOf(element);
+  
+  if (cellIndex === -1) return null;
+  
+  const row = Math.floor(cellIndex / 5) + 1;
+  const cell = (cellIndex % 5) + 1;
+  
+  return { row, cell };
 }
 
 function clickCell(row, cell) {
-  const rows = document.querySelectorAll('.game-row, .row, [class*="row"]');
-  const targetRow = rows[row - 1];
+  const cells = findGameCells();
+  const targetIndex = (row - 1) * 5 + (cell - 1);
   
-  if (targetRow) {
-    const cells = targetRow.querySelectorAll('.cell, .game-cell, [class*="cell"]');
-    const targetCell = cells[cell - 1];
-    
+  if (targetIndex >= 0 && targetIndex < cells.length) {
+    const targetCell = cells[targetIndex];
     if (targetCell) {
       targetCell.click();
       log(`Clicked cell ${cell} in row ${row}`);
@@ -61,15 +87,21 @@ function clickCell(row, cell) {
 }
 
 function observeGameChanges() {
-  const gameContainer = document.querySelector('.game-container, .game, [class*="game"]') || document.body;
+  const gameContainer = document.querySelector('[class*="game"], [class*="witch"], body');
+  
+  if (!gameContainer) {
+    log('No game container found, observing body');
+  }
   
   observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
-      if (mutation.type === 'attributes' || mutation.type === 'childList') {
-        const target = mutation.target;
+      const target = mutation.target;
+      
+      if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+        const classList = target.className || '';
         
-        if (target.classList?.contains('success') || target.getAttribute('data-result') === 'success') {
-          const position = getCellFromClick({ target });
+        if (classList.includes('success') || classList.includes('win') || classList.includes('correct')) {
+          const position = getRowAndCellFromElement(target);
           if (position) {
             sendGameEvent({
               type: 'row_result',
@@ -80,8 +112,8 @@ function observeGameChanges() {
           }
         }
         
-        if (target.classList?.contains('fail') || target.getAttribute('data-result') === 'fail') {
-          const position = getCellFromClick({ target });
+        if (classList.includes('fail') || classList.includes('lose') || classList.includes('wrong') || classList.includes('bomb')) {
+          const position = getRowAndCellFromElement(target);
           if (position) {
             sendGameEvent({
               type: 'row_result',
@@ -91,51 +123,99 @@ function observeGameChanges() {
             });
           }
         }
+        
+        if (classList.includes('active') || classList.includes('selected') || classList.includes('current')) {
+          const position = getRowAndCellFromElement(target);
+          if (position && position.row !== currentRow) {
+            currentRow = position.row;
+            sendGameEvent({
+              type: 'game_state',
+              state: { currentRow }
+            });
+          }
+        }
+      }
+      
+      if (mutation.type === 'childList') {
+        mutation.addedNodes.forEach(node => {
+          if (node.nodeType === 1) {
+            const text = node.textContent || '';
+            if (text.includes('WIN') || text.includes('won')) {
+              sendGameEvent({ type: 'game_state', state: { status: 'win' } });
+            }
+            if (text.includes('LOSE') || text.includes('lost') || text.includes('GAME OVER')) {
+              sendGameEvent({ type: 'game_state', state: { status: 'lose' } });
+            }
+          }
+        });
       }
     });
   });
   
-  observer.observe(gameContainer, {
+  observer.observe(gameContainer || document.body, {
     attributes: true,
     childList: true,
     subtree: true,
-    attributeFilter: ['class', 'data-result', 'data-state']
+    attributeFilter: ['class', 'style', 'data-state']
   });
+  
+  log('Game observer started');
 }
 
 document.addEventListener('click', (event) => {
-  const position = getCellFromClick(event);
+  const target = event.target;
+  const cells = findGameCells();
   
-  if (position) {
-    sendGameEvent({
-      type: 'cell_selected',
-      row: position.row,
-      cell: position.cell,
-      autoClicked: false
-    });
+  const clickedCell = cells.find(cell => cell === target || cell.contains(target));
+  
+  if (clickedCell) {
+    const position = getRowAndCellFromElement(clickedCell);
+    if (position) {
+      sendGameEvent({
+        type: 'cell_selected',
+        row: position.row,
+        cell: position.cell,
+        autoClicked: false
+      });
+      log(`User clicked cell ${position.cell} in row ${position.row}`);
+    }
   }
   
-  const target = event.target;
-  if (target.matches('.play-button, .start-button, [class*="play"], button[class*="start"]')) {
+  const targetClasses = target.className || '';
+  const parentClasses = target.parentElement?.className || '';
+  
+  if (targetClasses.includes('play') || targetClasses.includes('start') || 
+      parentClasses.includes('play') || parentClasses.includes('start') ||
+      target.textContent?.toLowerCase().includes('play') ||
+      target.textContent?.toLowerCase().includes('bet')) {
     if (!isPlaying) {
       isPlaying = true;
+      currentRow = 1;
       sendGameEvent({ type: 'play_started' });
-    } else {
-      isPlaying = false;
-      sendGameEvent({ type: 'play_stopped' });
+      log('Game started');
     }
+  }
+  
+  if (targetClasses.includes('take') || targetClasses.includes('collect') ||
+      parentClasses.includes('take') || parentClasses.includes('collect') ||
+      target.textContent?.toLowerCase().includes('take') ||
+      target.textContent?.toLowerCase().includes('collect')) {
+    isPlaying = false;
+    sendGameEvent({ type: 'play_stopped' });
+    log('Player took winnings');
   }
 }, true);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'ws_connected') {
-    log('WebSocket connected');
+    log('WebSocket connected to server');
     const gameState = detectGameElements();
     sendGameEvent({ type: 'game_state', state: gameState });
     sendResponse({ success: true });
     
   } else if (message.type === 'server_command') {
     const { data } = message;
+    log('Received command from server:', data);
     
     switch (data.action) {
       case 'click_cell':
@@ -151,18 +231,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
         
       case 'start_play':
-        const playButton = document.querySelector('.play-button, .start-button, [class*="play"], button[class*="start"]');
-        if (playButton && !isPlaying) {
-          playButton.click();
+        const playBtn = document.querySelector('[class*="play"], [class*="start"], button[class*="green"]');
+        if (playBtn && !isPlaying) {
+          playBtn.click();
           isPlaying = true;
+          currentRow = 1;
           sendGameEvent({ type: 'play_started' });
         }
         break;
         
       case 'stop_play':
-        const stopButton = document.querySelector('.stop-button, .pause-button, [class*="stop"], button[class*="pause"]');
-        if (stopButton && isPlaying) {
-          stopButton.click();
+        const takeBtn = document.querySelector('[class*="take"], [class*="collect"], [class*="cashout"]');
+        if (takeBtn && isPlaying) {
+          takeBtn.click();
           isPlaying = false;
           sendGameEvent({ type: 'play_stopped' });
         }
@@ -180,10 +261,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-window.addEventListener('load', () => {
-  log('Content script loaded');
-  observeGameChanges();
+function init() {
+  log('Witch Extension content script loaded on ' + window.location.href);
   
-  const gameState = detectGameElements();
-  log(`Detected: ${gameState.rows} rows, ${gameState.cells} cells`);
-});
+  setTimeout(() => {
+    observeGameChanges();
+    const gameState = detectGameElements();
+    log('Initial game state:', JSON.stringify(gameState));
+    
+    if (gameState.cells > 0 || gameState.hasGameContainer) {
+      sendGameEvent({ type: 'game_state', state: gameState });
+    }
+  }, 2000);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}

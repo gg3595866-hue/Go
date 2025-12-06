@@ -44,7 +44,7 @@ export default function WitchAnalyzerPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [grid, setGrid] = useState<CellState[][]>(() => 
     Array.from({ length: 10 }, (_, rowIndex) =>
-      Array.from({ length: 10 }, (_, cellIndex) => ({
+      Array.from({ length: 5 }, (_, cellIndex) => ({
         row: rowIndex + 1,
         cell: cellIndex + 1,
         status: "idle" as const,
@@ -285,7 +285,7 @@ export default function WitchAnalyzerPage() {
 
   const handleResetGrid = useCallback(() => {
     setGrid(Array.from({ length: 10 }, (_, rowIndex) =>
-      Array.from({ length: 10 }, (_, cellIndex) => ({
+      Array.from({ length: 5 }, (_, cellIndex) => ({
         row: rowIndex + 1,
         cell: cellIndex + 1,
         status: "idle" as const,
@@ -428,7 +428,7 @@ export default function WitchAnalyzerPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-            <CardTitle className="text-lg">10x10 Grid</CardTitle>
+            <CardTitle className="text-lg">10x5 Grid</CardTitle>
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
@@ -611,7 +611,7 @@ export default function WitchAnalyzerPage() {
                 data-testid="button-download-extension"
               >
                 <Download className="w-4 h-4" />
-                Download Extension (v5.0)
+                Download Extension (v5.2)
               </Button>
               <div className="text-xs text-muted-foreground">
                 <p className="font-medium mb-1">Installation:</p>

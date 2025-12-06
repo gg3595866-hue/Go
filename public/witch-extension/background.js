@@ -40,7 +40,7 @@ function connectWebSocket() {
         const data = JSON.parse(event.data);
         console.log('Received from server:', data);
         
-        chrome.tabs.query({ url: '*://*.betwitchgame.com/*' }, (tabs) => {
+        chrome.tabs.query({ url: ['*://*.1xbet.com/*', '*://*.1x-bet.mobi/*'] }, (tabs) => {
           tabs.forEach(tab => {
             if (tab.id) {
               chrome.tabs.sendMessage(tab.id, { type: 'server_command', data }).catch(() => {});
