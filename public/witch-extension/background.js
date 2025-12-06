@@ -1,6 +1,7 @@
 let serverUrl = null;
 let isConnected = false;
 let offscreenCreated = false;
+let popupTabId = null;
 
 console.log('[Witch BG] Service worker started');
 
@@ -79,6 +80,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'status_update') {
     isConnected = message.connected;
     console.log('[Witch BG] Connection status:', isConnected, 'reason:', message.reason);
+    
+    // Notify all tabs about connection status change
+    chrome.tabs.query({}, (tabs) => {
+      tabs.forEach(tab => {
+        chrome.tabs.sendMessage(tab.id || 0, { 
+          type: 'connection_status', 
+          connected: isConnected,
+          serverUrl: serverUrl
+        }).catch(() => {});
+      });
+    });
+    
     return false;
   }
   

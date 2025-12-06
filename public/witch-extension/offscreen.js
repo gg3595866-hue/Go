@@ -89,7 +89,7 @@ function connectWebSocket() {
     ws.onerror = (error) => {
       console.error('[Witch Offscreen] WebSocket error:', error);
       isConnected = false;
-      notifyBackground({ type: 'status_update', connected: false, reason: 'error' });
+      notifyBackground({ type: 'status_update', connected: false, reason: 'ws_error', error: error?.message });
     };
   } catch (error) {
     console.error('[Witch Offscreen] Failed to create WebSocket:', error);
