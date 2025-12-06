@@ -2,9 +2,11 @@ let isPlaying = false;
 let autoPlay = false;
 let currentRow = 1;
 let observer = null;
+let lastCellCount = 0;
+let pollInterval = null;
 
 function log(message, data) {
-  if (data) {
+  if (data !== undefined) {
     console.log('[Witch Extension]', message, data);
   } else {
     console.log('[Witch Extension]', message);
@@ -17,7 +19,7 @@ function sendGameEvent(eventData) {
       chrome.runtime.sendMessage({ type: 'game_event', data: eventData });
     }
   } catch (e) {
-    console.log('[Witch Extension] Failed to send message:', e.message);
+    log('Failed to send message:', e.message);
   }
 }
 
@@ -62,8 +64,6 @@ function detectGameElements() {
   const revealedCells = cells.filter(c => getCellState(c) !== 'unrevealed');
   const unrevealedCells = cells.filter(c => getCellState(c) === 'unrevealed');
   
-  log(`Detected: ${rows.length} rows, ${cells.length} cells (${unrevealedCells.length} unrevealed), active: ${gameActive}, ended: ${gameEnded}`);
-  
   return {
     rows: rows.length,
     cells: cells.length,
@@ -76,15 +76,26 @@ function detectGameElements() {
 }
 
 function getRowAndCellFromElement(element) {
-  const cells = findGameCells();
-  const cellIndex = cells.indexOf(element);
+  const rows = findGameRows();
   
-  if (cellIndex === -1) return null;
+  for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+    const rowElement = rows[rowIdx];
+    const rowCells = Array.from(rowElement.querySelectorAll('[class*="witch-game__box"]'));
+    const cellIdx = rowCells.indexOf(element);
+    if (cellIdx !== -1) {
+      return { row: rowIdx + 1, cell: cellIdx + 1 };
+    }
+  }
   
-  const row = Math.floor(cellIndex / 5) + 1;
-  const cell = (cellIndex % 5) + 1;
+  const allCells = findGameCells();
+  const cellIndex = allCells.indexOf(element);
+  if (cellIndex !== -1) {
+    const row = Math.floor(cellIndex / 5) + 1;
+    const cell = (cellIndex % 5) + 1;
+    return { row, cell };
+  }
   
-  return { row, cell };
+  return null;
 }
 
 function clickCell(row, cell) {
@@ -102,6 +113,69 @@ function clickCell(row, cell) {
   
   log(`Failed to find cell ${cell} in row ${row}`);
   return false;
+}
+
+function startGamePolling() {
+  if (pollInterval) return;
+  
+  log('Starting game polling...');
+  
+  pollInterval = setInterval(() => {
+    const cells = findGameCells();
+    const currentCellCount = cells.length;
+    
+    if (currentCellCount !== lastCellCount) {
+      lastCellCount = currentCellCount;
+      const gameState = detectGameElements();
+      log('Game state changed:', JSON.stringify(gameState));
+      sendGameEvent({ type: 'game_state', state: gameState });
+    }
+    
+    if (isGameEnded()) {
+      isPlaying = false;
+      sendGameEvent({ type: 'game_state', state: { status: 'lose', isGameEnded: true } });
+    }
+  }, 500);
+}
+
+function setupCellClickCapture() {
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    
+    const clickedBox = target.closest('[class*="witch-game__box"]');
+    if (clickedBox) {
+      const position = getRowAndCellFromElement(clickedBox);
+      if (position) {
+        sendGameEvent({
+          type: 'cell_selected',
+          row: position.row,
+          cell: position.cell,
+          autoClicked: false
+        });
+        log(`User clicked cell ${position.cell} in row ${position.row}`);
+      }
+    }
+    
+    const targetText = target.textContent?.toLowerCase() || '';
+    const targetClasses = target.className?.toString() || '';
+    
+    if (targetText.includes('play') || targetText.includes('bet') || 
+        targetClasses.includes('play') || targetClasses.includes('start')) {
+      if (!isPlaying) {
+        isPlaying = true;
+        currentRow = 1;
+        sendGameEvent({ type: 'play_started' });
+        log('Game started');
+      }
+    }
+    
+    if (targetText.includes('take') || targetText.includes('collect') ||
+        targetClasses.includes('take') || targetClasses.includes('collect')) {
+      isPlaying = false;
+      sendGameEvent({ type: 'play_stopped' });
+      log('Player took winnings');
+    }
+  }, true);
 }
 
 function observeGameChanges() {
@@ -141,10 +215,6 @@ function observeGameChanges() {
               sendGameEvent({ type: 'game_state', state: { status: 'lose', isGameEnded: true } });
               log('Game ended - LOSS');
             }
-            if (text.includes('WIN') || text.includes('Congratulations')) {
-              sendGameEvent({ type: 'game_state', state: { status: 'win' } });
-              log('Game win detected');
-            }
           }
         });
       }
@@ -158,51 +228,8 @@ function observeGameChanges() {
     attributeFilter: ['class', 'style']
   });
   
-  log('Game observer started on', gameContainer.className || 'body');
+  log('Game observer started');
 }
-
-document.addEventListener('click', (event) => {
-  const target = event.target;
-  const cells = findGameCells();
-  
-  const clickedCell = cells.find(cell => cell === target || cell.contains(target) || target.closest('[class*="witch-game__box"]') === cell);
-  
-  if (clickedCell) {
-    const position = getRowAndCellFromElement(clickedCell);
-    if (position) {
-      sendGameEvent({
-        type: 'cell_selected',
-        row: position.row,
-        cell: position.cell,
-        autoClicked: false
-      });
-      log(`User clicked cell ${position.cell} in row ${position.row}`);
-    }
-  }
-  
-  const targetClasses = target.className || '';
-  const parentClasses = target.parentElement?.className || '';
-  const buttonText = target.textContent?.toLowerCase() || '';
-  
-  if (targetClasses.includes('play') || targetClasses.includes('start') || 
-      parentClasses.includes('play') || parentClasses.includes('start') ||
-      buttonText.includes('play') || buttonText.includes('bet')) {
-    if (!isPlaying) {
-      isPlaying = true;
-      currentRow = 1;
-      sendGameEvent({ type: 'play_started' });
-      log('Game started');
-    }
-  }
-  
-  if (targetClasses.includes('take') || targetClasses.includes('collect') ||
-      parentClasses.includes('take') || parentClasses.includes('collect') ||
-      buttonText.includes('take') || buttonText.includes('collect')) {
-    isPlaying = false;
-    sendGameEvent({ type: 'play_stopped' });
-    log('Player took winnings');
-  }
-}, true);
 
 function setupMessageListener() {
   try {
@@ -283,15 +310,14 @@ function init() {
   log('Witch Extension content script loaded on ' + window.location.href);
   
   setupMessageListener();
+  setupCellClickCapture();
+  observeGameChanges();
+  startGamePolling();
   
   setTimeout(() => {
-    observeGameChanges();
     const gameState = detectGameElements();
     log('Initial game state:', JSON.stringify(gameState));
-    
-    if (gameState.cells > 0 || gameState.hasGameContainer) {
-      sendGameEvent({ type: 'game_state', state: gameState });
-    }
+    sendGameEvent({ type: 'game_state', state: gameState });
   }, 2000);
 }
 
