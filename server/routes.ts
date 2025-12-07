@@ -2143,7 +2143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", "attachment; filename=witch-extension-v5.9.zip");
+    res.setHeader("Content-Disposition", "attachment; filename=witch-extension-v6.0.zip");
 
     const archive = archiver("zip", { zlib: { level: 9 } });
     

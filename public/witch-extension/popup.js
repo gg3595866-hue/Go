@@ -73,12 +73,20 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   function forwardToContentScripts(data) {
+    console.log('[Witch Popup] Forwarding to content scripts:', data);
     try {
       chrome.tabs.query({ url: ['*://*.1xbet.com/*', '*://so.1xbet.com/*', '*://*.1x-bet.mobi/*', '*://1x-bet.mobi/*'] }, (tabs) => {
-        if (chrome.runtime.lastError) return;
+        if (chrome.runtime.lastError) {
+          console.log('[Witch Popup] Tab query error:', chrome.runtime.lastError);
+          return;
+        }
+        console.log('[Witch Popup] Found', tabs.length, '1xbet tabs');
         tabs.forEach(tab => {
           if (tab.id) {
-            chrome.tabs.sendMessage(tab.id, { type: 'server_command', data }).catch(() => {});
+            console.log('[Witch Popup] Sending to tab:', tab.id, tab.url);
+            chrome.tabs.sendMessage(tab.id, { type: 'server_command', data })
+              .then(() => console.log('[Witch Popup] Sent to tab', tab.id))
+              .catch((err) => console.log('[Witch Popup] Failed to send to tab', tab.id, err.message));
           }
         });
       });

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Witch Game Analyzer",
-  "version": "5.9",
+  "version": "6.0",
   "description": "Connects to the Witch Analyzer webapp for real-time game monitoring and control",
   "permissions": [
     "activeTab",

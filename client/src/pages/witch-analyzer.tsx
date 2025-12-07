@@ -611,7 +611,7 @@ export default function WitchAnalyzerPage() {
                 data-testid="button-download-extension"
               >
                 <Download className="w-4 h-4" />
-                Download Extension (v5.6)
+                Download Extension (v6.0)
               </Button>
               <div className="text-xs text-muted-foreground">
                 <p className="font-medium mb-1">Installation:</p>

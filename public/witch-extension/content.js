@@ -252,26 +252,73 @@ function findAllButtons() {
 }
 
 function clickCell(row, cell) {
-  logDetailed('ACTION', `Attempting to click cell ${cell} in row ${row}`);
+  logDetailed('ACTION', `=== CLICK CELL COMMAND: row ${row}, cell ${cell} ===`);
   
   const rows = findGameRows();
+  logDetailed('ACTION', `Found ${rows.length} game rows`);
+  
   if (row > 0 && row <= rows.length) {
     const rowElement = rows[row - 1];
     const rowCells = Array.from(rowElement.querySelectorAll('.witch-game__box'));
+    logDetailed('ACTION', `Row ${row} has ${rowCells.length} cells`);
+    
     if (cell > 0 && cell <= rowCells.length) {
       const targetCell = rowCells[cell - 1];
-      if (targetCell && getCellState(targetCell) === 'unrevealed') {
-        logDetailed('ACTION', `Clicking cell element`, getElementInfo(targetCell));
-        targetCell.click();
+      const cellState = getCellState(targetCell);
+      logDetailed('ACTION', `Target cell state: ${cellState}`, getElementInfo(targetCell));
+      
+      if (targetCell) {
+        // Try to click even if not unrevealed - let the game decide
+        logDetailed('ACTION', `Clicking cell element now!`);
+        
+        // Try multiple click methods for better mobile compatibility
+        try {
+          // Method 1: Direct click
+          targetCell.click();
+          logDetailed('ACTION', `Method 1 (click) executed`);
+        } catch (e) {
+          logDetailed('ACTION', `Method 1 failed: ${e.message}`);
+        }
+        
+        try {
+          // Method 2: Dispatch click event
+          const clickEvent = new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            view: window
+          });
+          targetCell.dispatchEvent(clickEvent);
+          logDetailed('ACTION', `Method 2 (dispatchEvent) executed`);
+        } catch (e) {
+          logDetailed('ACTION', `Method 2 failed: ${e.message}`);
+        }
+        
         log(`Clicked cell ${cell} in row ${row}`);
+        
+        sendGameEvent({
+          type: 'cell_clicked_from_webapp',
+          row,
+          cell,
+          success: true
+        });
+        
         return true;
-      } else {
-        logDetailed('ACTION', `Cell not clickable - state: ${getCellState(targetCell)}`);
       }
+    } else {
+      logDetailed('ACTION', `Cell ${cell} out of range (max: ${rowCells.length})`);
     }
+  } else {
+    logDetailed('ACTION', `Row ${row} out of range (max: ${rows.length})`);
   }
   
-  log(`Failed to find cell ${cell} in row ${row}`);
+  log(`Failed to find/click cell ${cell} in row ${row}`);
+  sendGameEvent({
+    type: 'cell_clicked_from_webapp',
+    row,
+    cell,
+    success: false,
+    error: 'Cell not found'
+  });
   return false;
 }
 
@@ -550,12 +597,16 @@ function setupMessageListener() {
         
       } else if (message.type === 'server_command') {
         const { data } = message;
-        logDetailed('CMD', 'Received command from server', data);
+        logDetailed('CMD', '=== SERVER COMMAND RECEIVED ===', data);
+        logDetailed('CMD', 'Data action:', data.action);
+        logDetailed('CMD', 'Data row:', data.row);
+        logDetailed('CMD', 'Data cell:', data.cell);
         
         switch (data.action) {
           case 'click_cell':
-            logDetailed('CMD', `Executing click_cell command: row ${data.row}, cell ${data.cell}`);
+            logDetailed('CMD', `=== EXECUTING CLICK_CELL: row ${data.row}, cell ${data.cell} ===`);
             const clicked = clickCell(data.row, data.cell);
+            logDetailed('CMD', `Click result: ${clicked}`);
             if (clicked) {
               sendGameEvent({
                 type: 'cell_selected',

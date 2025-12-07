@@ -144,16 +144,27 @@ function connectDirectWebSocket() {
         const data = JSON.parse(event.data);
         console.log('[Witch BG Direct] Received:', data);
         
-        if (data.type !== 'pong') {
-          // Forward to content scripts
-          chrome.tabs.query({ url: ['*://*.1xbet.com/*', '*://so.1xbet.com/*', '*://*.1x-bet.mobi/*', '*://1x-bet.mobi/*'] }, (tabs) => {
-            tabs.forEach(tab => {
-              if (tab.id) {
-                chrome.tabs.sendMessage(tab.id, { type: 'server_command', data }).catch(() => {});
-              }
-            });
-          });
+        if (data.type === 'pong' || data.type === 'welcome') {
+          return;
         }
+        
+        // Forward to content scripts - handle both formats
+        // Format 1: { action: "click_cell", row: 1, cell: 3 }
+        // Format 2: { type: "some_type", ... }
+        const messageToForward = data.action ? data : data;
+        console.log('[Witch BG Direct] Forwarding to content scripts:', messageToForward);
+        
+        chrome.tabs.query({ url: ['*://*.1xbet.com/*', '*://so.1xbet.com/*', '*://*.1x-bet.mobi/*', '*://1x-bet.mobi/*'] }, (tabs) => {
+          console.log('[Witch BG Direct] Found', tabs.length, '1xbet tabs');
+          tabs.forEach(tab => {
+            if (tab.id) {
+              console.log('[Witch BG Direct] Sending to tab:', tab.id, tab.url);
+              chrome.tabs.sendMessage(tab.id, { type: 'server_command', data: messageToForward })
+                .then(() => console.log('[Witch BG Direct] Message sent successfully to tab', tab.id))
+                .catch((err) => console.log('[Witch BG Direct] Failed to send to tab', tab.id, err.message));
+            }
+          });
+        });
       } catch (error) {
         console.error('[Witch BG Direct] Failed to parse message:', error);
       }
