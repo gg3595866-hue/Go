@@ -48,6 +48,15 @@
       background: #f87171;
       box-shadow: 0 0 8px #f87171;
     }
+    .status-dot.connecting {
+      background: #fbbf24;
+      box-shadow: 0 0 8px #fbbf24;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
     .status-text {
       font-weight: 500;
     }
@@ -131,7 +140,7 @@
     The extension works on so.1xbet.com and 1x-bet.mobi.
   </div>
   
-  <div class="version">v5.6</div>
+  <div class="version">v5.7</div>
   
   <script src="popup.js"></script>
 </body>

@@ -5,7 +5,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusDot = document.getElementById('statusDot');
   const statusText = document.getElementById('statusText');
   
-  function updateStatus(connected, url) {
+  let currentMode = 'offscreen';
+  
+  function updateStatus(connected, url, mode) {
+    if (mode) {
+      currentMode = mode;
+    }
+    
     if (connected) {
       statusDot.className = 'status-dot connected';
       statusText.textContent = 'Connected';
@@ -18,8 +24,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   chrome.runtime.sendMessage({ type: 'get_status' }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.log('Error getting status:', chrome.runtime.lastError.message);
+      statusText.textContent = 'Service loading...';
+      return;
+    }
     if (response) {
-      updateStatus(response.connected, response.serverUrl);
+      updateStatus(response.connected, response.serverUrl, response.mode);
       if (response.serverUrl) {
         serverUrlInput.value = response.serverUrl;
       }
@@ -48,7 +59,15 @@ document.addEventListener('DOMContentLoaded', () => {
     url = url.replace(/\/$/, '');
     serverUrlInput.value = url;
     
+    statusText.textContent = 'Connecting...';
+    statusDot.className = 'status-dot connecting';
+    
     chrome.runtime.sendMessage({ type: 'set_server_url', url }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.log('Error setting URL:', chrome.runtime.lastError.message);
+        statusText.textContent = 'Connection error, retrying...';
+        return;
+      }
       if (response?.success) {
         statusText.textContent = 'Connecting...';
       }
@@ -56,7 +75,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   
   reconnectBtn.addEventListener('click', () => {
+    statusText.textContent = 'Reconnecting...';
+    statusDot.className = 'status-dot connecting';
+    
     chrome.runtime.sendMessage({ type: 'reconnect' }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.log('Error reconnecting:', chrome.runtime.lastError.message);
+        statusText.textContent = 'Retry failed, try again...';
+        return;
+      }
       if (response?.success) {
         statusText.textContent = 'Reconnecting...';
       }
