@@ -270,9 +270,9 @@ chrome.storage.local.get(['serverUrl'], (result) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('[Witch BG] Received message:', message.type, 'from:', sender.url ? 'offscreen/popup' : 'content');
   
-  if (message.type === 'status_update') {
+  if (message.type === 'status_update' || message.type === 'popup_status_update') {
     isConnected = message.connected;
-    console.log('[Witch BG] Connection status:', isConnected, 'reason:', message.reason);
+    console.log('[Witch BG] Connection status:', isConnected, 'from:', message.type);
     
     // Notify all tabs about connection status change
     chrome.tabs.query({}, (tabs) => {
