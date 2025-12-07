@@ -2143,7 +2143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", "attachment; filename=witch-extension-v5.8.zip");
+    res.setHeader("Content-Disposition", "attachment; filename=witch-extension-v5.9.zip");
 
     const archive = archiver("zip", { zlib: { level: 9 } });
     
@@ -2168,9 +2168,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const url = request.url || "";
     const isExtension = url.includes("source=extension");
     
+    console.log("WebSocket connection attempt - URL:", url, "isExtension:", isExtension);
+    
     if (isExtension) {
       extensionClients.add(ws);
       console.log("Witch extension connected");
+      
+      // Send immediate welcome message to confirm connection
+      ws.send(JSON.stringify({ type: "welcome", message: "Connected to Witch Analyzer server" }));
       
       // Notify webapp clients that extension connected
       witchClients.forEach(client => {
@@ -2181,11 +2186,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } else {
       witchClients.add(ws);
       console.log("Witch webapp connected");
+      
+      // Send welcome to webapp too
+      ws.send(JSON.stringify({ type: "welcome", source: "webapp" }));
     }
 
     ws.on("message", (data) => {
       try {
         const message = JSON.parse(data.toString());
+        
+        // Handle ping from extension - respond with pong
+        if (message.type === "ping") {
+          ws.send(JSON.stringify({ type: "pong" }));
+          return;
+        }
         
         if (isExtension) {
           // Forward extension messages to webapp clients
