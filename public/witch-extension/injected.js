@@ -458,21 +458,23 @@
   console.log('[Mimick Spy] Injected script initialized - v7.0');
 
   // ========== RACING ATTACK AUTO-CLICK SYSTEM ==========
+  // Based on working witch-extension-v4.3-FIXED logic
   let racingAttackActive = false;
   let racingAttackInterval = null;
   let autoPlayEnabled = false;
   let totalRowsClicked = 0;
-  let lastCellCountForRacing = 0;
-  let lastRowClickedForRacing = -1;
+  let successfulRows = 0;
+  let lastCellCount = 0;
+  let lastRowClicked = -1;
   let gameEndedMaster = false;
   let pendingClickTimeouts = [];
 
   function isUnrevealedCell(cell) {
     const classList = cell.classList.toString().toLowerCase();
-    const hasPoison = classList.includes('poison') || classList.includes('w-lose') || classList.includes('lose');
-    const hasWine = classList.includes('wine') || classList.includes('w-win') || classList.includes('win');
-    const isOpen = classList.includes('open') || classList.includes('revealed');
-    return !hasPoison && !hasWine && !isOpen;
+    // Check for revealed cell states (poison/lose or wine/win)
+    const hasPoison = classList.includes('poison') || classList.includes('w-lose');
+    const hasWine = classList.includes('wine') || classList.includes('w-win');
+    return !hasPoison && !hasWine; // Still unrevealed if neither
   }
 
   function isGameLost() {
@@ -485,66 +487,19 @@
 
   function isRowActive() {
     const pageText = document.body.innerText || '';
-    return pageText.includes('Choose a cell') || pageText.includes('Select a cell');
+    return pageText.includes('Choose a cell');
   }
 
   function findAllGameCells() {
-    let cells = document.querySelectorAll('[class*="witch-game__box"]');
-    if (cells.length > 0) return Array.from(cells);
-    
-    cells = document.querySelectorAll('[class*="witch"][class*="box"]');
-    if (cells.length > 0) return Array.from(cells);
-    
-    cells = document.querySelectorAll('[class*="game-cell"]');
-    if (cells.length > 0) return Array.from(cells);
-    
-    return [];
-  }
-
-  function findActiveRow() {
-    // First try to find row with active class
-    let activeRow = document.querySelector('.witch-game__row--is-active');
-    if (activeRow) return activeRow;
-    
-    // Try alternative active row classes
-    activeRow = document.querySelector('[class*="witch-game__row"][class*="active"]');
-    if (activeRow) return activeRow;
-    
-    activeRow = document.querySelector('[class*="row"][class*="active"]');
-    if (activeRow) return activeRow;
-    
-    // If no active class found, find the lowest row (bottom) that has unrevealed cells
-    // Game starts from bottom and progresses upward
-    const allRows = document.querySelectorAll('.witch-game__row');
-    if (allRows.length === 0) return null;
-    
-    // Iterate from bottom to top (reverse order) to find the first row with unrevealed cells
-    for (let i = allRows.length - 1; i >= 0; i--) {
-      const row = allRows[i];
-      const cells = row.querySelectorAll('.witch-game__box');
-      const hasUnrevealed = Array.from(cells).some(cell => isUnrevealedCell(cell));
-      const hasRevealed = Array.from(cells).some(cell => !isUnrevealedCell(cell));
-      
-      // Active row is the one that has unrevealed cells but may have one revealed (if player clicked)
-      // Or it's the first row from bottom with all unrevealed cells
-      if (hasUnrevealed) {
-        return row;
-      }
-    }
-    
-    return null;
-  }
-
-  function findActiveRowCells() {
-    const activeRow = findActiveRow();
-    if (!activeRow) return [];
-    
-    const cells = activeRow.querySelectorAll('.witch-game__box');
+    // Use the same selector as the working extension
+    const cells = document.querySelectorAll('[class*="witch-game__box"]');
     return Array.from(cells);
   }
 
   function stopRacingAttack() {
     gameEndedMaster = true;
+    
+    // Cancel ALL pending timeouts
     pendingClickTimeouts.forEach(id => clearTimeout(id));
     pendingClickTimeouts = [];
     
@@ -553,8 +508,8 @@
       racingAttackInterval = null;
     }
     racingAttackActive = false;
-    console.log('%c[WITCH AUTO] Racing attack STOPPED', 'color: #ff6600; font-weight: bold;');
-    sendToContentScript('auto_click_stopped', { totalRows: totalRowsClicked });
+    console.log(`%c[WITCH AUTO] Racing attack STOPPED - Final: ${successfulRows}/${totalRowsClicked} rows`, 'color: #ff6600; font-weight: bold;');
+    sendToContentScript('auto_click_stopped', { totalRows: totalRowsClicked, successful: successfulRows });
   }
 
   function performRacingAttack() {
@@ -562,82 +517,134 @@
     racingAttackActive = true;
     gameEndedMaster = false;
     totalRowsClicked = 0;
-    lastCellCountForRacing = 0;
-    lastRowClickedForRacing = -1;
+    successfulRows = 0;
+    lastCellCount = 0;
+    lastRowClicked = -1;
     pendingClickTimeouts = [];
     
-    console.log('%c[WITCH AUTO] RACING ATTACK STARTED!', 'color: #00ff00; font-weight: bold; font-size: 16px;');
+    console.log('%c[WITCH AUTO] RACING ATTACK STARTED - Syncing with game progression!', 'color: #00ff00; font-weight: bold; font-size: 16px;');
     sendToContentScript('auto_click_started', {});
     
+    // Keep attacking rows continuously as they appear (same as working extension)
     racingAttackInterval = setInterval(() => {
-      if (gameEndedMaster || !autoPlayEnabled) {
-        stopRacingAttack();
-        return;
-      }
+      // MASTER KILL SWITCH - if game ended, don't do anything
+      if (gameEndedMaster) return;
       
+      // Re-scan for cells each time
+      const freshCells = findAllGameCells();
+      const pageText = document.body.innerText || '';
+      
+      // GAME END DETECTION
       if (isGameLost()) {
-        console.log('%c[WITCH AUTO] GAME ENDED - Stopping all clicks!', 'color: #ff0000; font-weight: bold;');
-        stopRacingAttack();
-        return;
-      }
-      
-      if (!isRowActive()) {
-        return;
-      }
-      
-      // Get only cells from the currently active row (not all cells)
-      const activeRow = findActiveRow();
-      if (!activeRow) {
-        return;
-      }
-      
-      const activeRowCells = findActiveRowCells();
-      if (activeRowCells.length === 0) {
-        return;
-      }
-      
-      // Only get unrevealed cells from the active row
-      const unrevealed = activeRowCells.filter(cell => isUnrevealedCell(cell));
-      
-      if (unrevealed.length === 0) {
-        return;
-      }
-      
-      // Get row index for logging (find which row number this is)
-      const allRows = document.querySelectorAll('.witch-game__row');
-      let currentRowIndex = Array.from(allRows).indexOf(activeRow) + 1;
-      
-      // Check if this is a new row by comparing with last clicked row
-      const isNewRow = currentRowIndex !== lastRowClickedForRacing;
-      
-      if (isNewRow && isRowActive()) {
-        totalRowsClicked++;
-        lastRowClickedForRacing = currentRowIndex;
+        gameEndedMaster = true;
+        console.log('%c[WITCH AUTO] GAME ENDED - Cancelling all pending clicks!', 'color: #ff0000; font-weight: bold;');
         
-        console.log(`%c[WITCH AUTO] Row ${currentRowIndex} (total: ${totalRowsClicked}): Clicking random cell from active row (${unrevealed.length} unrevealed)`, 'color: #ff3333; font-weight: bold;');
+        // Cancel ALL pending timeouts
+        pendingClickTimeouts.forEach(id => clearTimeout(id));
+        pendingClickTimeouts = [];
         
-        const randomCell = unrevealed[Math.floor(Math.random() * unrevealed.length)];
-        if (randomCell) {
-          const timeoutId = setTimeout(() => {
+        // Stop the interval
+        clearInterval(racingAttackInterval);
+        racingAttackInterval = null;
+        console.log(`%c[WITCH AUTO] FINAL SCORE: ${successfulRows}/${totalRowsClicked} rows cleared`, 'color: #ff6600; font-weight: bold; font-size: 14px;');
+        racingAttackActive = false;
+        sendToContentScript('auto_click_stopped', { totalRows: totalRowsClicked, successful: successfulRows });
+        return;
+      }
+      
+      // Check if we have cells AND "Choose a cell" is visible (row is active)
+      const rowActive = pageText.includes('Choose a cell') && freshCells.length > 0;
+      
+      if (!rowActive) {
+        return; // Wait for next row
+      }
+      
+      // Detect NEW row by checking if cell count changed (previous row was revealed)
+      const currentCellCount = freshCells.length;
+      
+      // Check if cells have unrevealed status (not wine/poison yet)
+      const unrevealed = freshCells.filter(cell => isUnrevealedCell(cell));
+      
+      // Only attack if we have unrevealed cells and this is a new row
+      if (unrevealed.length > 0) {
+        const isNewRow = currentCellCount !== lastCellCount || lastRowClicked === -1;
+        
+        if (isNewRow && pageText.includes('Choose a cell')) {
+          totalRowsClicked++;
+          lastRowClicked = totalRowsClicked;
+          lastCellCount = currentCellCount;
+          
+          // GRADUATED ATTACK STRATEGY based on game difficulty (same as working extension)
+          let clickCount;
+          let difficulty;
+          
+          const currentRow = totalRowsClicked - 1;
+          if (currentRow <= 3) {
+            clickCount = Math.min(4, unrevealed.length);
+            difficulty = "EASY";
+          } else if (currentRow <= 6) {
+            clickCount = Math.min(5, unrevealed.length);
+            difficulty = "MEDIUM";
+          } else if (currentRow <= 8) {
+            clickCount = Math.min(5, unrevealed.length);
+            difficulty = "HARD";
+          } else {
+            clickCount = Math.min(5, unrevealed.length);
+            difficulty = "EXTREME";
+          }
+          
+          console.log(`%c[WITCH AUTO] Row ${totalRowsClicked} [${difficulty}]: Clicking ${clickCount} cells (${unrevealed.length} unrevealed)`, 'color: #ff3333; font-weight: bold;');
+          
+          // Click cells ULTRA-RAPID (25ms apart) - same as working extension
+          for (let i = 0; i < clickCount; i++) {
+            const timeoutId = setTimeout(() => {
+              // CHECK KILL SWITCH before clicking
+              if (gameEndedMaster) return;
+              
+              const randomCell = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+              if (randomCell) {
+                console.log(`%c[WITCH AUTO] CLICK #${i + 1}`, 'color: #00ff00;');
+                randomCell.click();
+                
+                sendToContentScript('auto_cell_clicked', {
+                  row: totalRowsClicked,
+                  clickNum: i + 1,
+                  timestamp: getTimestamp()
+                });
+              }
+            }, i * 25);
+            
+            // Track this timeout so we can cancel it if game ends
+            pendingClickTimeouts.push(timeoutId);
+          }
+          
+          // Wait and check result
+          const checkResultId = setTimeout(() => {
+            // CHECK KILL SWITCH before checking result
             if (gameEndedMaster) return;
             
-            console.log('%c[WITCH AUTO] CLICK!', 'color: #00ff00;');
-            randomCell.click();
-            
-            sendToContentScript('auto_cell_clicked', {
-              row: currentRowIndex,
-              timestamp: getTimestamp()
-            });
-          }, 50);
+            const resultPoison = document.querySelectorAll('[class*="poison"], [class*="w-lose"]');
+            if (resultPoison.length === 0) {
+              console.log(`%c[WITCH AUTO] Row ${totalRowsClicked}: SURVIVED!`, 'color: #00ff00; font-weight: bold;');
+              successfulRows++;
+            } else {
+              console.log(`%c[WITCH AUTO] Row ${totalRowsClicked}: Poison hit`, 'color: #ff0000;');
+            }
+            // Reset for next row detection
+            lastCellCount = 0;
+          }, 2000);
           
-          pendingClickTimeouts.push(timeoutId);
+          pendingClickTimeouts.push(checkResultId);
         }
       }
-    }, 300);
+    }, 500); // Check every 500ms for more responsive detection (same as working extension)
     
+    // Auto-stop after 120 seconds (safety timeout)
     setTimeout(() => {
       if (!gameEndedMaster) {
-        console.log('%c[WITCH AUTO] Safety timeout - stopping after 2 minutes', 'color: #ff6600;');
+        gameEndedMaster = true;
+        pendingClickTimeouts.forEach(id => clearTimeout(id));
+        console.log('%c[WITCH AUTO] Safety timeout - stopping after 2 minutes', 'color: #ff6600; font-weight: bold;');
         stopRacingAttack();
       }
     }, 120000);
@@ -647,10 +654,14 @@
     if (!autoPlayEnabled) return;
     if (racingAttackActive) return;
     
-    const activeRow = findActiveRow();
-    const activeRowCells = findActiveRowCells();
-    if (activeRow && activeRowCells.length > 0 && isRowActive()) {
-      console.log('%c[WITCH AUTO] Game active detected with active row - starting racing attack!', 'color: #ffff00; font-weight: bold;');
+    const cells = findAllGameCells();
+    const pageText = document.body.innerText || '';
+    
+    // Game is active when: cells exist AND page shows "Choose a cell"
+    const isGameRunning = cells.length > 0 && pageText.includes('Choose a cell');
+    
+    if (isGameRunning) {
+      console.log('%c[WITCH AUTO] Game active detected - starting racing attack!', 'color: #ffff00; font-weight: bold;');
       performRacingAttack();
     }
   }
