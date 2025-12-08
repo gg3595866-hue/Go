@@ -501,6 +501,48 @@
     return [];
   }
 
+  function findActiveRow() {
+    // First try to find row with active class
+    let activeRow = document.querySelector('.witch-game__row--is-active');
+    if (activeRow) return activeRow;
+    
+    // Try alternative active row classes
+    activeRow = document.querySelector('[class*="witch-game__row"][class*="active"]');
+    if (activeRow) return activeRow;
+    
+    activeRow = document.querySelector('[class*="row"][class*="active"]');
+    if (activeRow) return activeRow;
+    
+    // If no active class found, find the lowest row (bottom) that has unrevealed cells
+    // Game starts from bottom and progresses upward
+    const allRows = document.querySelectorAll('.witch-game__row');
+    if (allRows.length === 0) return null;
+    
+    // Iterate from bottom to top (reverse order) to find the first row with unrevealed cells
+    for (let i = allRows.length - 1; i >= 0; i--) {
+      const row = allRows[i];
+      const cells = row.querySelectorAll('.witch-game__box');
+      const hasUnrevealed = Array.from(cells).some(cell => isUnrevealedCell(cell));
+      const hasRevealed = Array.from(cells).some(cell => !isUnrevealedCell(cell));
+      
+      // Active row is the one that has unrevealed cells but may have one revealed (if player clicked)
+      // Or it's the first row from bottom with all unrevealed cells
+      if (hasUnrevealed) {
+        return row;
+      }
+    }
+    
+    return null;
+  }
+
+  function findActiveRowCells() {
+    const activeRow = findActiveRow();
+    if (!activeRow) return [];
+    
+    const cells = activeRow.querySelectorAll('.witch-game__box');
+    return Array.from(cells);
+  }
+
   function stopRacingAttack() {
     gameEndedMaster = true;
     pendingClickTimeouts.forEach(id => clearTimeout(id));
@@ -533,8 +575,6 @@
         return;
       }
       
-      const freshCells = findAllGameCells();
-      
       if (isGameLost()) {
         console.log('%c[WITCH AUTO] GAME ENDED - Stopping all clicks!', 'color: #ff0000; font-weight: bold;');
         stopRacingAttack();
@@ -545,25 +585,36 @@
         return;
       }
       
-      if (freshCells.length === 0) {
+      // Get only cells from the currently active row (not all cells)
+      const activeRow = findActiveRow();
+      if (!activeRow) {
         return;
       }
       
-      const unrevealed = freshCells.filter(cell => isUnrevealedCell(cell));
+      const activeRowCells = findActiveRowCells();
+      if (activeRowCells.length === 0) {
+        return;
+      }
+      
+      // Only get unrevealed cells from the active row
+      const unrevealed = activeRowCells.filter(cell => isUnrevealedCell(cell));
       
       if (unrevealed.length === 0) {
         return;
       }
       
-      const currentCellCount = freshCells.length;
-      const isNewRow = currentCellCount !== lastCellCountForRacing || lastRowClickedForRacing === -1;
+      // Get row index for logging (find which row number this is)
+      const allRows = document.querySelectorAll('.witch-game__row');
+      let currentRowIndex = Array.from(allRows).indexOf(activeRow) + 1;
+      
+      // Check if this is a new row by comparing with last clicked row
+      const isNewRow = currentRowIndex !== lastRowClickedForRacing;
       
       if (isNewRow && isRowActive()) {
         totalRowsClicked++;
-        lastRowClickedForRacing = totalRowsClicked;
-        lastCellCountForRacing = currentCellCount;
+        lastRowClickedForRacing = currentRowIndex;
         
-        console.log(`%c[WITCH AUTO] Row ${totalRowsClicked}: Clicking random cell (${unrevealed.length} unrevealed)`, 'color: #ff3333; font-weight: bold;');
+        console.log(`%c[WITCH AUTO] Row ${currentRowIndex} (total: ${totalRowsClicked}): Clicking random cell from active row (${unrevealed.length} unrevealed)`, 'color: #ff3333; font-weight: bold;');
         
         const randomCell = unrevealed[Math.floor(Math.random() * unrevealed.length)];
         if (randomCell) {
@@ -574,20 +625,13 @@
             randomCell.click();
             
             sendToContentScript('auto_cell_clicked', {
-              row: totalRowsClicked,
+              row: currentRowIndex,
               timestamp: getTimestamp()
             });
           }, 50);
           
           pendingClickTimeouts.push(timeoutId);
         }
-        
-        const resetTimeoutId = setTimeout(() => {
-          if (gameEndedMaster) return;
-          lastCellCountForRacing = 0;
-        }, 1500);
-        
-        pendingClickTimeouts.push(resetTimeoutId);
       }
     }, 300);
     
@@ -603,9 +647,10 @@
     if (!autoPlayEnabled) return;
     if (racingAttackActive) return;
     
-    const cells = findAllGameCells();
-    if (cells.length > 0 && isRowActive()) {
-      console.log('%c[WITCH AUTO] Game active detected - starting racing attack!', 'color: #ffff00; font-weight: bold;');
+    const activeRow = findActiveRow();
+    const activeRowCells = findActiveRowCells();
+    if (activeRow && activeRowCells.length > 0 && isRowActive()) {
+      console.log('%c[WITCH AUTO] Game active detected with active row - starting racing attack!', 'color: #ffff00; font-weight: bold;');
       performRacingAttack();
     }
   }
