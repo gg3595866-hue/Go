@@ -1048,6 +1048,12 @@ function setupMessageListener() {
               if (autoPlay) {
                 logDetailed('CMD', 'Auto-play is enabled, starting auto-click');
                 startAutoClick();
+                
+                window.postMessage({
+                  source: 'witch-content-script',
+                  command: 'start_play',
+                  data: {}
+                }, '*');
               }
             }
             break;
@@ -1063,12 +1069,25 @@ function setupMessageListener() {
               sendGameEvent({ type: 'play_stopped' });
               logDetailed('CMD', 'Take button clicked programmatically');
               stopMimickRecording();
+              
+              window.postMessage({
+                source: 'witch-content-script',
+                command: 'stop_play',
+                data: {}
+              }, '*');
             }
             break;
             
           case 'set_auto_play':
             autoPlay = data.enabled;
             logDetailed('CMD', `Auto-play ${autoPlay ? 'enabled' : 'disabled'}`);
+            
+            window.postMessage({
+              source: 'witch-content-script',
+              command: 'set_auto_play',
+              data: { enabled: autoPlay }
+            }, '*');
+            
             if (autoPlay && isPlaying) {
               logDetailed('CMD', 'Auto-play enabled while playing - starting auto-click');
               startAutoClick();

@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Witch Analyzer v4.2 PRO (Fixed Selectors)</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 400px;
+      max-height: 600px;
+      background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 100%);
+      color: #ffffff;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      padding: 12px;
+      overflow-y: auto;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #ff6600;
+    }
+    
+    .header h1 {
+      font-size: 18px;
+      color: #ff6600;
+      text-shadow: 0 0 10px rgba(255, 102, 0, 0.5);
+      margin-bottom: 4px;
+    }
+    
+    .header .version {
+      font-size: 11px;
+      color: #00ff88;
+      font-weight: bold;
+    }
+    
+    .header .subtitle {
+      font-size: 10px;
+      color: #888;
+      margin-top: 4px;
+    }
+    
+    .fixed-banner {
+      background: rgba(0, 255, 136, 0.2);
+      border: 2px solid #00ff88;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    
+    .fixed-banner h3 {
+      color: #00ff88;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    
+    .fixed-banner p {
+      font-size: 10px;
+      color: #ccc;
+    }
+    
+    .fixed-banner code {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-family: monospace;
+      color: #00ffff;
+    }
+    
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+    
+    .tab {
+      flex: 1;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #888;
+      font-size: 10px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+    }
+    
+    .tab:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .tab.active {
+      background: rgba(255, 102, 0, 0.1);
+      border-color: #ff6600;
+      color: #ff6600;
+    }
+    
+    .panel {
+      display: none;
+    }
+    
+    .panel.active {
+      display: block;
+    }
+    
+    .features {
+      background: rgba(255, 102, 0, 0.1);
+      border: 1px solid rgba(255, 102, 0, 0.3);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+    
+    .features h2 {
+      font-size: 12px;
+      color: #ff6600;
+      margin-bottom: 6px;
+    }
+    
+    .features ul {
+      list-style: none;
+      font-size: 10px;
+      columns: 2;
+    }
+    
+    .features li {
+      padding: 2px 0;
+      color: #aaa;
+    }
+    
+    .features li::before {
+      content: "OK ";
+      color: #00ff88;
+    }
+    
+    .status {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+    
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .status-item:last-child {
+      border-bottom: none;
+    }
+    
+    .status-label {
+      font-size: 10px;
+      color: #888;
+    }
+    
+    .status-value {
+      font-size: 10px;
+      font-weight: bold;
+    }
+    
+    .status-value.active {
+      color: #00ff88;
+    }
+    
+    .status-value.autoclick {
+      color: #ff6600;
+      animation: pulse 1s infinite;
+    }
+    
+    .status-value.realtime {
+      color: #00ffff;
+      animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .network-log {
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid #333;
+      border-radius: 6px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    
+    .network-item {
+      padding: 6px 8px;
+      border-bottom: 1px solid #222;
+      font-size: 9px;
+      font-family: monospace;
+    }
+    
+    .network-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .network-item.outgoing {
+      border-left: 3px solid #ff9900;
+    }
+    
+    .network-item.incoming {
+      border-left: 3px solid #00ff88;
+    }
+    
+    .network-item.game {
+      background: rgba(0, 255, 255, 0.1);
+      border-left: 3px solid #00ffff;
+    }
+    
+    .network-method {
+      display: inline-block;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-weight: bold;
+      margin-right: 4px;
+    }
+    
+    .network-method.GET { background: #2d5; color: #000; }
+    .network-method.POST { background: #f90; color: #000; }
+    .network-method.WS { background: #f0f; color: #000; }
+    
+    .network-url {
+      color: #aaa;
+      word-break: break-all;
+    }
+    
+    .network-time {
+      color: #666;
+      float: right;
+    }
+    
+    .filter-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    
+    .filter-btn {
+      flex: 1;
+      padding: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #888;
+      font-size: 9px;
+      cursor: pointer;
+    }
+    
+    .filter-btn.active {
+      background: rgba(0, 255, 136, 0.2);
+      border-color: #00ff88;
+      color: #00ff88;
+    }
+    
+    .clear-btn {
+      width: 100%;
+      padding: 8px;
+      background: rgba(255, 0, 0, 0.1);
+      border: 1px solid rgba(255, 0, 0, 0.3);
+      border-radius: 6px;
+      color: #ff6666;
+      font-size: 10px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    
+    .clear-btn:hover {
+      background: rgba(255, 0, 0, 0.2);
+    }
+    
+    .instructions {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 10px;
+      color: #888;
+      line-height: 1.4;
+    }
+    
+    .instructions h3 {
+      color: #ff6600;
+      font-size: 11px;
+      margin-bottom: 6px;
+    }
+    
+    .instructions ol {
+      padding-left: 16px;
+    }
+    
+    .instructions li {
+      margin-bottom: 3px;
+    }
+    
+    .footer {
+      margin-top: 12px;
+      text-align: center;
+      font-size: 9px;
+      color: #666;
+    }
+    
+    .data-preview {
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 8px;
+      font-family: monospace;
+      font-size: 9px;
+      max-height: 150px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #0f0;
+    }
+    
+    .round-card {
+      background: rgba(255, 102, 0, 0.1);
+      border: 1px solid rgba(255, 102, 0, 0.3);
+      border-radius: 6px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    
+    .round-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(255, 102, 0, 0.2);
+    }
+    
+    .round-label {
+      font-size: 10px;
+      color: #ff6600;
+      font-weight: bold;
+    }
+    
+    .round-time {
+      font-size: 9px;
+      color: #666;
+    }
+    
+    .grid-mini {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 2px;
+    }
+    
+    .cell-mini {
+      width: 20px;
+      height: 20px;
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+    }
+    
+    .cell-mini.safe {
+      background: rgba(0, 255, 0, 0.3);
+      border: 1px solid #0f0;
+      color: #0f0;
+    }
+    
+    .cell-mini.danger {
+      background: rgba(255, 0, 0, 0.1);
+      border: 1px solid rgba(255, 0, 0, 0.2);
+      color: #f00;
+    }
+    
+    .cell-mini.autoclick {
+      background: rgba(255, 102, 0, 0.4);
+      border: 1px solid #ff6600;
+      color: #ff6600;
+    }
+    
+    .autoclick-info {
+      background: rgba(255, 102, 0, 0.2);
+      border: 2px solid #ff6600;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    
+    .autoclick-info h3 {
+      color: #ff6600;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    
+    .autoclick-info p {
+      font-size: 10px;
+      color: #ccc;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Witch Analyzer PRO</h1>
+    <div class="version">v4.2.0 - FIXED SELECTORS EDITION</div>
+    <div class="subtitle">Auto-Click + Real-Time Capture + Network Monitor</div>
+  </div>
+  
+  <div class="fixed-banner">
+    <h3>v4.2 SELECTOR FIX</h3>
+    <p>Now properly detects <code>witch-game__box</code> and <code>witch-game__row</code> elements!</p>
+    <p style="margin-top: 4px;">Also supports <code>w-game-box</code> and <code>w-game-row</code> format.</p>
+  </div>
+  
+  <div class="tabs">
+    <div class="tab active" data-panel="overview">Overview</div>
+    <div class="tab" data-panel="network">Network</div>
+    <div class="tab" data-panel="rounds">Rounds</div>
+    <div class="tab" data-panel="help">Help</div>
+  </div>
+  
+  <div id="overview" class="panel active">
+    <div class="autoclick-info">
+      <h3>AUTO-CLICK FEATURE</h3>
+      <p>Click the PLAY button to automatically click cells row by row!<br>The extension waits for server confirmation before moving to the next row.</p>
+    </div>
+    
+    <div class="features">
+      <h2>NEW in v4.2 FIXED SELECTORS</h2>
+      <ul>
+        <li>witch-game__box selector</li>
+        <li>witch-game__row selector</li>
+        <li>w-game-box fallback</li>
+        <li>w-game-row fallback</li>
+        <li>Row-based detection</li>
+        <li>Active row tracking</li>
+      </ul>
+    </div>
+    
+    <div class="status">
+      <div class="status-item">
+        <span class="status-label">Extension Status</span>
+        <span class="status-value active" id="ext-status">ACTIVE</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Auto-Click Mode</span>
+        <span class="status-value autoclick" id="autoclick-status">ENABLED</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Network Monitor</span>
+        <span class="status-value realtime" id="net-status">ENABLED</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Requests Captured</span>
+        <span class="status-value active" id="req-count">0</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Rounds Captured</span>
+        <span class="status-value active" id="round-count">0</span>
+      </div>
+    </div>
+  </div>
+  
+  <div id="network" class="panel">
+    <div class="filter-bar">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="game">Game</button>
+      <button class="filter-btn" data-filter="api">API</button>
+      <button class="filter-btn" data-filter="out">Outgoing</button>
+    </div>
+    
+    <div class="network-log" id="network-log">
+      <div class="network-item">
+        <span style="color: #666;">Waiting for network activity...</span>
+      </div>
+    </div>
+    
+    <button class="clear-btn" id="clear-logs">Clear Network Log</button>
+  </div>
+  
+  <div id="rounds" class="panel">
+    <div id="rounds-list">
+      <div style="color: #666; font-size: 11px; text-align: center; padding: 20px;">
+        No rounds captured yet.<br>Click PLAY to start auto-clicking!
+      </div>
+    </div>
+  </div>
+  
+  <div id="help" class="panel">
+    <div class="instructions">
+      <h3>How to Use v4.2 (Fixed Selectors):</h3>
+      <ol>
+        <li>Navigate to the Witch game on 1xbet</li>
+        <li>Look for the buttons in the bottom-right corner</li>
+        <li>Click PLAY button - auto-click starts automatically!</li>
+        <li>The extension clicks one cell per row</li>
+        <li>It waits for server to confirm before next row</li>
+        <li>Results appear in real-time on the overlay</li>
+        <li>Use the stop button to halt auto-clicking</li>
+      </ol>
+      <br>
+      <h3>v4.2 Fixed Selectors:</h3>
+      <p style="color: #00ff88;">This version correctly detects witch-game__box and witch-game__row elements instead of using generic [class*="cell"] selectors that were matching wrong elements.</p>
+      <br>
+      <h3>Debug Commands (Console):</h3>
+      <p style="color: #00ffff; font-family: monospace; font-size: 9px;">
+        window.__WITCH_FIND_ROWS__()<br>
+        window.__WITCH_FIND_CELLS__()<br>
+        window.__WITCH_FIND_ACTIVE_ROW__()
+      </p>
+    </div>
+  </div>
+  
+  <div class="footer">
+    v4.2 PRO - Fixed Selectors Edition
+  </div>
+  
+  <script>
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.panel).classList.add('active');
+      });
+    });
+    
+    // Filter buttons
+    let currentFilter = 'all';
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.filter;
+        loadNetworkLog();
+      });
+    });
+    
+    // Clear logs
+    document.getElementById('clear-logs').addEventListener('click', () => {
+      chrome.runtime.sendMessage({ type: 'CLEAR_LOGS' }, (response) => {
+        loadNetworkLog();
+        loadRounds();
+      });
+    });
+    
+    // Load network log
+    function loadNetworkLog() {
+      chrome.runtime.sendMessage({ 
+        type: 'GET_NETWORK_LOG',
+        filter: currentFilter === 'all' ? null : currentFilter
+      }, (response) => {
+        const container = document.getElementById('network-log');
+        
+        if (!response || !response.requests || response.requests.length === 0) {
+          container.innerHTML = '<div class="network-item"><span style="color: #666;">No network activity captured yet.</span></div>';
+          return;
+        }
+        
+        document.getElementById('req-count').textContent = response.total || 0;
+        
+        let html = '';
+        response.requests.slice(0, 50).forEach(req => {
+          const isGame = req.isGameRequest || req.isGameResponse;
+          const isOut = req.type === 'request';
+          const method = req.method || 'GET';
+          const shortUrl = (req.url || '').replace(/https?:\/\/[^\/]+/, '').substring(0, 60);
+          const time = new Date(req.timestamp).toLocaleTimeString();
+          
+          let classes = 'network-item';
+          if (isOut) classes += ' outgoing';
+          else classes += ' incoming';
+          if (isGame) classes += ' game';
+          
+          html += '<div class="' + classes + '">';
+          html += '<span class="network-time">' + time + '</span>';
+          html += '<span class="network-method ' + method + '">' + method + '</span>';
+          html += '<span class="network-url">' + shortUrl + '...</span>';
+          html += '</div>';
+        });
+        
+        container.innerHTML = html;
+      });
+    }
+    
+    // Load rounds
+    function loadRounds() {
+      chrome.runtime.sendMessage({ type: 'GET_GAME_DATA' }, (response) => {
+        const container = document.getElementById('rounds-list');
+        
+        if (!response || !response.rounds || response.rounds.length === 0) {
+          container.innerHTML = '<div style="color: #666; font-size: 11px; text-align: center; padding: 20px;">No rounds captured yet.<br>Click PLAY to start auto-clicking!</div>';
+          return;
+        }
+        
+        document.getElementById('round-count').textContent = response.rounds.length;
+        
+        let html = '';
+        response.rounds.slice(0, 10).forEach((round, idx) => {
+          const time = new Date(round.timestamp).toLocaleTimeString();
+          const safeCells = round.safeCells || round.data?.safeCells || {};
+          const totalSafe = Object.values(safeCells).reduce((sum, cells) => sum + (cells?.length || 0), 0);
+          
+          html += '<div class="round-card">';
+          html += '<div class="round-header">';
+          html += '<span class="round-label">' + (idx === 0 ? 'LATEST' : '#' + (idx + 1)) + '</span>';
+          html += '<span class="round-time">' + time + ' | ' + totalSafe + ' safe</span>';
+          html += '</div>';
+          
+          // Mini grid
+          html += '<div class="grid-mini">';
+          for (let row = 0; row < 10; row++) {
+            const rowSafe = safeCells[row] || [];
+            for (let col = 0; col < 5; col++) {
+              const isSafe = rowSafe.includes(col);
+              html += '<div class="cell-mini ' + (isSafe ? 'safe' : 'danger') + '">';
+              html += isSafe ? 'OK' : 'X';
+              html += '</div>';
+            }
+          }
+          html += '</div>';
+          html += '</div>';
+        });
+        
+        container.innerHTML = html;
+      });
+    }
+    
+    // Initial load
+    loadNetworkLog();
+    loadRounds();
+    
+    // Auto-refresh
+    setInterval(() => {
+      loadNetworkLog();
+      loadRounds();
+    }, 2000);
+  </script>
+</body>
+</html>

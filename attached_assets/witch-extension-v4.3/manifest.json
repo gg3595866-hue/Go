@@ -1,0 +1,68 @@
+{
+  "manifest_version": 3,
+  "name": "Witch Analyzer v4.3 PRO AUTO-CLICK (Fixed Selectors + WIN/LOSS)",
+  "version": "4.3.0",
+  "description": "Fixed selectors for witch-game__box and witch-game__row. Auto-clicks cells row by row, waits for server confirmation, displays WIN/LOSS results clearly in console",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "webRequest",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "*://*.1x-bet.mobi/*",
+    "*://1x-bet.mobi/*",
+    "*://*.1xbet.com/*",
+    "*://1xbet.com/*",
+    "*://*.1xbet.mobi/*",
+    "*://1xbet.mobi/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "injected.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://1x-bet.mobi/*",
+        "*://*.1x-bet.mobi/*",
+        "*://1xbet.com/*",
+        "*://*.1xbet.com/*",
+        "*://1xbet.mobi/*",
+        "*://*.1xbet.mobi/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

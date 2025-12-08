@@ -456,4 +456,212 @@
 
   sendToContentScript('injected_ready', { timestamp: getTimestamp() });
   console.log('[Mimick Spy] Injected script initialized - v7.0');
+
+  // ========== RACING ATTACK AUTO-CLICK SYSTEM ==========
+  let racingAttackActive = false;
+  let racingAttackInterval = null;
+  let autoPlayEnabled = false;
+  let totalRowsClicked = 0;
+  let lastCellCountForRacing = 0;
+  let lastRowClickedForRacing = -1;
+  let gameEndedMaster = false;
+  let pendingClickTimeouts = [];
+
+  function isUnrevealedCell(cell) {
+    const classList = cell.classList.toString().toLowerCase();
+    const hasPoison = classList.includes('poison') || classList.includes('w-lose') || classList.includes('lose');
+    const hasWine = classList.includes('wine') || classList.includes('w-win') || classList.includes('win');
+    const isOpen = classList.includes('open') || classList.includes('revealed');
+    return !hasPoison && !hasWine && !isOpen;
+  }
+
+  function isGameLost() {
+    const pageText = document.body.innerText || '';
+    return pageText.includes('Better luck next time') || 
+           pageText.includes('GAME LOSS') || 
+           pageText.includes('game is over') ||
+           pageText.includes('You lost');
+  }
+
+  function isRowActive() {
+    const pageText = document.body.innerText || '';
+    return pageText.includes('Choose a cell') || pageText.includes('Select a cell');
+  }
+
+  function findAllGameCells() {
+    let cells = document.querySelectorAll('[class*="witch-game__box"]');
+    if (cells.length > 0) return Array.from(cells);
+    
+    cells = document.querySelectorAll('[class*="witch"][class*="box"]');
+    if (cells.length > 0) return Array.from(cells);
+    
+    cells = document.querySelectorAll('[class*="game-cell"]');
+    if (cells.length > 0) return Array.from(cells);
+    
+    return [];
+  }
+
+  function stopRacingAttack() {
+    gameEndedMaster = true;
+    pendingClickTimeouts.forEach(id => clearTimeout(id));
+    pendingClickTimeouts = [];
+    
+    if (racingAttackInterval) {
+      clearInterval(racingAttackInterval);
+      racingAttackInterval = null;
+    }
+    racingAttackActive = false;
+    console.log('%c[WITCH AUTO] Racing attack STOPPED', 'color: #ff6600; font-weight: bold;');
+    sendToContentScript('auto_click_stopped', { totalRows: totalRowsClicked });
+  }
+
+  function performRacingAttack() {
+    if (racingAttackActive) return;
+    racingAttackActive = true;
+    gameEndedMaster = false;
+    totalRowsClicked = 0;
+    lastCellCountForRacing = 0;
+    lastRowClickedForRacing = -1;
+    pendingClickTimeouts = [];
+    
+    console.log('%c[WITCH AUTO] RACING ATTACK STARTED!', 'color: #00ff00; font-weight: bold; font-size: 16px;');
+    sendToContentScript('auto_click_started', {});
+    
+    racingAttackInterval = setInterval(() => {
+      if (gameEndedMaster || !autoPlayEnabled) {
+        stopRacingAttack();
+        return;
+      }
+      
+      const freshCells = findAllGameCells();
+      
+      if (isGameLost()) {
+        console.log('%c[WITCH AUTO] GAME ENDED - Stopping all clicks!', 'color: #ff0000; font-weight: bold;');
+        stopRacingAttack();
+        return;
+      }
+      
+      if (!isRowActive()) {
+        return;
+      }
+      
+      if (freshCells.length === 0) {
+        return;
+      }
+      
+      const unrevealed = freshCells.filter(cell => isUnrevealedCell(cell));
+      
+      if (unrevealed.length === 0) {
+        return;
+      }
+      
+      const currentCellCount = freshCells.length;
+      const isNewRow = currentCellCount !== lastCellCountForRacing || lastRowClickedForRacing === -1;
+      
+      if (isNewRow && isRowActive()) {
+        totalRowsClicked++;
+        lastRowClickedForRacing = totalRowsClicked;
+        lastCellCountForRacing = currentCellCount;
+        
+        console.log(`%c[WITCH AUTO] Row ${totalRowsClicked}: Clicking random cell (${unrevealed.length} unrevealed)`, 'color: #ff3333; font-weight: bold;');
+        
+        const randomCell = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+        if (randomCell) {
+          const timeoutId = setTimeout(() => {
+            if (gameEndedMaster) return;
+            
+            console.log('%c[WITCH AUTO] CLICK!', 'color: #00ff00;');
+            randomCell.click();
+            
+            sendToContentScript('auto_cell_clicked', {
+              row: totalRowsClicked,
+              timestamp: getTimestamp()
+            });
+          }, 50);
+          
+          pendingClickTimeouts.push(timeoutId);
+        }
+        
+        const resetTimeoutId = setTimeout(() => {
+          if (gameEndedMaster) return;
+          lastCellCountForRacing = 0;
+        }, 1500);
+        
+        pendingClickTimeouts.push(resetTimeoutId);
+      }
+    }, 300);
+    
+    setTimeout(() => {
+      if (!gameEndedMaster) {
+        console.log('%c[WITCH AUTO] Safety timeout - stopping after 2 minutes', 'color: #ff6600;');
+        stopRacingAttack();
+      }
+    }, 120000);
+  }
+
+  function startAutoClickIfGameActive() {
+    if (!autoPlayEnabled) return;
+    if (racingAttackActive) return;
+    
+    const cells = findAllGameCells();
+    if (cells.length > 0 && isRowActive()) {
+      console.log('%c[WITCH AUTO] Game active detected - starting racing attack!', 'color: #ffff00; font-weight: bold;');
+      performRacingAttack();
+    }
+  }
+
+  window.addEventListener('message', function(event) {
+    if (event.source !== window) return;
+    if (!event.data || event.data.source !== 'witch-content-script') return;
+    
+    const { command, data } = event.data;
+    
+    switch (command) {
+      case 'set_auto_play':
+        autoPlayEnabled = data.enabled;
+        console.log(`%c[WITCH AUTO] Auto-play ${autoPlayEnabled ? 'ENABLED' : 'DISABLED'}`, 
+                    `color: ${autoPlayEnabled ? '#00ff00' : '#ff0000'}; font-weight: bold;`);
+        
+        if (autoPlayEnabled) {
+          gameEndedMaster = false;
+          startAutoClickIfGameActive();
+        } else {
+          stopRacingAttack();
+        }
+        break;
+        
+      case 'start_play':
+        if (autoPlayEnabled) {
+          gameEndedMaster = false;
+          console.log('%c[WITCH AUTO] Start play command received - initiating racing attack', 'color: #00ffff;');
+          setTimeout(() => performRacingAttack(), 500);
+        }
+        break;
+        
+      case 'stop_play':
+        stopRacingAttack();
+        break;
+    }
+  });
+
+  let autoStartCheckInterval = setInterval(() => {
+    if (autoPlayEnabled && !racingAttackActive) {
+      startAutoClickIfGameActive();
+    }
+  }, 1000);
+
+  window.WITCH_AUTO = {
+    startAttack: performRacingAttack,
+    stopAttack: stopRacingAttack,
+    setAutoPlay: (enabled) => { 
+      autoPlayEnabled = enabled; 
+      if (enabled) startAutoClickIfGameActive();
+      else stopRacingAttack();
+    },
+    isActive: () => racingAttackActive,
+    isAutoPlayEnabled: () => autoPlayEnabled
+  };
+
+  console.log('%c[WITCH AUTO] Racing Attack System Ready', 'color: lime; font-weight: bold;');
+  // ========== END RACING ATTACK SYSTEM ==========
 })();
