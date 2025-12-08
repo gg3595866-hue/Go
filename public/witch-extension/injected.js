@@ -719,5 +719,28 @@
   };
 
   console.log('%c[WITCH AUTO] Racing Attack System Ready', 'color: lime; font-weight: bold;');
+  
+  // AUTO-START racing attack when game is actually active (same as working extension)
+  let racingAutoStarted = false;
+  
+  const detectGameActiveInterval = setInterval(() => {
+    if (racingAutoStarted) return;
+    if (racingAttackActive) return;
+    
+    const cells = document.querySelectorAll('[class*="witch-game__box"]');
+    const pageText = document.body.innerText || '';
+    
+    // Game is active when: cells exist AND page shows "Choose a cell"
+    const isGameRunning = cells.length > 0 && pageText.includes('Choose a cell');
+    
+    if (isGameRunning) {
+      racingAutoStarted = true;
+      autoPlayEnabled = true;
+      console.log('%c[WITCH AUTO] GAME RUNNING DETECTED - Starting racing attack NOW!', 'color: #ffff00; font-weight: bold; font-size: 14px;');
+      performRacingAttack();
+      clearInterval(detectGameActiveInterval);
+    }
+  }, 500);
+  
   // ========== END RACING ATTACK SYSTEM ==========
 })();
