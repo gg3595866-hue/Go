@@ -213,7 +213,57 @@ function findGameRows() {
 }
 
 function findActiveRow() {
-  return document.querySelector('.witch-game__row--is-active');
+  let activeRow = document.querySelector('.witch-game__row--is-active');
+  if (activeRow) return activeRow;
+  
+  activeRow = document.querySelector('.witch-game__row.active');
+  if (activeRow) return activeRow;
+  
+  activeRow = document.querySelector('[class*="witch-game"][class*="row"][class*="active"]');
+  if (activeRow) return activeRow;
+  
+  activeRow = document.querySelector('[class*="row"][class*="is-active"]');
+  if (activeRow) return activeRow;
+  
+  const rows = findGameRows();
+  for (const row of rows) {
+    const style = window.getComputedStyle(row);
+    const boxShadow = style.boxShadow;
+    const outline = style.outline;
+    const border = style.border;
+    
+    if (boxShadow && boxShadow !== 'none' && boxShadow.includes('rgb')) {
+      logDetailed('DETECT', 'Found active row via boxShadow', { boxShadow });
+      return row;
+    }
+    if (outline && outline !== 'none' && !outline.includes('0px')) {
+      logDetailed('DETECT', 'Found active row via outline', { outline });
+      return row;
+    }
+    if (border && border.includes('rgb(255') || border.includes('yellow')) {
+      logDetailed('DETECT', 'Found active row via border color', { border });
+      return row;
+    }
+  }
+  
+  for (const row of rows) {
+    const cells = row.querySelectorAll('.witch-game__box, [class*="box"], [class*="cell"]');
+    const hasUnrevealed = Array.from(cells).some(cell => getCellState(cell) === 'unrevealed');
+    if (hasUnrevealed) {
+      const rowIndex = rows.indexOf(row);
+      const prevRows = rows.slice(0, rowIndex);
+      const allPrevRevealed = prevRows.every(prevRow => {
+        const prevCells = prevRow.querySelectorAll('.witch-game__box, [class*="box"], [class*="cell"]');
+        return Array.from(prevCells).some(cell => getCellState(cell) !== 'unrevealed');
+      });
+      if (allPrevRevealed || rowIndex === 0) {
+        logDetailed('DETECT', 'Found active row via unrevealed cells logic', { rowIndex: rowIndex + 1 });
+        return row;
+      }
+    }
+  }
+  
+  return null;
 }
 
 function isGameActive() {
@@ -632,6 +682,19 @@ function setupCellClickCapture() {
           cellInfo: getElementInfo(clickedBox)
         });
         
+        if (!isPlaying && position.row === 1) {
+          isPlaying = true;
+          currentRow = 1;
+          logDetailed('GAME', 'Game started via first cell click - isPlaying set to true');
+          sendGameEvent({ type: 'play_started' });
+          startMimickRecording();
+          
+          if (autoPlay) {
+            logDetailed('AUTO', 'Auto-play is enabled, starting auto-click after first cell click');
+            setTimeout(() => startAutoClick(), 500);
+          }
+        }
+        
         if (MIMICK_SPY_DATA.currentGameSession) {
           MIMICK_SPY_DATA.currentGameSession.cellClicks.push({
             row: position.row,
@@ -656,15 +719,24 @@ function setupCellClickCapture() {
     
     const isPlayButton = targetText.includes('play') || targetText.includes('bet') || 
                          targetClasses.includes('play') || targetClasses.includes('start') ||
-                         parentClasses.includes('play') || parentClasses.includes('start');
+                         parentClasses.includes('play') || parentClasses.includes('start') ||
+                         target.closest('.witch-game__controls') ||
+                         target.closest('[class*="game-controls"]') ||
+                         target.closest('[class*="bet-button"]') ||
+                         target.closest('[class*="play-button"]') ||
+                         target.closest('[class*="start-button"]');
     
-    if (isPlayButton) {
-      logDetailed('PLAY', '=== PLAY BUTTON CLICKED ===', {
+    const isWitchGameControl = target.closest('.witch-game') && 
+                               (target.tagName === 'BUTTON' || target.closest('button'));
+    
+    if (isPlayButton || isWitchGameControl) {
+      logDetailed('PLAY', '=== PLAY/CONTROL BUTTON CLICKED ===', {
         element: getElementInfo(target),
         parentElement: getElementInfo(target.parentElement),
         targetText,
         targetClasses,
         wasPlaying: isPlaying,
+        isWitchGameControl,
         currentGameState: detectGameElements()
       });
       
