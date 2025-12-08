@@ -7,6 +7,18 @@ let pollInterval = null;
 let networkLogs = [];
 let eventLogs = [];
 
+const MIMICK_SPY_DATA = {
+  capturedRequests: [],
+  capturedResponses: [],
+  capturedWebSockets: [],
+  capturedTokens: {},
+  gameFlows: [],
+  currentGameSession: null,
+  isRecording: false,
+  replayQueue: [],
+  isReplaying: false
+};
+
 function getTimestamp() {
   return new Date().toISOString().split('T')[1].slice(0, 12);
 }
@@ -42,75 +54,143 @@ function logDetailed(category, message, data) {
   });
 }
 
-function interceptNetworkRequests() {
-  const originalFetch = window.fetch;
-  window.fetch = async function(...args) {
-    const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || 'unknown';
-    const method = args[1]?.method || 'GET';
-    const body = args[1]?.body;
-    
-    const requestTime = getTimestamp();
-    logDetailed('NETWORK', `Fetch request: ${method} ${url}`, { body: body ? JSON.parse(body) : null });
-    
-    try {
-      const response = await originalFetch.apply(this, args);
-      const responseClone = response.clone();
-      
-      responseClone.text().then(text => {
-        let parsedBody = text;
-        try {
-          parsedBody = JSON.parse(text);
-        } catch (e) {}
-        
-        logDetailed('NETWORK', `Fetch response: ${response.status} ${url}`, { 
-          status: response.status,
-          body: parsedBody 
-        });
-      }).catch(() => {});
-      
-      return response;
-    } catch (error) {
-      logDetailed('NETWORK', `Fetch error: ${url}`, { error: error.message });
-      throw error;
-    }
-  };
-  
-  const originalXHROpen = XMLHttpRequest.prototype.open;
-  const originalXHRSend = XMLHttpRequest.prototype.send;
-  
-  XMLHttpRequest.prototype.open = function(method, url, ...args) {
-    this._witchMethod = method;
-    this._witchUrl = url;
-    return originalXHROpen.apply(this, [method, url, ...args]);
-  };
-  
-  XMLHttpRequest.prototype.send = function(body) {
-    const method = this._witchMethod;
-    const url = this._witchUrl;
-    
-    logDetailed('NETWORK', `XHR request: ${method} ${url}`, { body });
-    
-    this.addEventListener('load', () => {
-      let responseBody = this.responseText;
-      try {
-        responseBody = JSON.parse(this.responseText);
-      } catch (e) {}
-      
-      logDetailed('NETWORK', `XHR response: ${this.status} ${url}`, {
-        status: this.status,
-        body: responseBody
-      });
-    });
-    
-    this.addEventListener('error', () => {
-      logDetailed('NETWORK', `XHR error: ${url}`, { status: this.status });
-    });
-    
-    return originalXHRSend.apply(this, [body]);
-  };
-  
-  log('Network request interception enabled');
+function injectMimickSpy() {
+  try {
+    const script = document.createElement('script');
+    script.src = chrome.runtime.getURL('injected.js');
+    script.onload = function() {
+      this.remove();
+      log('Mimick Spy injected successfully');
+    };
+    script.onerror = function() {
+      log('Failed to inject Mimick Spy script, using fallback');
+      injectMimickSpyInline();
+    };
+    (document.head || document.documentElement).appendChild(script);
+  } catch (e) {
+    log('Error injecting Mimick Spy:', e.message);
+    injectMimickSpyInline();
+  }
 }
+
+function injectMimickSpyInline() {
+  const script = document.createElement('script');
+  script.textContent = `
+    (function() {
+      const MIMICK_SPY = { capturedRequests: [], capturedResponses: [], sessionTokens: {} };
+      
+      const originalFetch = window.fetch;
+      window.fetch = async function(input, init) {
+        const url = typeof input === 'string' ? input : input?.url || 'unknown';
+        const method = init?.method || 'GET';
+        
+        window.postMessage({
+          source: 'mimick-spy-injected',
+          type: 'network_request',
+          data: { url, method, timestamp: new Date().toISOString() }
+        }, '*');
+        
+        const response = await originalFetch.apply(this, arguments);
+        return response;
+      };
+      
+      window.MIMICK_SPY = MIMICK_SPY;
+      console.log('[Mimick Spy] Fallback injected');
+    })();
+  `;
+  (document.head || document.documentElement).appendChild(script);
+  script.remove();
+}
+
+window.addEventListener('message', function(event) {
+  if (event.source !== window) return;
+  if (!event.data || event.data.source !== 'mimick-spy-injected') return;
+  
+  const { type, data, timestamp } = event.data;
+  
+  switch (type) {
+    case 'network_request':
+      MIMICK_SPY_DATA.capturedRequests.push({ ...data, timestamp });
+      if (data.isGameRelated) {
+        logDetailed('NETWORK', `Game request: ${data.method} ${data.url}`, data);
+        sendGameEvent({
+          type: 'mimick_request',
+          data: data
+        });
+      }
+      break;
+      
+    case 'network_response':
+      MIMICK_SPY_DATA.capturedResponses.push({ ...data, timestamp });
+      if (data.isGameRelated) {
+        logDetailed('NETWORK', `Game response: ${data.status} ${data.url}`, data);
+        sendGameEvent({
+          type: 'mimick_response',
+          data: data
+        });
+      }
+      break;
+      
+    case 'websocket_message':
+      MIMICK_SPY_DATA.capturedWebSockets.push({ ...data, timestamp });
+      if (data.isGameRelated) {
+        logDetailed('WEBSOCKET', `WS ${data.direction}: ${typeof data.data === 'object' ? JSON.stringify(data.data) : data.data}`, data);
+        sendGameEvent({
+          type: 'mimick_websocket',
+          data: data
+        });
+      }
+      break;
+      
+    case 'token_captured':
+      MIMICK_SPY_DATA.capturedTokens[data.key] = data.value;
+      logDetailed('TOKEN', `Captured: ${data.key}`, data.value);
+      sendGameEvent({
+        type: 'mimick_token',
+        data: data
+      });
+      break;
+      
+    case 'dom_tokens':
+      Object.assign(MIMICK_SPY_DATA.capturedTokens, data);
+      logDetailed('TOKEN', 'DOM tokens captured', data);
+      sendGameEvent({
+        type: 'mimick_dom_tokens',
+        data: data
+      });
+      break;
+      
+    case 'recording_started':
+      MIMICK_SPY_DATA.isRecording = true;
+      MIMICK_SPY_DATA.currentGameSession = {
+        id: data.flowId,
+        startTime: timestamp,
+        events: [],
+        requests: [],
+        results: []
+      };
+      logDetailed('RECORD', 'Recording started', data);
+      sendGameEvent({
+        type: 'recording_started',
+        data: data
+      });
+      break;
+      
+    case 'recording_stopped':
+      MIMICK_SPY_DATA.isRecording = false;
+      MIMICK_SPY_DATA.gameFlows.push(data);
+      logDetailed('RECORD', 'Recording stopped', data);
+      sendGameEvent({
+        type: 'recording_stopped',
+        data: data
+      });
+      break;
+      
+    case 'injected_ready':
+      logDetailed('INIT', 'Mimick Spy injected and ready', data);
+      break;
+  }
+});
 
 function sendGameEvent(eventData) {
   try {
@@ -150,16 +230,10 @@ function isGameEnded() {
 
 function getCellState(cell) {
   const dataResult = cell.getAttribute('data-result');
-  if (dataResult === 'lose') {
-    return 'lose';
-  }
-  if (dataResult === 'win') {
-    return 'win';
-  }
+  if (dataResult === 'lose') return 'lose';
+  if (dataResult === 'win') return 'win';
   const classList = cell.classList.toString();
-  if (classList.includes('--is-open')) {
-    return 'revealed';
-  }
+  if (classList.includes('--is-open')) return 'revealed';
   return 'unrevealed';
 }
 
@@ -178,7 +252,7 @@ function detectGameElements() {
     activeRowIndex = rows.indexOf(activeRow) + 1;
   }
   
-  return {
+  const gameState = {
     rows: rows.length,
     cells: cells.length,
     unrevealedCells: unrevealedCells.length,
@@ -186,8 +260,24 @@ function detectGameElements() {
     activeRow: activeRowIndex,
     isGameActive: gameActive,
     isGameEnded: gameEnded,
-    hasGameContainer: cells.length > 0
+    hasGameContainer: cells.length > 0,
+    rowResults: []
   };
+
+  rows.forEach((row, rowIdx) => {
+    const rowCells = Array.from(row.querySelectorAll('.witch-game__box'));
+    const rowResult = {
+      row: rowIdx + 1,
+      cells: rowCells.map((cell, cellIdx) => ({
+        cell: cellIdx + 1,
+        state: getCellState(cell),
+        dataResult: cell.getAttribute('data-result')
+      }))
+    };
+    gameState.rowResults.push(rowResult);
+  });
+
+  return gameState;
 }
 
 function getRowAndCellFromElement(element) {
@@ -236,18 +326,13 @@ function getElementInfo(element) {
 
 function findAllButtons() {
   const buttons = [];
-  
   const playButtons = document.querySelectorAll('[class*="play"], [class*="start"], [class*="bet"], button');
   playButtons.forEach(btn => {
     const info = getElementInfo(btn);
     if (info) {
-      buttons.push({
-        type: 'potential_play',
-        ...info
-      });
+      buttons.push({ type: 'potential_play', ...info });
     }
   });
-  
   return buttons;
 }
 
@@ -268,12 +353,9 @@ function clickCell(row, cell) {
       logDetailed('ACTION', `Target cell state: ${cellState}`, getElementInfo(targetCell));
       
       if (targetCell) {
-        // Try to click even if not unrevealed - let the game decide
         logDetailed('ACTION', `Clicking cell element now!`);
         
-        // Try multiple click methods for better mobile compatibility
         try {
-          // Method 1: Direct click
           targetCell.click();
           logDetailed('ACTION', `Method 1 (click) executed`);
         } catch (e) {
@@ -281,7 +363,6 @@ function clickCell(row, cell) {
         }
         
         try {
-          // Method 2: Dispatch click event
           const clickEvent = new MouseEvent('click', {
             bubbles: true,
             cancelable: true,
@@ -322,6 +403,93 @@ function clickCell(row, cell) {
   return false;
 }
 
+function startMimickRecording() {
+  logDetailed('MIMICK', 'Starting mimick recording');
+  MIMICK_SPY_DATA.isRecording = true;
+  MIMICK_SPY_DATA.currentGameSession = {
+    id: `session_${Date.now()}`,
+    startTime: getTimestamp(),
+    requests: [],
+    responses: [],
+    websockets: [],
+    tokens: { ...MIMICK_SPY_DATA.capturedTokens },
+    cellClicks: [],
+    rowResults: []
+  };
+  
+  try {
+    const script = document.createElement('script');
+    script.textContent = `if(window.MIMICK_SPY) window.MIMICK_SPY.startRecording();`;
+    document.documentElement.appendChild(script);
+    script.remove();
+  } catch (e) {}
+  
+  sendGameEvent({
+    type: 'mimick_recording_started',
+    sessionId: MIMICK_SPY_DATA.currentGameSession.id
+  });
+}
+
+function stopMimickRecording() {
+  logDetailed('MIMICK', 'Stopping mimick recording');
+  MIMICK_SPY_DATA.isRecording = false;
+  
+  if (MIMICK_SPY_DATA.currentGameSession) {
+    MIMICK_SPY_DATA.currentGameSession.endTime = getTimestamp();
+    MIMICK_SPY_DATA.currentGameSession.requests = [...MIMICK_SPY_DATA.capturedRequests];
+    MIMICK_SPY_DATA.currentGameSession.responses = [...MIMICK_SPY_DATA.capturedResponses];
+    MIMICK_SPY_DATA.currentGameSession.websockets = [...MIMICK_SPY_DATA.capturedWebSockets];
+    MIMICK_SPY_DATA.currentGameSession.tokens = { ...MIMICK_SPY_DATA.capturedTokens };
+    MIMICK_SPY_DATA.currentGameSession.gameState = detectGameElements();
+    
+    MIMICK_SPY_DATA.gameFlows.push(MIMICK_SPY_DATA.currentGameSession);
+    
+    sendGameEvent({
+      type: 'mimick_recording_stopped',
+      session: MIMICK_SPY_DATA.currentGameSession
+    });
+    
+    MIMICK_SPY_DATA.currentGameSession = null;
+  }
+  
+  try {
+    const script = document.createElement('script');
+    script.textContent = `if(window.MIMICK_SPY) window.MIMICK_SPY.stopRecording();`;
+    document.documentElement.appendChild(script);
+    script.remove();
+  } catch (e) {}
+}
+
+function getMimickData() {
+  return {
+    requests: MIMICK_SPY_DATA.capturedRequests,
+    responses: MIMICK_SPY_DATA.capturedResponses,
+    websockets: MIMICK_SPY_DATA.capturedWebSockets,
+    tokens: MIMICK_SPY_DATA.capturedTokens,
+    gameFlows: MIMICK_SPY_DATA.gameFlows,
+    isRecording: MIMICK_SPY_DATA.isRecording,
+    currentSession: MIMICK_SPY_DATA.currentGameSession
+  };
+}
+
+function clearMimickData() {
+  MIMICK_SPY_DATA.capturedRequests = [];
+  MIMICK_SPY_DATA.capturedResponses = [];
+  MIMICK_SPY_DATA.capturedWebSockets = [];
+  MIMICK_SPY_DATA.capturedTokens = {};
+  MIMICK_SPY_DATA.gameFlows = [];
+  
+  try {
+    const script = document.createElement('script');
+    script.textContent = `if(window.MIMICK_SPY) window.MIMICK_SPY.clearData();`;
+    document.documentElement.appendChild(script);
+    script.remove();
+  } catch (e) {}
+  
+  logDetailed('MIMICK', 'Mimick data cleared');
+  sendGameEvent({ type: 'mimick_data_cleared' });
+}
+
 function startGamePolling() {
   if (pollInterval) return;
   
@@ -342,6 +510,10 @@ function startGamePolling() {
       isPlaying = false;
       logDetailed('GAME', 'Game ended - detected loss');
       sendGameEvent({ type: 'game_state', state: { status: 'lose', isGameEnded: true } });
+      
+      if (MIMICK_SPY_DATA.isRecording) {
+        stopMimickRecording();
+      }
     }
   }, 500);
 }
@@ -368,6 +540,15 @@ function setupCellClickCapture() {
           cellState: getCellState(clickedBox),
           cellInfo: getElementInfo(clickedBox)
         });
+        
+        if (MIMICK_SPY_DATA.currentGameSession) {
+          MIMICK_SPY_DATA.currentGameSession.cellClicks.push({
+            row: position.row,
+            cell: position.cell,
+            timestamp: timestamp,
+            isTrusted: event.isTrusted
+          });
+        }
         
         sendGameEvent({
           type: 'cell_selected',
@@ -404,6 +585,8 @@ function setupCellClickCapture() {
         currentRow = 1;
         sendGameEvent({ type: 'play_started' });
         logDetailed('GAME', 'Game started - isPlaying set to true');
+        
+        startMimickRecording();
       }
     }
     
@@ -421,6 +604,10 @@ function setupCellClickCapture() {
       isPlaying = false;
       sendGameEvent({ type: 'play_stopped' });
       logDetailed('GAME', 'Player took winnings - isPlaying set to false');
+      
+      if (MIMICK_SPY_DATA.isRecording) {
+        stopMimickRecording();
+      }
     }
   }, true);
   
@@ -480,6 +667,15 @@ function observeGameChanges() {
                 oldValue: mutation.oldValue
               });
               
+              if (MIMICK_SPY_DATA.currentGameSession) {
+                MIMICK_SPY_DATA.currentGameSession.rowResults.push({
+                  row: position.row,
+                  cell: position.cell,
+                  result: state,
+                  timestamp: getTimestamp()
+                });
+              }
+              
               sendGameEvent({
                 type: 'row_result',
                 row: position.row,
@@ -536,6 +732,10 @@ function observeGameChanges() {
               });
               isPlaying = false;
               sendGameEvent({ type: 'game_state', state: { status: 'lose', isGameEnded: true } });
+              
+              if (MIMICK_SPY_DATA.isRecording) {
+                stopMimickRecording();
+              }
             }
             
             if (text.includes('You won') || text.includes('Congratulations')) {
@@ -543,6 +743,10 @@ function observeGameChanges() {
                 text: text.slice(0, 200),
                 className
               });
+              
+              if (MIMICK_SPY_DATA.isRecording) {
+                stopMimickRecording();
+              }
             }
             
             if (className.includes && (className.includes('play') || className.includes('bet'))) {
@@ -627,6 +831,7 @@ function setupMessageListener() {
               currentRow = 1;
               sendGameEvent({ type: 'play_started' });
               logDetailed('CMD', 'Play button clicked programmatically');
+              startMimickRecording();
             }
             break;
             
@@ -639,6 +844,7 @@ function setupMessageListener() {
               isPlaying = false;
               sendGameEvent({ type: 'play_stopped' });
               logDetailed('CMD', 'Take button clicked programmatically');
+              stopMimickRecording();
             }
             break;
             
@@ -658,6 +864,24 @@ function setupMessageListener() {
             logDetailed('CMD', 'Sending all buttons', buttons);
             sendGameEvent({ type: 'buttons_info', buttons });
             break;
+            
+          case 'start_mimick_recording':
+            startMimickRecording();
+            break;
+            
+          case 'stop_mimick_recording':
+            stopMimickRecording();
+            break;
+            
+          case 'get_mimick_data':
+            const mimickData = getMimickData();
+            logDetailed('CMD', 'Sending mimick data', mimickData);
+            sendGameEvent({ type: 'mimick_data', data: mimickData });
+            break;
+            
+          case 'clear_mimick_data':
+            clearMimickData();
+            break;
         }
         
         sendResponse({ success: true });
@@ -674,13 +898,13 @@ function setupMessageListener() {
 }
 
 function init() {
-  logDetailed('INIT', '=== Witch Extension Starting ===', {
+  logDetailed('INIT', '=== Witch Extension Starting (v7.0 with Mimick Spy) ===', {
     url: window.location.href,
     userAgent: navigator.userAgent,
     timestamp: new Date().toISOString()
   });
   
-  interceptNetworkRequests();
+  injectMimickSpy();
   
   setupMessageListener();
   setupCellClickCapture();
@@ -695,9 +919,13 @@ function init() {
     logDetailed('INIT', 'Initial buttons found', buttons);
     
     sendGameEvent({ type: 'game_state', state: gameState });
+    sendGameEvent({ 
+      type: 'mimick_spy_ready',
+      capturedTokens: MIMICK_SPY_DATA.capturedTokens
+    });
   }, 2000);
   
-  logDetailed('INIT', '=== Witch Extension Ready ===');
+  logDetailed('INIT', '=== Witch Extension Ready (v7.0) ===');
 }
 
 if (document.readyState === 'loading') {

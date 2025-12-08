@@ -12,6 +12,36 @@ import archiver from "archiver";
 import path from "path";
 import fs from "fs";
 
+interface MimickSession {
+  id: string;
+  startTime: string;
+  endTime?: string;
+  requests: any[];
+  responses: any[];
+  websockets: any[];
+  tokens: Record<string, any>;
+  cellClicks: any[];
+  rowResults: any[];
+  gameState?: any;
+  storedAt?: string;
+}
+
+interface MimickCaptureData {
+  captureType: string;
+  data: any;
+  timestamp: string;
+}
+
+const mimickSpyStorage: {
+  sessions: MimickSession[];
+  captures: MimickCaptureData[];
+  goldenFlows: MimickSession[];
+} = {
+  sessions: [],
+  captures: [],
+  goldenFlows: []
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get fixtures for a specific date
   app.get("/api/fixtures/:date", async (req, res) => {
@@ -2134,6 +2164,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mimick Spy API Routes
+  app.get("/api/witch/mimick/sessions", (req, res) => {
+    res.json({
+      sessions: mimickSpyStorage.sessions,
+      goldenFlows: mimickSpyStorage.goldenFlows,
+      totalCaptures: mimickSpyStorage.captures.length
+    });
+  });
+
+  app.post("/api/witch/mimick/session", (req, res) => {
+    try {
+      const session = req.body as MimickSession;
+      session.storedAt = new Date().toISOString();
+      
+      mimickSpyStorage.sessions.push(session);
+      
+      if (mimickSpyStorage.sessions.length > 100) {
+        mimickSpyStorage.sessions = mimickSpyStorage.sessions.slice(-100);
+      }
+      
+      console.log("[Mimick] Session stored:", session.id);
+      res.json({ success: true, sessionId: session.id });
+    } catch (error) {
+      console.error("[Mimick] Error storing session:", error);
+      res.status(500).json({ error: "Failed to store session" });
+    }
+  });
+
+  app.post("/api/witch/mimick/golden-flow", (req, res) => {
+    try {
+      const { sessionId } = req.body;
+      const session = mimickSpyStorage.sessions.find(s => s.id === sessionId);
+      
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      
+      mimickSpyStorage.goldenFlows.push({ ...session });
+      console.log("[Mimick] Golden flow saved:", sessionId);
+      res.json({ success: true, goldenFlowId: sessionId });
+    } catch (error) {
+      console.error("[Mimick] Error saving golden flow:", error);
+      res.status(500).json({ error: "Failed to save golden flow" });
+    }
+  });
+
+  app.get("/api/witch/mimick/captures", (req, res) => {
+    const limit = parseInt(req.query.limit as string) || 100;
+    res.json({
+      captures: mimickSpyStorage.captures.slice(-limit),
+      total: mimickSpyStorage.captures.length
+    });
+  });
+
+  app.delete("/api/witch/mimick/sessions", (req, res) => {
+    mimickSpyStorage.sessions = [];
+    mimickSpyStorage.captures = [];
+    console.log("[Mimick] All sessions cleared");
+    res.json({ success: true });
+  });
+
+  app.delete("/api/witch/mimick/golden-flows", (req, res) => {
+    mimickSpyStorage.goldenFlows = [];
+    console.log("[Mimick] All golden flows cleared");
+    res.json({ success: true });
+  });
+
   // Extension download route
   app.get("/api/witch/extension/download", (req, res) => {
     const extensionDir = path.join(process.cwd(), "public", "witch-extension");
@@ -2143,7 +2240,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", "attachment; filename=witch-extension-v6.0.zip");
+    res.setHeader("Content-Disposition", "attachment; filename=witch-extension-v7.0.zip");
 
     const archive = archiver("zip", { zlib: { level: 9 } });
     
@@ -2195,26 +2292,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const message = JSON.parse(data.toString());
         
-        // Handle ping from extension - respond with pong
         if (message.type === "ping") {
           ws.send(JSON.stringify({ type: "pong" }));
           return;
         }
         
         if (isExtension) {
-          // Forward extension messages to webapp clients
+          if (message.type === "mimick_capture") {
+            mimickSpyStorage.captures.push({
+              captureType: message.captureType,
+              data: message.data,
+              timestamp: new Date().toISOString()
+            });
+            if (mimickSpyStorage.captures.length > 1000) {
+              mimickSpyStorage.captures = mimickSpyStorage.captures.slice(-1000);
+            }
+          }
+          
+          if (message.type === "mimick_session_stored" && message.session) {
+            const session = message.session as MimickSession;
+            session.storedAt = new Date().toISOString();
+            mimickSpyStorage.sessions.push(session);
+            if (mimickSpyStorage.sessions.length > 100) {
+              mimickSpyStorage.sessions = mimickSpyStorage.sessions.slice(-100);
+            }
+            console.log("[Mimick WS] Session stored:", session.id);
+          }
+          
           witchClients.forEach(client => {
             if (client.readyState === WebSocket.OPEN) {
               client.send(JSON.stringify(message));
             }
           });
         } else {
-          // Forward webapp messages to extension clients
-          extensionClients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-              client.send(JSON.stringify(message));
+          if (message.action === "start_replay" && message.sessionId) {
+            const session = mimickSpyStorage.sessions.find(s => s.id === message.sessionId) ||
+                          mimickSpyStorage.goldenFlows.find(s => s.id === message.sessionId);
+            if (session) {
+              const replayActions = session.cellClicks.map((click: any, idx: number) => ({
+                action: "click_cell",
+                row: click.row,
+                cell: click.cell,
+                delay: idx === 0 ? 500 : 1500
+              }));
+              
+              extensionClients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                  client.send(JSON.stringify({
+                    type: "replay_command",
+                    action: "start_replay",
+                    actions: replayActions
+                  }));
+                }
+              });
             }
-          });
+          } else {
+            extensionClients.forEach(client => {
+              if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify(message));
+              }
+            });
+          }
         }
       } catch (error) {
         console.error("Failed to parse WebSocket message:", error);

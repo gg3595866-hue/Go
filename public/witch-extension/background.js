@@ -3,7 +3,6 @@ let isConnected = false;
 let offscreenCreated = false;
 let popupTabId = null;
 
-// Direct WebSocket fallback for browsers without offscreen support (like Kiwi on Android)
 let directWs = null;
 let useDirectMode = false;
 let reconnectAttempts = 0;
@@ -11,11 +10,19 @@ const MAX_RECONNECT_ATTEMPTS = 20;
 const RECONNECT_DELAY = 3000;
 let heartbeatInterval = null;
 
-console.log('[Witch BG] Service worker started');
+const MIMICK_SPY_STORAGE = {
+  sessions: [],
+  currentSession: null,
+  capturedFlows: [],
+  replayQueue: [],
+  isReplaying: false,
+  tokens: {}
+};
+
+console.log('[Witch BG v7.0] Service worker started with Mimick Spy');
 
 const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
 
-// Check if offscreen API is available
 function isOffscreenSupported() {
   return typeof chrome.offscreen !== 'undefined' && 
          typeof chrome.offscreen.createDocument === 'function';
@@ -70,7 +77,6 @@ async function createOffscreenDocument() {
   }
 }
 
-// Direct WebSocket functions (fallback for mobile/Kiwi)
 function buildWebSocketUrl(httpUrl) {
   try {
     const url = new URL(httpUrl);
@@ -137,6 +143,12 @@ function connectDirectWebSocket() {
       console.log('[Witch BG Direct] Connected successfully!');
       updateConnectionStatus(true);
       startDirectHeartbeat();
+      
+      sendToServer({
+        type: 'extension_info',
+        version: '7.0',
+        mimickSpyEnabled: true
+      });
     };
     
     directWs.onmessage = (event) => {
@@ -148,9 +160,11 @@ function connectDirectWebSocket() {
           return;
         }
         
-        // Forward to content scripts - handle both formats
-        // Format 1: { action: "click_cell", row: 1, cell: 3 }
-        // Format 2: { type: "some_type", ... }
+        if (data.type === 'replay_command') {
+          handleReplayCommand(data);
+          return;
+        }
+        
         const messageToForward = data.action ? data : data;
         console.log('[Witch BG Direct] Forwarding to content scripts:', messageToForward);
         
@@ -197,13 +211,55 @@ function connectDirectWebSocket() {
   }
 }
 
-function sendDirectToServer(message) {
-  if (directWs?.readyState === WebSocket.OPEN) {
-    directWs.send(JSON.stringify(message));
-    console.log('[Witch BG Direct] Sent:', message);
-    return true;
+function sendToServer(message) {
+  if (useDirectMode) {
+    if (directWs?.readyState === WebSocket.OPEN) {
+      directWs.send(JSON.stringify(message));
+      console.log('[Witch BG Direct] Sent:', message.type || message);
+      return true;
+    } else {
+      console.warn('[Witch BG Direct] Not connected, message not sent');
+      return false;
+    }
   } else {
-    console.warn('[Witch BG Direct] Not connected, message not sent');
+    try {
+      chrome.runtime.sendMessage({ type: 'send', data: message }).catch((err) => {
+        console.log('[Witch BG] Offscreen send failed, using direct fallback:', err.message);
+        if (directWs?.readyState === WebSocket.OPEN) {
+          directWs.send(JSON.stringify(message));
+        }
+      });
+      return true;
+    } catch (e) {
+      console.warn('[Witch BG] sendToServer error:', e.message);
+      return false;
+    }
+  }
+}
+
+async function postSessionToServer(session) {
+  if (!serverUrl) {
+    console.log('[Witch BG Mimick] No server URL, cannot post session');
+    return false;
+  }
+  
+  try {
+    const apiUrl = new URL('/api/witch/mimick/session', serverUrl);
+    const response = await fetch(apiUrl.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(session)
+    });
+    
+    if (response.ok) {
+      console.log('[Witch BG Mimick] Session posted to server:', session.id);
+      return true;
+    } else {
+      console.error('[Witch BG Mimick] Failed to post session:', response.status);
+      return false;
+    }
+  } catch (error) {
+    console.error('[Witch BG Mimick] Error posting session:', error.message);
     return false;
   }
 }
@@ -212,7 +268,6 @@ function updateConnectionStatus(connected, reason) {
   isConnected = connected;
   console.log('[Witch BG] Connection status:', isConnected, 'reason:', reason);
   
-  // Notify all tabs about connection status change
   chrome.tabs.query({}, (tabs) => {
     tabs.forEach(tab => {
       chrome.tabs.sendMessage(tab.id || 0, { 
@@ -230,10 +285,8 @@ async function ensureOffscreenAndConnect() {
     return;
   }
   
-  // Try to create offscreen document
   const created = await createOffscreenDocument();
   
-  // If offscreen not supported or failed, use direct mode
   if (useDirectMode || !created) {
     console.log('[Witch BG] Using direct WebSocket mode');
     useDirectMode = true;
@@ -246,14 +299,12 @@ async function ensureOffscreenAndConnect() {
     return;
   }
   
-  // Offscreen mode - send connect message to offscreen document
   await new Promise(resolve => setTimeout(resolve, 200));
   
   try {
     chrome.runtime.sendMessage({ type: 'connect', url: serverUrl }, (response) => {
       if (chrome.runtime.lastError) {
         console.log('[Witch BG] Error sending to offscreen:', chrome.runtime.lastError.message);
-        // Fall back to direct mode if offscreen communication fails
         console.log('[Witch BG] Falling back to direct mode due to communication error');
         useDirectMode = true;
         setTimeout(connectDirectWebSocket, 100);
@@ -263,18 +314,107 @@ async function ensureOffscreenAndConnect() {
     });
   } catch (error) {
     console.error('[Witch BG] Failed to send connect message:', error);
-    // Fall back to direct mode
     console.log('[Witch BG] Falling back to direct mode due to exception');
     useDirectMode = true;
     setTimeout(connectDirectWebSocket, 100);
   }
 }
 
-chrome.storage.local.get(['serverUrl'], (result) => {
+async function storeMimickSession(sessionData) {
+  sessionData.storedAt = new Date().toISOString();
+  
+  if (!sessionData.id) {
+    sessionData.id = `session_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  }
+  
+  MIMICK_SPY_STORAGE.sessions.push(sessionData);
+  
+  if (MIMICK_SPY_STORAGE.sessions.length > 50) {
+    MIMICK_SPY_STORAGE.sessions = MIMICK_SPY_STORAGE.sessions.slice(-50);
+  }
+  
+  chrome.storage.local.set({ 
+    mimickSessions: MIMICK_SPY_STORAGE.sessions 
+  });
+  
+  const httpPosted = await postSessionToServer(sessionData);
+  console.log('[Witch BG Mimick] HTTP POST result:', httpPosted);
+  
+  sendToServer({
+    type: 'mimick_session_stored',
+    session: sessionData,
+    httpPosted: httpPosted
+  });
+  
+  sendToServer({
+    type: 'mimick_recording_stopped',
+    sessionId: sessionData.id,
+    session: sessionData
+  });
+  
+  console.log('[Witch BG Mimick] Session stored locally and to server:', sessionData.id);
+}
+
+function handleReplayCommand(data) {
+  console.log('[Witch BG Mimick] Replay command received:', data);
+  
+  if (data.action === 'start_replay') {
+    MIMICK_SPY_STORAGE.isReplaying = true;
+    MIMICK_SPY_STORAGE.replayQueue = data.actions || [];
+    executeReplayQueue();
+  } else if (data.action === 'stop_replay') {
+    MIMICK_SPY_STORAGE.isReplaying = false;
+    MIMICK_SPY_STORAGE.replayQueue = [];
+  }
+}
+
+async function executeReplayQueue() {
+  if (!MIMICK_SPY_STORAGE.isReplaying || MIMICK_SPY_STORAGE.replayQueue.length === 0) {
+    MIMICK_SPY_STORAGE.isReplaying = false;
+    sendToServer({ type: 'replay_completed' });
+    return;
+  }
+  
+  const action = MIMICK_SPY_STORAGE.replayQueue.shift();
+  console.log('[Witch BG Mimick] Executing replay action:', action);
+  
+  chrome.tabs.query({ url: ['*://*.1xbet.com/*', '*://so.1xbet.com/*', '*://*.1x-bet.mobi/*', '*://1x-bet.mobi/*'] }, async (tabs) => {
+    if (tabs.length > 0 && tabs[0].id) {
+      try {
+        await chrome.tabs.sendMessage(tabs[0].id, { 
+          type: 'server_command', 
+          data: action 
+        });
+        
+        sendToServer({
+          type: 'replay_action_executed',
+          action: action,
+          success: true
+        });
+      } catch (error) {
+        sendToServer({
+          type: 'replay_action_executed',
+          action: action,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+    
+    const delay = action.delay || 1000;
+    setTimeout(executeReplayQueue, delay);
+  });
+}
+
+chrome.storage.local.get(['serverUrl', 'mimickSessions'], (result) => {
   console.log('[Witch BG] Loaded stored URL:', result.serverUrl);
   if (result.serverUrl) {
     serverUrl = result.serverUrl;
     ensureOffscreenAndConnect();
+  }
+  if (result.mimickSessions) {
+    MIMICK_SPY_STORAGE.sessions = result.mimickSessions;
+    console.log('[Witch BG Mimick] Loaded', MIMICK_SPY_STORAGE.sessions.length, 'stored sessions');
   }
 });
 
@@ -285,7 +425,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     isConnected = message.connected;
     console.log('[Witch BG] Connection status:', isConnected, 'from:', message.type);
     
-    // Notify all tabs about connection status change
     chrome.tabs.query({}, (tabs) => {
       tabs.forEach(tab => {
         chrome.tabs.sendMessage(tab.id || 0, { 
@@ -315,7 +454,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.local.set({ serverUrl: message.url });
     console.log('[Witch BG] Server URL set to:', message.url);
     
-    // Reset direct mode flag to retry offscreen first
     useDirectMode = false;
     ensureOffscreenAndConnect();
     sendResponse({ success: true });
@@ -324,16 +462,87 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   if (message.type === 'get_status') {
     console.log('[Witch BG] Status request - connected:', isConnected, 'url:', serverUrl, 'mode:', useDirectMode ? 'direct' : 'offscreen');
-    sendResponse({ connected: isConnected, serverUrl, mode: useDirectMode ? 'direct' : 'offscreen' });
+    sendResponse({ 
+      connected: isConnected, 
+      serverUrl, 
+      mode: useDirectMode ? 'direct' : 'offscreen',
+      mimickSpyEnabled: true,
+      storedSessions: MIMICK_SPY_STORAGE.sessions.length
+    });
     return true;
   }
   
   if (message.type === 'game_event') {
-    if (useDirectMode) {
-      sendDirectToServer(message.data);
-    } else {
-      chrome.runtime.sendMessage({ type: 'send', data: message.data }).catch(() => {});
+    const eventData = message.data;
+    
+    if (eventData.type === 'mimick_recording_started') {
+      MIMICK_SPY_STORAGE.currentSession = {
+        id: eventData.sessionId,
+        startTime: new Date().toISOString(),
+        requests: [],
+        responses: [],
+        websockets: [],
+        tokens: {},
+        cellClicks: [],
+        rowResults: []
+      };
+      console.log('[Witch BG Mimick] Recording started, currentSession:', MIMICK_SPY_STORAGE.currentSession.id);
     }
+    
+    if (eventData.type === 'mimick_recording_stopped' && eventData.session) {
+      storeMimickSession(eventData.session);
+      MIMICK_SPY_STORAGE.currentSession = null;
+    }
+    
+    if (eventData.type === 'mimick_request' || eventData.type === 'mimick_response' || 
+        eventData.type === 'mimick_websocket' || eventData.type === 'mimick_token') {
+      if (MIMICK_SPY_STORAGE.currentSession) {
+        if (eventData.type === 'mimick_request') {
+          MIMICK_SPY_STORAGE.currentSession.requests.push(eventData.data);
+        } else if (eventData.type === 'mimick_response') {
+          MIMICK_SPY_STORAGE.currentSession.responses.push(eventData.data);
+        } else if (eventData.type === 'mimick_websocket') {
+          MIMICK_SPY_STORAGE.currentSession.websockets.push(eventData.data);
+        } else if (eventData.type === 'mimick_token') {
+          MIMICK_SPY_STORAGE.currentSession.tokens[eventData.data.key] = eventData.data.value;
+        }
+      }
+      
+      sendToServer({
+        type: 'mimick_capture',
+        captureType: eventData.type,
+        data: eventData.data
+      });
+    }
+    
+    sendToServer(eventData);
+    sendResponse({ success: true });
+    return true;
+  }
+  
+  if (message.type === 'get_mimick_sessions') {
+    sendResponse({ sessions: MIMICK_SPY_STORAGE.sessions });
+    return true;
+  }
+  
+  if (message.type === 'clear_mimick_sessions') {
+    MIMICK_SPY_STORAGE.sessions = [];
+    chrome.storage.local.set({ mimickSessions: [] });
+    sendResponse({ success: true });
+    return true;
+  }
+  
+  if (message.type === 'start_replay') {
+    handleReplayCommand({
+      action: 'start_replay',
+      actions: message.actions
+    });
+    sendResponse({ success: true });
+    return true;
+  }
+  
+  if (message.type === 'stop_replay') {
+    handleReplayCommand({ action: 'stop_replay' });
     sendResponse({ success: true });
     return true;
   }
@@ -368,7 +577,7 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[Witch BG] Extension installed/updated');
+  console.log('[Witch BG v7.0] Extension installed/updated with Mimick Spy');
 });
 
 setInterval(async () => {
@@ -376,14 +585,12 @@ setInterval(async () => {
     console.log('[Witch BG] Periodic check - connected:', isConnected, 'mode:', useDirectMode ? 'direct' : 'offscreen');
     
     if (useDirectMode) {
-      // Direct mode - just try to reconnect if not connected
       if (!directWs || directWs.readyState === WebSocket.CLOSED) {
         console.log('[Witch BG] Direct WS gone, reconnecting...');
         reconnectAttempts = 0;
         connectDirectWebSocket();
       }
     } else {
-      // Offscreen mode - check if document exists
       const exists = await hasOffscreenDocument();
       if (!exists) {
         console.log('[Witch BG] Offscreen document gone, recreating...');

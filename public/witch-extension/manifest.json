@@ -1,13 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "Witch Game Analyzer",
-  "version": "6.0",
-  "description": "Connects to the Witch Analyzer webapp for real-time game monitoring and control",
+  "name": "Witch Game Analyzer Pro",
+  "version": "7.0",
+  "description": "Advanced Witch Analyzer with Mimick Spy - Full network capture and auto-play",
   "permissions": [
     "activeTab",
     "storage",
     "alarms",
-    "offscreen"
+    "offscreen",
+    "webRequest",
+    "cookies",
+    "tabs"
   ],
   "host_permissions": [
     "*://*.1xbet.com/*",
@@ -18,7 +21,8 @@
     "*://*.replit.dev/*",
     "*://*.replit.app/*",
     "*://*.repl.co/*",
-    "*://*.id.repl.co/*"
+    "*://*.id.repl.co/*",
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -40,7 +44,7 @@
         "*://1x-bet.mobi/*"
       ],
       "js": ["content.js"],
-      "run_at": "document_end",
+      "run_at": "document_start",
       "all_frames": true
     }
   ],
@@ -48,5 +52,11 @@
     "16": "icon16.png",
     "48": "icon48.png",
     "128": "icon128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": ["*://*.1xbet.com/*", "*://so.1xbet.com/*", "*://*.1x-bet.mobi/*", "*://1x-bet.mobi/*"]
+    }
+  ]
 }
