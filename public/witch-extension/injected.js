@@ -496,6 +496,47 @@
     return Array.from(cells);
   }
 
+  // Find the active row on the real 1xbet game (has yellow/gold border or highlighted)
+  function findActiveRowElement() {
+    // Look for rows with active indicator (yellow border, active class, etc.)
+    const selectors = [
+      '.witch-game__row--is-active',
+      '[class*="witch-game__row"][class*="active"]',
+      '[class*="row"][class*="active"]',
+      '[class*="row"][style*="border"]',
+      '[class*="row"][style*="yellow"]',
+      '[class*="row"][style*="gold"]'
+    ];
+    
+    for (const selector of selectors) {
+      const row = document.querySelector(selector);
+      if (row) return row;
+    }
+    
+    // Fallback: find row that contains clickable/unrevealed cells
+    // On 1xbet, only the active row's cells are interactable
+    const allRows = document.querySelectorAll('[class*="witch-game__row"], [class*="row"]');
+    for (const row of allRows) {
+      const cells = row.querySelectorAll('[class*="witch-game__box"]');
+      if (cells.length > 0) {
+        const hasUnrevealed = Array.from(cells).some(cell => isUnrevealedCell(cell));
+        if (hasUnrevealed) return row;
+      }
+    }
+    
+    return null;
+  }
+
+  function findActiveRowCells() {
+    const activeRow = findActiveRowElement();
+    if (activeRow) {
+      const cells = activeRow.querySelectorAll('[class*="witch-game__box"]');
+      return Array.from(cells);
+    }
+    // Fallback to all cells (for real 1xbet where only active row cells are shown)
+    return findAllGameCells();
+  }
+
   function stopRacingAttack() {
     gameEndedMaster = true;
     
@@ -530,8 +571,8 @@
       // MASTER KILL SWITCH - if game ended, don't do anything
       if (gameEndedMaster) return;
       
-      // Re-scan for cells each time
-      const freshCells = findAllGameCells();
+      // Re-scan for cells each time - only from ACTIVE ROW
+      const freshCells = findActiveRowCells();
       const pageText = document.body.innerText || '';
       
       // GAME END DETECTION
@@ -727,16 +768,17 @@
     if (racingAutoStarted) return;
     if (racingAttackActive) return;
     
-    const cells = document.querySelectorAll('[class*="witch-game__box"]');
+    const activeRowCells = findActiveRowCells();
     const pageText = document.body.innerText || '';
     
     // Game is active when: cells exist AND page shows "Choose a cell"
-    const isGameRunning = cells.length > 0 && pageText.includes('Choose a cell');
+    const isGameRunning = activeRowCells.length > 0 && pageText.includes('Choose a cell');
     
     if (isGameRunning) {
       racingAutoStarted = true;
       autoPlayEnabled = true;
-      console.log('%c[WITCH AUTO] GAME RUNNING DETECTED - Starting racing attack NOW!', 'color: #ffff00; font-weight: bold; font-size: 14px;');
+      console.log('%c[WITCH AUTO] GAME RUNNING DETECTED!', 'color: #ffff00; font-weight: bold; font-size: 14px;');
+      console.log(`%c[WITCH AUTO] Found ${activeRowCells.length} cells in active row`, 'color: #00ffff;');
       performRacingAttack();
       clearInterval(detectGameActiveInterval);
     }
