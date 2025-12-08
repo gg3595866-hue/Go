@@ -6,6 +6,8 @@ let lastCellCount = 0;
 let pollInterval = null;
 let networkLogs = [];
 let eventLogs = [];
+let autoClickInterval = null;
+let lastClickedRow = 0;
 
 const MIMICK_SPY_DATA = {
   capturedRequests: [],
@@ -403,6 +405,94 @@ function clickCell(row, cell) {
   return false;
 }
 
+function autoClickActiveRow() {
+  if (!autoPlay || !isPlaying) {
+    logDetailed('AUTO', 'Auto-click skipped - autoPlay or isPlaying is false', { autoPlay, isPlaying });
+    return;
+  }
+  
+  const activeRow = findActiveRow();
+  if (!activeRow) {
+    logDetailed('AUTO', 'No active row found for auto-click');
+    return;
+  }
+  
+  const rows = findGameRows();
+  const activeRowIndex = rows.indexOf(activeRow) + 1;
+  
+  if (activeRowIndex <= lastClickedRow) {
+    logDetailed('AUTO', `Row ${activeRowIndex} already clicked (lastClickedRow: ${lastClickedRow})`);
+    return;
+  }
+  
+  if (isGameEnded()) {
+    logDetailed('AUTO', 'Game ended - stopping auto-click');
+    stopAutoClick();
+    return;
+  }
+  
+  const unrevealedCells = Array.from(activeRow.querySelectorAll('.witch-game__box'))
+    .filter(cell => getCellState(cell) === 'unrevealed');
+  
+  if (unrevealedCells.length === 0) {
+    logDetailed('AUTO', 'No unrevealed cells in active row');
+    return;
+  }
+  
+  const randomIndex = Math.floor(Math.random() * unrevealedCells.length);
+  const targetCell = unrevealedCells[randomIndex];
+  const position = getRowAndCellFromElement(targetCell);
+  
+  if (position) {
+    logDetailed('AUTO', `=== AUTO-CLICKING: row ${position.row}, cell ${position.cell} ===`);
+    lastClickedRow = position.row;
+    
+    try {
+      targetCell.click();
+      logDetailed('AUTO', 'Auto-click executed');
+      
+      sendGameEvent({
+        type: 'cell_selected',
+        row: position.row,
+        cell: position.cell,
+        autoClicked: true
+      });
+    } catch (e) {
+      logDetailed('AUTO', `Auto-click failed: ${e.message}`);
+    }
+  }
+}
+
+function startAutoClick() {
+  if (autoClickInterval) {
+    clearInterval(autoClickInterval);
+  }
+  
+  logDetailed('AUTO', '=== STARTING AUTO-CLICK MODE ===');
+  lastClickedRow = 0;
+  
+  setTimeout(() => {
+    autoClickActiveRow();
+  }, 500);
+  
+  autoClickInterval = setInterval(() => {
+    if (!autoPlay || !isPlaying) {
+      stopAutoClick();
+      return;
+    }
+    autoClickActiveRow();
+  }, 300);
+}
+
+function stopAutoClick() {
+  if (autoClickInterval) {
+    clearInterval(autoClickInterval);
+    autoClickInterval = null;
+    logDetailed('AUTO', '=== STOPPED AUTO-CLICK MODE ===');
+  }
+  lastClickedRow = 0;
+}
+
 function startMimickRecording() {
   logDetailed('MIMICK', 'Starting mimick recording');
   MIMICK_SPY_DATA.isRecording = true;
@@ -508,6 +598,7 @@ function startGamePolling() {
     
     if (isGameEnded()) {
       isPlaying = false;
+      stopAutoClick();
       logDetailed('GAME', 'Game ended - detected loss');
       sendGameEvent({ type: 'game_state', state: { status: 'lose', isGameEnded: true } });
       
@@ -587,6 +678,11 @@ function setupCellClickCapture() {
         logDetailed('GAME', 'Game started - isPlaying set to true');
         
         startMimickRecording();
+        
+        if (autoPlay) {
+          logDetailed('AUTO', 'Auto-play is enabled, starting auto-click');
+          startAutoClick();
+        }
       }
     }
     
@@ -602,6 +698,7 @@ function setupCellClickCapture() {
       });
       
       isPlaying = false;
+      stopAutoClick();
       sendGameEvent({ type: 'play_stopped' });
       logDetailed('GAME', 'Player took winnings - isPlaying set to false');
       
@@ -731,6 +828,7 @@ function observeGameChanges() {
                 className
               });
               isPlaying = false;
+              stopAutoClick();
               sendGameEvent({ type: 'game_state', state: { status: 'lose', isGameEnded: true } });
               
               if (MIMICK_SPY_DATA.isRecording) {
@@ -832,6 +930,11 @@ function setupMessageListener() {
               sendGameEvent({ type: 'play_started' });
               logDetailed('CMD', 'Play button clicked programmatically');
               startMimickRecording();
+              
+              if (autoPlay) {
+                logDetailed('CMD', 'Auto-play is enabled, starting auto-click');
+                startAutoClick();
+              }
             }
             break;
             
@@ -842,6 +945,7 @@ function setupMessageListener() {
             if (takeBtn && isPlaying) {
               takeBtn.click();
               isPlaying = false;
+              stopAutoClick();
               sendGameEvent({ type: 'play_stopped' });
               logDetailed('CMD', 'Take button clicked programmatically');
               stopMimickRecording();
@@ -851,6 +955,12 @@ function setupMessageListener() {
           case 'set_auto_play':
             autoPlay = data.enabled;
             logDetailed('CMD', `Auto-play ${autoPlay ? 'enabled' : 'disabled'}`);
+            if (autoPlay && isPlaying) {
+              logDetailed('CMD', 'Auto-play enabled while playing - starting auto-click');
+              startAutoClick();
+            } else if (!autoPlay) {
+              stopAutoClick();
+            }
             break;
             
           case 'get_state':
