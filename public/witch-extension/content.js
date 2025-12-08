@@ -205,11 +205,53 @@ function sendGameEvent(eventData) {
 }
 
 function findGameCells() {
-  return Array.from(document.querySelectorAll('.witch-game__box'));
+  let cells = Array.from(document.querySelectorAll('.witch-game__box'));
+  if (cells.length > 0) return cells;
+  
+  cells = Array.from(document.querySelectorAll('[class*="witch"][class*="box"]'));
+  if (cells.length > 0) return cells;
+  
+  cells = Array.from(document.querySelectorAll('[class*="game"][class*="cell"]'));
+  if (cells.length > 0) return cells;
+  
+  cells = Array.from(document.querySelectorAll('[class*="game-cell"]'));
+  if (cells.length > 0) return cells;
+  
+  const rows = findGameRows();
+  if (rows.length > 0) {
+    cells = [];
+    rows.forEach(row => {
+      const rowCells = row.querySelectorAll('div[class*="box"], div[class*="cell"], div[class*="item"]');
+      cells.push(...Array.from(rowCells));
+    });
+    if (cells.length > 0) return cells;
+  }
+  
+  return cells;
 }
 
 function findGameRows() {
-  return Array.from(document.querySelectorAll('.witch-game__row'));
+  let rows = Array.from(document.querySelectorAll('.witch-game__row'));
+  if (rows.length > 0) return rows;
+  
+  rows = Array.from(document.querySelectorAll('[class*="witch"][class*="row"]'));
+  if (rows.length > 0) return rows;
+  
+  rows = Array.from(document.querySelectorAll('[class*="game-row"]'));
+  if (rows.length > 0) return rows;
+  
+  rows = Array.from(document.querySelectorAll('[class*="game"][class*="row"]'));
+  if (rows.length > 0) return rows;
+  
+  const gameContainer = document.querySelector('[class*="witch-game"], [class*="game-grid"], [class*="game-board"]');
+  if (gameContainer) {
+    rows = Array.from(gameContainer.children).filter(child => {
+      const childCells = child.querySelectorAll('div');
+      return childCells.length >= 4 && childCells.length <= 6;
+    });
+  }
+  
+  return rows;
 }
 
 function findActiveRow() {
