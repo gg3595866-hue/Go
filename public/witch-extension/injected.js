@@ -115,6 +115,8 @@
 
         if (capturedRequest.isGameRelated) {
           extractTokensFromResponse(capturedResponse);
+          // Try to capture solution grid from game responses
+          processResponseForSolutionGrid(capturedResponse);
         }
       }).catch(() => {});
       
@@ -191,6 +193,8 @@
 
         if (spyData.isGameRelated) {
           extractTokensFromResponse(capturedResponse);
+          // Try to capture solution grid from game responses
+          processResponseForSolutionGrid(capturedResponse);
         }
       });
 
@@ -207,10 +211,184 @@
     return originalXHRSend.apply(this, arguments);
   };
 
+  // ========== ADVANCED BINARY DECODING UTILITIES ==========
+  
+  // Decode ArrayBuffer to various formats
+  function decodeArrayBuffer(buffer) {
+    const results = [];
+    const uint8 = new Uint8Array(buffer);
+    
+    // Try as UTF-8 string
+    try {
+      const decoder = new TextDecoder('utf-8');
+      const str = decoder.decode(buffer);
+      if (str && str.length > 0) {
+        results.push({ type: 'utf8', data: str });
+        // Try parsing as JSON
+        try {
+          const json = JSON.parse(str);
+          results.push({ type: 'json', data: json });
+        } catch (e) {}
+      }
+    } catch (e) {}
+    
+    // Check for gzip magic bytes (1f 8b)
+    if (uint8.length > 2 && uint8[0] === 0x1f && uint8[1] === 0x8b) {
+      try {
+        const decompressed = decompressGzip(uint8);
+        if (decompressed) {
+          results.push({ type: 'gzip', data: decompressed });
+        }
+      } catch (e) {}
+    }
+    
+    // Check for zlib magic bytes (78 9c, 78 da, 78 01)
+    if (uint8.length > 2 && uint8[0] === 0x78 && (uint8[1] === 0x9c || uint8[1] === 0xda || uint8[1] === 0x01)) {
+      try {
+        const decompressed = decompressZlib(uint8);
+        if (decompressed) {
+          results.push({ type: 'zlib', data: decompressed });
+        }
+      } catch (e) {}
+    }
+    
+    // Try msgpack-like decoding (look for array markers)
+    if (uint8.length > 10) {
+      try {
+        const msgpackResult = tryDecodeMsgpack(uint8);
+        if (msgpackResult) {
+          results.push({ type: 'msgpack', data: msgpackResult });
+        }
+      } catch (e) {}
+    }
+    
+    // Try to find boolean arrays in raw bytes
+    const boolArrays = extractBooleanArraysFromBytes(uint8);
+    if (boolArrays.length > 0) {
+      results.push({ type: 'bool_arrays', data: boolArrays });
+    }
+    
+    return results;
+  }
+  
+  // Simple gzip decompression using pako-like approach
+  function decompressGzip(data) {
+    // This is a simplified approach - real gzip needs pako library
+    // For now, try to extract readable content after header
+    try {
+      const decoder = new TextDecoder('utf-8', { fatal: false });
+      // Skip gzip header and try to decode
+      const content = decoder.decode(data.slice(10));
+      if (content.includes('[') || content.includes('{')) {
+        return content;
+      }
+    } catch (e) {}
+    return null;
+  }
+  
+  function decompressZlib(data) {
+    try {
+      const decoder = new TextDecoder('utf-8', { fatal: false });
+      const content = decoder.decode(data.slice(2));
+      if (content.includes('[') || content.includes('{')) {
+        return content;
+      }
+    } catch (e) {}
+    return null;
+  }
+  
+  // Try to decode msgpack-like binary format
+  function tryDecodeMsgpack(uint8) {
+    const results = [];
+    
+    // Look for fixarray markers (0x90 - 0x9f = array of 0-15 elements)
+    for (let i = 0; i < uint8.length - 10; i++) {
+      const byte = uint8[i];
+      
+      // fixarray of 5 elements (0x95) - could be a row
+      if (byte === 0x95) {
+        const row = [];
+        let valid = true;
+        for (let j = 0; j < 5 && valid; j++) {
+          const val = uint8[i + 1 + j];
+          if (val === 0xc3) row.push(true);      // msgpack true
+          else if (val === 0xc2) row.push(false); // msgpack false
+          else valid = false;
+        }
+        if (valid && row.length === 5) {
+          results.push(row);
+        }
+      }
+      
+      // array16 marker (0xdc) followed by size
+      if (byte === 0xdc && i + 2 < uint8.length) {
+        const size = (uint8[i + 1] << 8) | uint8[i + 2];
+        if (size >= 5 && size <= 10) {
+          console.log(`%c[WITCH BINARY] Found array16 marker, size: ${size}`, 'color: #ff00ff;');
+        }
+      }
+    }
+    
+    return results.length >= 5 ? results : null;
+  }
+  
+  // Extract boolean arrays from raw bytes
+  function extractBooleanArraysFromBytes(uint8) {
+    const rows = [];
+    
+    // Pattern 1: Sequential 0x00/0x01 bytes (raw booleans)
+    for (let i = 0; i <= uint8.length - 5; i++) {
+      let valid = true;
+      const row = [];
+      for (let j = 0; j < 5; j++) {
+        const val = uint8[i + j];
+        if (val === 0 || val === 1) {
+          row.push(val === 1);
+        } else {
+          valid = false;
+          break;
+        }
+      }
+      if (valid) {
+        rows.push({ offset: i, row });
+      }
+    }
+    
+    // Pattern 2: msgpack-style booleans (0xc2=false, 0xc3=true)
+    for (let i = 0; i <= uint8.length - 5; i++) {
+      let valid = true;
+      const row = [];
+      for (let j = 0; j < 5; j++) {
+        const val = uint8[i + j];
+        if (val === 0xc2) row.push(false);
+        else if (val === 0xc3) row.push(true);
+        else { valid = false; break; }
+      }
+      if (valid) {
+        rows.push({ offset: i, row, type: 'msgpack' });
+      }
+    }
+    
+    // Look for 10 consecutive rows of 5 booleans
+    if (rows.length >= 10) {
+      // Check for consecutive offsets
+      for (let i = 0; i <= rows.length - 10; i++) {
+        const group = rows.slice(i, i + 10);
+        const offsets = group.map(r => r.offset);
+        const isConsecutive = offsets.every((off, idx) => idx === 0 || off === offsets[idx - 1] + 5);
+        if (isConsecutive) {
+          return group.map(r => r.row);
+        }
+      }
+    }
+    
+    return [];
+  }
+
   const originalWebSocket = window.WebSocket;
   window.WebSocket = function(url, protocols) {
     const wsId = `ws_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const isGameRelated = url.includes('witch') || url.includes('game') || url.includes('bet');
+    const isGameRelated = url.includes('witch') || url.includes('game') || url.includes('bet') || url.includes('1x');
     
     sendToContentScript('websocket_created', {
       id: wsId,
@@ -225,9 +403,16 @@
     const originalSend = ws.send.bind(ws);
     ws.send = function(data) {
       let parsedData = data;
+      let decodedFormats = [];
+      
       try {
         if (typeof data === 'string') {
           parsedData = JSON.parse(data);
+        } else if (data instanceof ArrayBuffer) {
+          decodedFormats = decodeArrayBuffer(data);
+          parsedData = decodedFormats.length > 0 ? decodedFormats : '[Binary ArrayBuffer]';
+        } else if (data instanceof Blob) {
+          parsedData = '[Binary Blob]';
         }
       } catch (e) {}
       
@@ -235,7 +420,8 @@
         id: wsId,
         direction: 'outgoing',
         data: parsedData,
-        raw: typeof data === 'string' ? data : '[Binary]',
+        raw: typeof data === 'string' ? data : `[Binary ${data.byteLength || data.size || 0} bytes]`,
+        decodedFormats: decodedFormats,
         timestamp: getTimestamp(),
         isGameRelated: isGameRelated
       };
@@ -248,17 +434,65 @@
 
     ws.addEventListener('message', function(event) {
       let parsedData = event.data;
+      let decodedFormats = [];
+      let rawDescription = '';
+      
       try {
         if (typeof event.data === 'string') {
-          parsedData = JSON.parse(event.data);
+          rawDescription = event.data.substring(0, 500);
+          try {
+            parsedData = JSON.parse(event.data);
+          } catch (e) {
+            parsedData = event.data;
+          }
+        } else if (event.data instanceof ArrayBuffer) {
+          rawDescription = `[ArrayBuffer ${event.data.byteLength} bytes]`;
+          decodedFormats = decodeArrayBuffer(event.data);
+          console.log(`%c[WITCH WS] Binary message received: ${event.data.byteLength} bytes, decoded ${decodedFormats.length} formats`, 'color: #ff00ff;');
+          
+          // Check decoded formats for solution grid
+          for (const format of decodedFormats) {
+            if (format.type === 'json' && format.data) {
+              processResponseForSolutionGrid({ body: format.data, url: url });
+            }
+            if (format.type === 'bool_arrays' && format.data.length >= 5) {
+              console.log('%c[WITCH WS] Found boolean arrays in binary data!', 'color: #00ff00; font-weight: bold;');
+              processBinaryBooleanGrid(format.data);
+            }
+            if (format.type === 'msgpack' && format.data) {
+              console.log('%c[WITCH WS] Found msgpack data!', 'color: #00ff00; font-weight: bold;');
+              processBinaryBooleanGrid(format.data);
+            }
+          }
+          
+          parsedData = decodedFormats.length > 0 ? decodedFormats : '[Binary]';
+        } else if (event.data instanceof Blob) {
+          rawDescription = `[Blob ${event.data.size} bytes]`;
+          // Read blob as ArrayBuffer
+          event.data.arrayBuffer().then(buffer => {
+            const formats = decodeArrayBuffer(buffer);
+            console.log(`%c[WITCH WS] Blob decoded: ${formats.length} formats`, 'color: #ff00ff;');
+            for (const format of formats) {
+              if (format.type === 'json' && format.data) {
+                processResponseForSolutionGrid({ body: format.data, url: url });
+              }
+              if (format.type === 'bool_arrays' && format.data.length >= 5) {
+                processBinaryBooleanGrid(format.data);
+              }
+            }
+          }).catch(() => {});
+          parsedData = '[Blob - async decode]';
         }
-      } catch (e) {}
+      } catch (e) {
+        console.log('%c[WITCH WS] Decode error:', 'color: #ff0000;', e);
+      }
       
       const wsMessage = {
         id: wsId,
         direction: 'incoming',
         data: parsedData,
-        raw: typeof event.data === 'string' ? event.data : '[Binary]',
+        raw: rawDescription || (typeof event.data === 'string' ? event.data : '[Binary]'),
+        decodedFormats: decodedFormats,
         timestamp: getTimestamp(),
         isGameRelated: isGameRelated
       };
@@ -291,6 +525,65 @@
   window.WebSocket.OPEN = originalWebSocket.OPEN;
   window.WebSocket.CLOSING = originalWebSocket.CLOSING;
   window.WebSocket.CLOSED = originalWebSocket.CLOSED;
+  
+  // Process binary boolean grid
+  function processBinaryBooleanGrid(grid) {
+    if (!grid || !Array.isArray(grid) || grid.length < 5) return;
+    
+    capturedSolutionGrid = grid;
+    lastGridCaptureTime = Date.now();
+    
+    console.log('%c[WITCH BINARY] ========== BINARY SOLUTION GRID CAPTURED! ==========', 'color: #00ff00; font-weight: bold; font-size: 16px;');
+    console.log('%c[WITCH BINARY] Grid:', 'color: #00ff00;', capturedSolutionGrid);
+    
+    capturedSolutionGrid.forEach((row, rowIdx) => {
+      const safeCells = row.map((v, i) => v ? i + 1 : null).filter(v => v !== null);
+      console.log(`%c[WITCH BINARY] Row ${rowIdx + 1}: Safe cells = [${safeCells.join(', ')}]`, 'color: #00ffff;');
+    });
+    
+    sendToContentScript('solution_grid_captured', {
+      grid: capturedSolutionGrid,
+      source: 'binary',
+      timestamp: getTimestamp(),
+      rowCount: capturedSolutionGrid.length
+    });
+  }
+  
+  // ========== HOOK JSON.parse TO CAPTURE DECODED DATA ==========
+  const originalJSONParse = JSON.parse;
+  JSON.parse = function(text, reviver) {
+    const result = originalJSONParse.call(this, text, reviver);
+    
+    // Check if this looks like game data
+    if (result && typeof result === 'object') {
+      // Delayed processing to avoid blocking
+      setTimeout(() => {
+        try {
+          processResponseForSolutionGrid({ body: result, url: 'json.parse' });
+        } catch (e) {}
+      }, 0);
+    }
+    
+    return result;
+  };
+  
+  // ========== HOOK atob TO CAPTURE BASE64 DECODED DATA ==========
+  const originalAtob = window.atob;
+  window.atob = function(encodedData) {
+    const result = originalAtob.call(this, encodedData);
+    
+    // Try to parse as JSON
+    try {
+      const parsed = JSON.parse(result);
+      if (parsed && typeof parsed === 'object') {
+        setTimeout(() => {
+          processResponseForSolutionGrid({ body: parsed, url: 'atob' });
+        }, 0);
+      }
+    } catch (e) {}
+    
+    return result;
+  };
 
   function extractTokensFromResponse(response) {
     if (!response.body || typeof response.body !== 'object') return;
@@ -456,6 +749,122 @@
 
   sendToContentScript('injected_ready', { timestamp: getTimestamp() });
   console.log('[Mimick Spy] Injected script initialized - v7.0');
+
+  // ========== SOLUTION GRID CAPTURE SYSTEM ==========
+  // Stores the captured solution grid from the Play button response
+  // Format: Array of 10 rows, each row is an array of 5 booleans (true = safe, false = poison)
+  let capturedSolutionGrid = null;
+  let lastGridCaptureTime = 0;
+
+  // Parse response body to find solution grid (10 rows x 5 booleans)
+  function parseSolutionGrid(body) {
+    if (!body) return null;
+    
+    const candidateGrids = [];
+    
+    // Recursively search for arrays of 5 booleans
+    function findBooleanArrays(obj, path = '') {
+      if (!obj || typeof obj !== 'object') return;
+      
+      if (Array.isArray(obj)) {
+        // Check if this is a row (array of 5 booleans)
+        if (obj.length === 5 && obj.every(v => typeof v === 'boolean')) {
+          candidateGrids.push({ path, row: [...obj] });
+          return;
+        }
+        // Check if this is a grid (array of 10 rows of 5 booleans)
+        if (obj.length === 10 && obj.every(row => 
+            Array.isArray(row) && row.length === 5 && row.every(v => typeof v === 'boolean')
+        )) {
+          console.log('%c[WITCH GRID] Found complete solution grid!', 'color: #00ff00; font-weight: bold;');
+          return obj;
+        }
+        // Check if this could be rows (array of arrays)
+        if (obj.length >= 5 && obj.length <= 10) {
+          const boolRows = obj.filter(row => 
+            Array.isArray(row) && row.length === 5 && row.every(v => typeof v === 'boolean')
+          );
+          if (boolRows.length >= 5) {
+            console.log(`%c[WITCH GRID] Found ${boolRows.length} boolean rows!`, 'color: #00ff00; font-weight: bold;');
+            return boolRows;
+          }
+        }
+        // Search nested arrays
+        obj.forEach((item, idx) => {
+          const result = findBooleanArrays(item, `${path}[${idx}]`);
+          if (result) return result;
+        });
+      } else {
+        // Search object properties
+        for (const [key, value] of Object.entries(obj)) {
+          const result = findBooleanArrays(value, `${path}.${key}`);
+          if (result) return result;
+        }
+      }
+      return null;
+    }
+    
+    // Try to find a complete grid
+    const directGrid = findBooleanArrays(body);
+    if (directGrid && Array.isArray(directGrid) && directGrid.length >= 5) {
+      return directGrid;
+    }
+    
+    // If we found individual rows, combine them
+    if (candidateGrids.length >= 5) {
+      console.log(`%c[WITCH GRID] Combining ${candidateGrids.length} candidate rows`, 'color: #ffff00;');
+      return candidateGrids.slice(0, 10).map(c => c.row);
+    }
+    
+    // Try to decode base64 strings that might contain the grid
+    function tryDecodeBase64(str) {
+      try {
+        const decoded = atob(str);
+        const parsed = JSON.parse(decoded);
+        return parseSolutionGrid(parsed);
+      } catch (e) {
+        return null;
+      }
+    }
+    
+    // Search for base64-encoded data in strings
+    if (typeof body === 'object') {
+      for (const value of Object.values(body)) {
+        if (typeof value === 'string' && value.length > 20 && value.length < 2000) {
+          const decoded = tryDecodeBase64(value);
+          if (decoded) return decoded;
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  // Process captured response to extract solution grid
+  function processResponseForSolutionGrid(response) {
+    if (!response.body) return;
+    
+    const grid = parseSolutionGrid(response.body);
+    if (grid && grid.length >= 5) {
+      capturedSolutionGrid = grid;
+      lastGridCaptureTime = Date.now();
+      
+      console.log('%c[WITCH GRID] ========== SOLUTION GRID CAPTURED! ==========', 'color: #00ff00; font-weight: bold; font-size: 16px;');
+      console.log('%c[WITCH GRID] Grid:', 'color: #00ff00;', capturedSolutionGrid);
+      
+      // Find which cells are safe per row
+      capturedSolutionGrid.forEach((row, rowIdx) => {
+        const safeCells = row.map((v, i) => v ? i + 1 : null).filter(v => v !== null);
+        console.log(`%c[WITCH GRID] Row ${rowIdx + 1}: Safe cells = [${safeCells.join(', ')}]`, 'color: #00ffff;');
+      });
+      
+      sendToContentScript('solution_grid_captured', {
+        grid: capturedSolutionGrid,
+        timestamp: getTimestamp(),
+        rowCount: capturedSolutionGrid.length
+      });
+    }
+  }
 
   // ========== RACING ATTACK AUTO-CLICK SYSTEM ==========
   // Based on working witch-extension-v4.3-FIXED logic
@@ -636,20 +1045,58 @@
           
           console.log(`%c[WITCH AUTO] Row ${totalRowsClicked} [${difficulty}]: Clicking ${clickCount} cells (${unrevealed.length} unrevealed)`, 'color: #ff3333; font-weight: bold;');
           
+          // Check if we have a captured solution grid
+          const rowIndex = totalRowsClicked - 1; // 0-indexed for grid access
+          let safeCellIndices = [];
+          let usingSolutionGrid = false;
+          
+          if (capturedSolutionGrid && rowIndex < capturedSolutionGrid.length) {
+            const rowSolution = capturedSolutionGrid[rowIndex];
+            if (rowSolution && Array.isArray(rowSolution)) {
+              // Find all safe cell indices (where value is true)
+              safeCellIndices = rowSolution.map((isSafe, idx) => isSafe ? idx : -1).filter(idx => idx !== -1);
+              usingSolutionGrid = true;
+              console.log(`%c[WITCH AUTO] *** USING SOLUTION GRID *** Row ${totalRowsClicked}: Safe cells at indices [${safeCellIndices.join(', ')}]`, 'color: #00ff00; font-weight: bold; font-size: 14px;');
+            }
+          }
+          
           // Click cells ULTRA-RAPID (25ms apart) - same as working extension
           for (let i = 0; i < clickCount; i++) {
             const timeoutId = setTimeout(() => {
               // CHECK KILL SWITCH before clicking
               if (gameEndedMaster) return;
               
-              const randomCell = unrevealed[Math.floor(Math.random() * unrevealed.length)];
-              if (randomCell) {
-                console.log(`%c[WITCH AUTO] CLICK #${i + 1}`, 'color: #00ff00;');
-                randomCell.click();
+              let targetCell;
+              
+              if (usingSolutionGrid && safeCellIndices.length > 0) {
+                // Use solution grid - click the safe cell(s)
+                // Pick from safe cell indices
+                const safeIdx = safeCellIndices[i % safeCellIndices.length];
+                // Find the cell at this index from unrevealed cells
+                // Note: unrevealed array might not match grid indices directly
+                // We need to match by position in the row
+                const allRowCells = findActiveRowCells();
+                if (safeIdx < allRowCells.length) {
+                  targetCell = allRowCells[safeIdx];
+                  console.log(`%c[WITCH AUTO] SMART CLICK #${i + 1} -> Cell ${safeIdx + 1} (SAFE)`, 'color: #00ff00; font-weight: bold;');
+                } else {
+                  // Fallback to unrevealed
+                  targetCell = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+                  console.log(`%c[WITCH AUTO] FALLBACK CLICK #${i + 1}`, 'color: #ffff00;');
+                }
+              } else {
+                // No solution grid - use random selection
+                targetCell = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+                console.log(`%c[WITCH AUTO] RANDOM CLICK #${i + 1}`, 'color: #00ff00;');
+              }
+              
+              if (targetCell) {
+                targetCell.click();
                 
                 sendToContentScript('auto_cell_clicked', {
                   row: totalRowsClicked,
                   clickNum: i + 1,
+                  usedSolutionGrid: usingSolutionGrid,
                   timestamp: getTimestamp()
                 });
               }

@@ -191,6 +191,37 @@ window.addEventListener('message', function(event) {
     case 'injected_ready':
       logDetailed('INIT', 'Mimick Spy injected and ready', data);
       break;
+      
+    case 'solution_grid_captured':
+      logDetailed('GRID', '========== SOLUTION GRID CAPTURED! ==========', data);
+      MIMICK_SPY_DATA.capturedSolutionGrid = data.grid;
+      MIMICK_SPY_DATA.gridCaptureTime = data.timestamp;
+      
+      sendGameEvent({
+        type: 'mimick_solution_grid',
+        data: data
+      });
+      
+      data.grid.forEach((row, rowIdx) => {
+        const safeCells = row.map((v, i) => v ? i + 1 : null).filter(v => v !== null);
+        logDetailed('GRID', `Row ${rowIdx + 1}: Safe cells = [${safeCells.join(', ')}]`);
+      });
+      break;
+      
+    case 'auto_click_started':
+      logDetailed('AUTO', 'Racing attack started from injected.js');
+      sendGameEvent({ type: 'auto_click_started', data });
+      break;
+      
+    case 'auto_click_stopped':
+      logDetailed('AUTO', 'Racing attack stopped', data);
+      sendGameEvent({ type: 'auto_click_stopped', data });
+      break;
+      
+    case 'auto_cell_clicked':
+      logDetailed('AUTO', `Auto-click: Row ${data.row}, Click #${data.clickNum}${data.usedSolutionGrid ? ' (SMART)' : ''}`, data);
+      sendGameEvent({ type: 'auto_cell_clicked', data });
+      break;
   }
 });
 
