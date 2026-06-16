@@ -562,23 +562,53 @@ function autoClickActiveRow() {
     return;
   }
   
-  const randomIndex = Math.floor(Math.random() * unrevealedCells.length);
-  const targetCell = unrevealedCells[randomIndex];
+  // Try to use the captured solution grid first (smart click)
+  let targetCell = null;
+  let usedSolutionGrid = false;
+
+  if (MIMICK_SPY_DATA.capturedSolutionGrid && activeRowIndex <= MIMICK_SPY_DATA.capturedSolutionGrid.length) {
+    const gridRow = MIMICK_SPY_DATA.capturedSolutionGrid[activeRowIndex - 1];
+    if (gridRow && Array.isArray(gridRow)) {
+      const safeCellIndices = gridRow.map((v, i) => v ? i : -1).filter(i => i !== -1);
+      logDetailed('AUTO', `Solution grid row ${activeRowIndex}: safe cells = [${safeCellIndices.map(i => i + 1).join(', ')}]`);
+
+      for (const safeIdx of safeCellIndices) {
+        const cellElement = unrevealedCells.find(cell => {
+          const pos = getRowAndCellFromElement(cell);
+          return pos && pos.cell === safeIdx + 1;
+        });
+        if (cellElement) {
+          targetCell = cellElement;
+          usedSolutionGrid = true;
+          logDetailed('AUTO', `=== SMART CLICK: using solution grid cell ${safeIdx + 1} for row ${activeRowIndex} ===`);
+          break;
+        }
+      }
+    }
+  }
+
+  if (!targetCell) {
+    const randomIndex = Math.floor(Math.random() * unrevealedCells.length);
+    targetCell = unrevealedCells[randomIndex];
+    logDetailed('AUTO', 'No solution grid available — using random cell fallback');
+  }
+
   const position = getRowAndCellFromElement(targetCell);
   
   if (position) {
-    logDetailed('AUTO', `=== AUTO-CLICKING: row ${position.row}, cell ${position.cell} ===`);
+    logDetailed('AUTO', `=== AUTO-CLICKING: row ${position.row}, cell ${position.cell} ${usedSolutionGrid ? '(SMART - solution grid)' : '(RANDOM - no grid)'} ===`);
     lastClickedRow = position.row;
     
     try {
       targetCell.click();
-      logDetailed('AUTO', 'Auto-click executed');
+      logDetailed('AUTO', `Auto-click executed${usedSolutionGrid ? ' [SMART]' : ' [RANDOM]'}`);
       
       sendGameEvent({
         type: 'cell_selected',
         row: position.row,
         cell: position.cell,
-        autoClicked: true
+        autoClicked: true,
+        usedSolutionGrid: usedSolutionGrid
       });
     } catch (e) {
       logDetailed('AUTO', `Auto-click failed: ${e.message}`);

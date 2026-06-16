@@ -76,6 +76,9 @@ export default function WitchAnalyzerPage() {
   const [capturedTokens, setCapturedTokens] = useState<CapturedToken[]>([]);
   const [networkCaptures, setNetworkCaptures] = useState<any[]>([]);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [solutionGrid, setSolutionGrid] = useState<boolean[][] | null>(null);
+  const [solutionGridSource, setSolutionGridSource] = useState<string>("");
+  const [solutionGridTime, setSolutionGridTime] = useState<Date | null>(null);
   const [grid, setGrid] = useState<CellState[][]>(() => 
     Array.from({ length: 10 }, (_, rowIndex) =>
       Array.from({ length: 5 }, (_, cellIndex) => ({
@@ -283,6 +286,34 @@ export default function WitchAnalyzerPage() {
           message: `Token captured: ${data.data.key}`,
           source: "mimick",
         });
+        break;
+
+      case "mimick_solution_grid":
+        if (data.data?.grid && Array.isArray(data.data.grid)) {
+          setSolutionGrid(data.data.grid);
+          setSolutionGridSource(data.data.source || "unknown");
+          setSolutionGridTime(new Date());
+          addLog({
+            type: "success",
+            row: null,
+            cell: null,
+            message: `SOLUTION GRID CAPTURED (${data.data.source || "unknown"}) — ${data.data.rowCount || data.data.grid.length} rows. Safe cells ready!`,
+            source: "mimick",
+          });
+          // Log each row's safe cells
+          data.data.grid.forEach((row: boolean[], rowIdx: number) => {
+            const safeCells = row.map((v: boolean, i: number) => v ? i + 1 : null).filter(Boolean);
+            if (safeCells.length > 0) {
+              addLog({
+                type: "success",
+                row: rowIdx + 1,
+                cell: null,
+                message: `Row ${rowIdx + 1} safe cells: [${safeCells.join(', ')}]`,
+                source: "mimick",
+              });
+            }
+          });
+        }
         break;
 
       case "replay_action_executed":
@@ -663,6 +694,70 @@ export default function WitchAnalyzerPage() {
         </TabsList>
 
         <TabsContent value="grid">
+          {solutionGrid && (
+            <Card className="mb-4 border-green-500/50 bg-green-500/5">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                  <CardTitle className="text-lg text-green-600 dark:text-green-400">
+                    Solution Grid — Winning Cells Detected
+                  </CardTitle>
+                </div>
+                <div className="flex items-center gap-2">
+                  {solutionGridTime && (
+                    <span className="text-xs text-muted-foreground">
+                      {solutionGridTime.toLocaleTimeString()} · source: {solutionGridSource}
+                    </span>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => { setSolutionGrid(null); setSolutionGridTime(null); }}
+                    data-testid="button-clear-solution-grid"
+                  >
+                    <Trash2 className="w-3 h-3 mr-1" />
+                    Clear
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Green cells are safe to click. The extension will use these automatically when auto-play is on.
+                </p>
+                <div className="space-y-1">
+                  {solutionGrid.map((row, rowIndex) => {
+                    const safeCells = row.map((v, i) => v ? i + 1 : null).filter(Boolean);
+                    return (
+                      <div key={rowIndex} className={`flex items-center gap-1 ${rowIndex + 1 === currentRow ? "bg-green-500/10 rounded-md p-1 -mx-1" : ""}`}>
+                        <span className="w-8 text-xs font-medium text-muted-foreground">
+                          R{rowIndex + 1}
+                        </span>
+                        {row.map((isSafe, cellIndex) => (
+                          <div
+                            key={cellIndex}
+                            className={`w-10 h-10 flex items-center justify-center text-sm font-bold rounded-md border ${
+                              isSafe
+                                ? "bg-green-500/20 border-green-500 text-green-700 dark:text-green-300"
+                                : "bg-red-500/10 border-red-400/30 text-muted-foreground/40"
+                            }`}
+                            data-testid={`solution-cell-${rowIndex + 1}-${cellIndex + 1}`}
+                          >
+                            {cellIndex + 1}
+                          </div>
+                        ))}
+                        {safeCells.length > 0 && (
+                          <span className="ml-2 text-xs text-green-600 dark:text-green-400 font-medium">
+                            safe: {safeCells.join(', ')}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
