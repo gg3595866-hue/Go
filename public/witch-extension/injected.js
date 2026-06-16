@@ -34,6 +34,63 @@
   }
 
   // ============================================================
+  // URL / BODY FILTERS — only process actual game API responses
+  // ============================================================
+
+  // Static file extensions to always skip
+  var STATIC_EXT_RE = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|webp|mp3|mp4|map)(\?|$|#)/i;
+
+  // Known noise URL fragments (CDN, CMS, analytics, app manifests)
+  var NOISE_URL_FRAGMENTS = [
+    'genfiles/cms', 'genfiles/web-app', 'media_as', 'web-app-manifest',
+    'traincdn.com', 'google-analytics', 'googletagmanager', 'facebook.net',
+    'hotjar', 'sentry', 'datadog', 'newrelic', 'amplitude', 'mixpanel',
+    '/lang/', '/locale/', '/i18n/', '/translations/', '/cms/'
+  ];
+
+  // Game API signal fragments — URL must contain at least one
+  var GAME_URL_SIGNALS = [
+    'witch', 'game', '/bet', 'play', 'round', 'result', 'spin',
+    'service-api', 'bff-api', 'game-api', 'gaming-api',
+    'getgame', 'getsession', 'getround', 'startgame', 'finishgame',
+    'crash', 'mines', 'lucky', 'slot', 'casino-api', 'gameserver'
+  ];
+
+  function isGameUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    var u = url.toLowerCase();
+
+    // Skip static files immediately
+    if (STATIC_EXT_RE.test(u)) return false;
+
+    // Skip known noise sources
+    for (var i = 0; i < NOISE_URL_FRAGMENTS.length; i++) {
+      if (u.indexOf(NOISE_URL_FRAGMENTS[i]) !== -1) return false;
+    }
+
+    // Must contain at least one game signal
+    for (var j = 0; j < GAME_URL_SIGNALS.length; j++) {
+      if (u.indexOf(GAME_URL_SIGNALS[j]) !== -1) return true;
+    }
+
+    return false;
+  }
+
+  // Detect translation / localization JSON bodies:
+  // if >80% of top-level values are strings → it's a translation file, not game data
+  function isNoiseBody(body) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+    var keys = Object.keys(body);
+    if (keys.length < 15) return false;
+    var strCount = 0;
+    var checkCount = Math.min(keys.length, 60);
+    for (var i = 0; i < checkCount; i++) {
+      if (typeof body[keys[i]] === 'string') strCount++;
+    }
+    return (strCount / checkCount) > 0.8;
+  }
+
+  // ============================================================
   // LOCAL STORAGE
   // ============================================================
   function loadHistory() {
@@ -586,6 +643,11 @@
     }
 
     var url = resp.url || 'unknown';
+
+    // ★ NOISE GATE: skip CDN/CMS/analytics/localization responses
+    if (!isGameUrl(url)) return;
+    if (isNoiseBody(body)) return;
+
     var eventType = reqRef ? classifyRequest(reqRef, resp) : 'OTHER';
 
     // 1. Try to find grid directly (RS[0].F)
@@ -596,6 +658,9 @@
       var totalGames = addGridToHistory(grid, { url: url, ts: ts() });
       var ft = getBestCellsFromFrequency();
       gameCount++;
+
+      // ★ Run grid statistical analysis after each new game result
+      analyzeGridHistory();
 
       // Snapshot for diff engine
       prevGameSnapshot = lastGameSnapshot;
@@ -639,92 +704,164 @@
       scanAllFieldsForEncodings(body, url);
     }
 
-    // 2. Extract seeds/crypto
+    // 2. Extract seeds/crypto fields (only from game URLs, already filtered above)
     var seeds = extractSeeds(body, url);
     if (seeds) {
       seedHistory.push(seeds);
       if (seedHistory.length > 100) seedHistory = seedHistory.slice(-100);
       emit('seeds_extracted', seeds);
-      analyzeSeeds();
     }
   }
 
   // ============================================================
-  // SEED PATTERN ANALYSIS
+  // ★ GRID STATISTICAL ANALYSIS — chi-square test on historical results
+  // Replaces seed-field guessing with real mathematical analysis of outcomes
   // ============================================================
-  function analyzeSeeds() {
-    if (seedHistory.length < 2) return;
+  function analyzeGridHistory() {
+    var h = loadHistory();
+    var totalGames = h.grids.length;
+    if (totalGames < 2) return;
+
     var analysis = {
-      totalSamples: seedHistory.length,
-      fieldNames: [],
-      patterns: [],
-      rngHints: []
+      totalGames: totalGames,
+      cellStats: [],       // 10 rows × 5 cols win rates + chi-square
+      hotCells: [],        // cells significantly above 20% (biased safe)
+      coldCells: [],       // cells significantly below 20% (biased unsafe)
+      correlations: [],    // sequential game correlations
+      fairnessScore: 100,  // 0–100 (100 = perfectly random)
+      summary: ''
     };
 
-    var fieldSeen = {};
-    for (var i = 0; i < seedHistory.length; i++) {
-      var fields = seedHistory[i].fields;
-      for (var k in fields) fieldSeen[k] = true;
-    }
-    analysis.fieldNames = Object.keys(fieldSeen);
+    // ── Per-cell win rate + chi-square ─────────────────────────
+    // Expected: each cell is safe 20% of the time in a fair 5-cell game
+    var totalChiSq = 0;
+    var cellCount = 0;
 
-    for (var fk in fieldSeen) {
-      var vals = [];
-      for (var si = 0; si < seedHistory.length; si++) {
-        var v = seedHistory[si].fields[fk];
-        if (typeof v === 'number') vals.push(v);
-        else if (typeof v === 'string' && /^\d+$/.test(v)) vals.push(parseInt(v, 10));
+    for (var r = 0; r < 10; r++) {
+      var rowStats = [];
+      for (var c = 0; c < 5; c++) {
+        var safeCount = 0;
+        var gamesWithRow = 0;
+        for (var g = 0; g < totalGames; g++) {
+          var grid = h.grids[g].grid;
+          if (!grid || !grid[r]) continue;
+          gamesWithRow++;
+          if (grid[r][c]) safeCount++;
+        }
+        if (gamesWithRow === 0) { rowStats.push(null); continue; }
+        var rate = safeCount / gamesWithRow;
+        // Chi-square: (observed – expected)² / expected
+        var expected = gamesWithRow * 0.2;
+        var chiSq = expected > 0 ? Math.pow(safeCount - expected, 2) / expected : 0;
+        // p < 0.05 critical value for 1 df = 3.841
+        var significant = chiSq > 3.841 && gamesWithRow >= 10;
+        var stat = {
+          row: r + 1, col: c + 1,
+          safeCount: safeCount,
+          games: gamesWithRow,
+          rate: Math.round(rate * 100),
+          chiSq: Math.round(chiSq * 10) / 10,
+          significant: significant
+        };
+        rowStats.push(stat);
+        totalChiSq += chiSq;
+        cellCount++;
+        if (significant) {
+          if (rate > 0.2) analysis.hotCells.push(stat);
+          else            analysis.coldCells.push(stat);
+        }
       }
-      if (vals.length >= 3) {
-        var diffs = [];
-        for (var di = 1; di < vals.length; di++) diffs.push(vals[di] - vals[di - 1]);
-        var allSameDiff = diffs.every(function(d) { return d === diffs[0]; });
-        if (allSameDiff && diffs[0] !== 0) {
-          analysis.patterns.push({
-            field: fk, type: 'LINEAR_SEQUENCE', increment: diffs[0],
-            values: vals.slice(-5), nextPredicted: vals[vals.length - 1] + diffs[0], confidence: 'HIGH'
+      analysis.cellStats.push(rowStats);
+    }
+
+    // Sort hot/cold by deviation size
+    analysis.hotCells.sort(function(a, b) { return b.rate - a.rate; });
+    analysis.coldCells.sort(function(a, b) { return a.rate - b.rate; });
+
+    // ── Sequential correlation ─────────────────────────────────
+    // Does game N share an unusual number of safe cells with game N+1?
+    if (totalGames >= 10) {
+      var sharedTotal = 0;
+      var pairsChecked = 0;
+      for (var g2 = 0; g2 < totalGames - 1; g2++) {
+        var gA = h.grids[g2].grid;
+        var gB = h.grids[g2 + 1].grid;
+        if (!gA || !gB) continue;
+        var shared = 0;
+        for (var r2 = 0; r2 < Math.min(gA.length, gB.length, 10); r2++) {
+          if (!gA[r2] || !gB[r2]) continue;
+          for (var c2 = 0; c2 < 5; c2++) {
+            if (gA[r2][c2] && gB[r2][c2]) shared++;
+          }
+        }
+        sharedTotal += shared;
+        pairsChecked++;
+      }
+      if (pairsChecked > 0) {
+        // Expected overlap per game pair: 10 rows × 1 safe cell per row × 20% chance = 2.0
+        var avgShared = Math.round((sharedTotal / pairsChecked) * 10) / 10;
+        var expectedShared = 2.0; // 10 rows × (1/5 × 1/5 × 5 cells overlap) ≈ 2.0
+        if (avgShared > 3.5) {
+          analysis.correlations.push({
+            type: 'SEQUENTIAL_REPEAT',
+            avgSharedCells: avgShared,
+            expected: expectedShared,
+            confidence: avgShared > 5 ? 'HIGH' : 'MEDIUM',
+            note: 'Avg ' + avgShared + ' safe cells repeat between consecutive games (expected ~2). Suggests non-random seeding or short PRNG cycle.'
           });
         }
-        if (vals.length >= 5) {
-          var mod = detectModulus(vals);
-          if (mod) analysis.patterns.push({ field: fk, type: 'LCG_MODULUS', modulus: mod, confidence: 'MEDIUM' });
+      }
+    }
+
+    // ── Cycle detection — look for repeating grid patterns ─────
+    if (totalGames >= 6) {
+      for (var period = 2; period <= Math.min(20, Math.floor(totalGames / 2)); period++) {
+        var matchCount = 0;
+        var testPairs = 0;
+        for (var g3 = 0; g3 + period < totalGames; g3++) {
+          var gX = h.grids[g3].grid;
+          var gY = h.grids[g3 + period].grid;
+          if (!gX || !gY) continue;
+          var identical = true;
+          for (var r3 = 0; r3 < Math.min(gX.length, gY.length, 10) && identical; r3++) {
+            if (!gX[r3] || !gY[r3]) { identical = false; break; }
+            for (var c3 = 0; c3 < 5 && identical; c3++) {
+              if (gX[r3][c3] !== gY[r3][c3]) identical = false;
+            }
+          }
+          if (identical) matchCount++;
+          testPairs++;
+        }
+        if (testPairs > 0 && matchCount / testPairs > 0.5) {
+          analysis.correlations.push({
+            type: 'CYCLE_DETECTED',
+            period: period,
+            matchRate: Math.round((matchCount / testPairs) * 100),
+            confidence: matchCount / testPairs > 0.8 ? 'HIGH' : 'MEDIUM',
+            note: 'Grid repeats every ' + period + ' games (' + Math.round((matchCount / testPairs) * 100) + '% match rate). PRNG cycle length = ' + period + '.'
+          });
+          break; // report shortest cycle found
         }
       }
     }
 
-    for (var fk2 in fieldSeen) {
-      var hexVals = [];
-      for (var si2 = 0; si2 < seedHistory.length; si2++) {
-        var v2 = seedHistory[si2].fields[fk2];
-        if (typeof v2 === 'string' && /^[0-9a-f]{8,}$/i.test(v2)) hexVals.push(v2);
-      }
-      if (hexVals.length >= 2) {
-        analysis.rngHints.push({
-          field: fk2, type: 'HEX_HASH', length: hexVals[0].length,
-          sample: hexVals[0].substring(0, 16) + '...',
-          count: hexVals.length,
-          note: hexVals[0].length === 64 ? 'SHA-256 likely' :
-                hexVals[0].length === 32 ? 'MD5/SHA-128 likely' :
-                hexVals[0].length === 40 ? 'SHA-1 likely' : 'Unknown hash',
-          consecutive: hexVals.slice(-3)
-        });
-      }
+    // ── Fairness score (0–100) ─────────────────────────────────
+    var avgChiSq = cellCount > 0 ? totalChiSq / cellCount : 0;
+    analysis.fairnessScore = Math.max(0, Math.min(100, Math.round(100 - avgChiSq * 8)));
+
+    // ── Summary line ───────────────────────────────────────────
+    var biasedCells = analysis.hotCells.length + analysis.coldCells.length;
+    if (biasedCells === 0 && analysis.correlations.length === 0) {
+      analysis.summary = 'No significant bias detected (' + totalGames + ' games). Collect more data for higher confidence.';
+    } else if (biasedCells > 0) {
+      analysis.summary = biasedCells + ' biased cell(s) detected (p < 0.05). ' +
+        (analysis.hotCells.length ? analysis.hotCells.length + ' hot' : '') +
+        (analysis.coldCells.length ? (analysis.hotCells.length ? ', ' : '') + analysis.coldCells.length + ' cold' : '') + '.';
+    } else {
+      analysis.summary = 'Sequential correlation detected — game results may not be independent.';
     }
 
-    if (analysis.patterns.length > 0 || analysis.rngHints.length > 0) {
-      emit('rng_analysis', analysis);
-    }
-  }
-
-  function detectModulus(vals) {
-    var mods = [256, 512, 1024, 2048, 4096, 65536, 1000000, 2147483648];
-    for (var m = 0; m < mods.length; m++) {
-      var mod = mods[m];
-      var residuals = vals.map(function(v) { return v % mod; });
-      if (residuals.every(function(v) { return v < mod; }) &&
-          Math.max.apply(null, residuals) > mod * 0.1) return mod;
-    }
-    return null;
+    emit('grid_rng_analysis', analysis);
   }
 
   // ============================================================
@@ -987,6 +1124,9 @@
 
   var initFt = getBestCellsFromFrequency();
   if (initFt) emit('frequency_ready', initFt);
+
+  // ★ Run grid analysis on existing saved history immediately at load
+  analyzeGridHistory();
 
   console.log('%c[WITCH v12] Analyzer loaded — Decoder + Bitmask + Diff + Timeline active (no auto-click)',
     'color:#00ffff;font-weight:bold;font-size:14px;background:#001a2e;padding:4px 8px;');

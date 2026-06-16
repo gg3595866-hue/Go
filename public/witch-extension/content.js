@@ -19,6 +19,7 @@
     diffResults: [],
     timeline: [],
     rngAnalysis: null,
+    gridRngAnalysis: null,
     isMinimized: false,
     activeTab: 'grid'
   };
@@ -78,6 +79,11 @@
       case 'rng_analysis':
         state.rngAnalysis = data;
         notifyBackground('rng_analysis', data);
+        if (state.activeTab === 'rng') renderTabContent();
+        break;
+
+      case 'grid_rng_analysis':
+        state.gridRngAnalysis = data;
         if (state.activeTab === 'rng') renderTabContent();
         break;
 
@@ -519,74 +525,121 @@
   }
 
   // ============================================================
-  // TAB: RNG
+  // TAB: RNG — Statistical analysis of historical game results
   // ============================================================
   function renderRNG() {
-    var analysis = state.rngAnalysis;
-    var h = loadSeedHistory();
+    var analysis = state.gridRngAnalysis;
+    var totalGames = (analysis && analysis.totalGames) || (state.stats && state.stats.totalGames) || 0;
 
-    var html = '<div class="witch-section">' +
-      '<div class="witch-section-title">🧬 RNG Pattern Analysis</div>';
+    var html = '<div class="witch-section">';
+    html += '<div class="witch-section-title">🧬 RNG / Fairness Analysis' +
+      '<span class="badge badge-gray" style="margin-left:4px">' + totalGames + ' games</span>' +
+    '</div>';
+    html += '<div style="font-size:9px;color:#666;margin-bottom:6px">Chi-square test on actual game outcomes (safe cell rates per position). Expected: 20% per cell in a fair game.</div>';
 
-    if (h.length > 0) {
-      html += '<div style="font-size:9px;color:#888;margin-bottom:4px">Samples: ' + h.length + ' | Fields: ';
-      var fieldsSeen = {};
-      h.forEach(function(s) { Object.keys(s.fields || {}).forEach(function(k) { fieldsSeen[k] = true; }); });
-      html += Object.keys(fieldsSeen).join(', ');
+    if (!analysis || totalGames < 2) {
+      html += '<div class="witch-empty">Need ≥2 completed games to calculate statistics.<br><br>Play the Witch game — each post-game RS[0].F response is automatically saved and analysed.</div>';
       html += '</div>';
+      return html;
     }
 
-    if (!analysis) {
-      html += '<div class="witch-empty">Collecting seed data...<br>Need ≥2 samples to detect patterns.</div>';
-    } else {
-      if (analysis.patterns && analysis.patterns.length) {
-        for (var i = 0; i < analysis.patterns.length; i++) {
-          var p = analysis.patterns[i];
-          html += '<div class="rng-pattern">';
-          html += '<span class="rng-high">⚡ ' + p.type + ' [' + p.confidence + ']</span><br>';
-          html += '<span style="color:#888;font-size:9px">Field: </span><span style="color:#60a5fa">' + esc(p.field) + '</span><br>';
-          if (p.increment !== undefined) html += '<span style="font-size:9px">Increment: ' + p.increment + '</span><br>';
-          if (p.modulus) html += '<span style="font-size:9px">Modulus: ' + p.modulus + '</span><br>';
-          if (p.nextPredicted !== undefined) html += '<span style="color:#34d399;font-weight:bold">Next predicted: ' + p.nextPredicted + '</span>';
-          html += '</div>';
-        }
-      }
-      if (analysis.rngHints && analysis.rngHints.length) {
-        for (var j = 0; j < analysis.rngHints.length; j++) {
-          var hint = analysis.rngHints[j];
-          html += '<div class="rng-pattern">';
-          html += '<span class="rng-med">🔑 ' + hint.type + '</span><br>';
-          html += '<span style="color:#888;font-size:9px">Field: </span><span style="color:#60a5fa">' + esc(hint.field) + '</span><br>';
-          html += '<span style="font-size:9px">' + esc(hint.note) + '</span><br>';
-          html += '<span style="font-size:9px;color:#555">Samples: ' + hint.count + '</span>';
-          html += '</div>';
-        }
-      }
-      if ((!analysis.patterns || !analysis.patterns.length) && (!analysis.rngHints || !analysis.rngHints.length)) {
-        html += '<div style="color:#888;font-size:9px;padding:4px">Samples: ' + analysis.totalSamples + '<br>No patterns detected yet...</div>';
-      }
-    }
-
-    // Raw seed log
-    html += '</div><div class="witch-section">';
-    html += '<div class="witch-section-title" style="font-size:10px">Raw Seed History</div>';
-    if (!h.length) {
-      html += '<div class="witch-empty">No seeds captured.</div>';
-    } else {
-      html += '<div class="witch-result-box" style="max-height:150px">';
-      var showLimit = Math.min(h.length, 5);
-      for (var si = 0; si < showLimit; si++) {
-        var s = h[si];
-        var fields = s.fields || {};
-        html += Object.keys(fields).map(function(k) {
-          return '<span style="color:#6366f1">' + esc(k) + '</span>: ' + esc(String(fields[k]).substring(0, 30));
-        }).join('<br>');
-        html += '<br><span style="color:#333">─────</span><br>';
-      }
-      html += '</div>';
-    }
-
+    // ── Fairness score ──────────────────────────────────────
+    var score = analysis.fairnessScore;
+    var scoreColor = score >= 80 ? '#34d399' : score >= 50 ? '#fbbf24' : '#f87171';
+    var scoreLabel = score >= 80 ? 'Appears fair' : score >= 50 ? 'Mild bias detected' : 'STRONG BIAS';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:6px;background:#0d0d1e;border-radius:6px;border:1px solid #2a2a4a">';
+    html += '<div style="font-size:22px;font-weight:bold;color:' + scoreColor + '">' + score + '</div>';
+    html += '<div><div style="font-size:10px;font-weight:bold;color:' + scoreColor + '">' + scoreLabel + '</div>' +
+            '<div style="font-size:9px;color:#555">' + esc(analysis.summary) + '</div></div>';
     html += '</div>';
+
+    // ── Win-rate heatmap ────────────────────────────────────
+    html += '<div class="witch-section-title" style="font-size:10px;margin-bottom:4px">Safe Cell Rate Heatmap <span style="font-size:8px;color:#666">(expected 20% — hot=biased safe, cold=biased unsafe)</span></div>';
+    html += '<table class="witch-grid-table"><tr><th class="row-label">Row</th><th>C1</th><th>C2</th><th>C3</th><th>C4</th><th>C5</th></tr>';
+
+    for (var r = 0; r < analysis.cellStats.length; r++) {
+      var rowStats = analysis.cellStats[r];
+      if (!rowStats) continue;
+      html += '<tr><td class="row-label">' + (r + 1) + '</td>';
+      for (var c = 0; c < 5; c++) {
+        var cell = rowStats[c];
+        if (!cell) { html += '<td class="cell-empty">?</td>'; continue; }
+        var rate = cell.rate;
+        var cellClass, title;
+        if (cell.significant && rate > 20) {
+          cellClass = 'cell-rng-hot';
+          title = 'HOT: ' + rate + '% safe (' + cell.safeCount + '/' + cell.games + ') χ²=' + cell.chiSq;
+        } else if (cell.significant && rate < 20) {
+          cellClass = 'cell-rng-cold';
+          title = 'COLD: ' + rate + '% safe (' + cell.safeCount + '/' + cell.games + ') χ²=' + cell.chiSq;
+        } else if (rate >= 28) {
+          cellClass = 'cell-rng-warm';
+          title = rate + '% safe (not yet significant)';
+        } else if (rate <= 12) {
+          cellClass = 'cell-rng-cool';
+          title = rate + '% safe (not yet significant)';
+        } else {
+          cellClass = 'cell-rng-neutral';
+          title = rate + '% safe';
+        }
+        html += '<td class="' + cellClass + '" title="' + esc(title) + '">' + rate + '%</td>';
+      }
+      html += '</tr>';
+    }
+    html += '</table>';
+    html += '<div style="font-size:8px;color:#555;margin-top:3px">★ = statistically significant bias (p&lt;0.05, n≥10) &nbsp; Need ≥30 games for reliable results</div>';
+    html += '</div>';
+
+    // ── Hot cells summary ───────────────────────────────────
+    if (analysis.hotCells.length > 0 || analysis.coldCells.length > 0) {
+      html += '<div class="witch-section">';
+      html += '<div class="witch-section-title" style="font-size:10px">Statistically Biased Cells</div>';
+
+      if (analysis.hotCells.length > 0) {
+        html += '<div style="margin-bottom:5px"><span style="color:#f87171;font-size:9px;font-weight:bold">🔥 HOT (appear safe more than expected):</span><br>';
+        for (var hi = 0; hi < analysis.hotCells.length; hi++) {
+          var hc = analysis.hotCells[hi];
+          html += '<div style="font-size:9px;margin-top:2px">' +
+            '<span style="color:#34d399">Row ' + hc.row + ' · C' + hc.col + '</span>' +
+            ' — <span style="color:#fbbf24;font-weight:bold">' + hc.rate + '%</span> safe' +
+            ' <span style="color:#555">(' + hc.safeCount + '/' + hc.games + ' games, χ²=' + hc.chiSq + ')</span>' +
+            '</div>';
+        }
+        html += '</div>';
+      }
+
+      if (analysis.coldCells.length > 0) {
+        html += '<div><span style="color:#60a5fa;font-size:9px;font-weight:bold">🧊 COLD (appear safe less than expected):</span><br>';
+        for (var ci = 0; ci < analysis.coldCells.length; ci++) {
+          var cc = analysis.coldCells[ci];
+          html += '<div style="font-size:9px;margin-top:2px">' +
+            '<span style="color:#f87171">Row ' + cc.row + ' · C' + cc.col + '</span>' +
+            ' — <span style="color:#fbbf24;font-weight:bold">' + cc.rate + '%</span> safe' +
+            ' <span style="color:#555">(' + cc.safeCount + '/' + cc.games + ' games, χ²=' + cc.chiSq + ')</span>' +
+            '</div>';
+        }
+        html += '</div>';
+      }
+
+      html += '</div>';
+    }
+
+    // ── Correlation / cycle findings ────────────────────────
+    if (analysis.correlations && analysis.correlations.length > 0) {
+      html += '<div class="witch-section">';
+      html += '<div class="witch-section-title" style="font-size:10px;color:#ffd700">⚡ Pattern Detected</div>';
+      for (var pi = 0; pi < analysis.correlations.length; pi++) {
+        var cor = analysis.correlations[pi];
+        var confColor = cor.confidence === 'HIGH' ? '#f87171' : '#fbbf24';
+        html += '<div style="margin-bottom:6px">';
+        html += '<span style="color:' + confColor + ';font-weight:bold;font-size:10px">' + cor.type + ' [' + cor.confidence + ']</span><br>';
+        html += '<span style="font-size:9px;color:#aaa">' + esc(cor.note) + '</span>';
+        if (cor.period) html += '<br><span style="font-size:9px;color:#34d399;font-weight:bold">→ Every ' + cor.period + 'th game may use the same grid!</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
     return html;
   }
 
@@ -973,6 +1026,11 @@
       #witch-overlay-v11 .witch-grid-table th { color:#6366f1!important;padding:2px 3px!important;text-align:center!important;font-size:10px!important;border-bottom:1px solid #2a2a4a!important; }
       #witch-overlay-v11 .witch-grid-table td { padding:2px 3px!important;text-align:center!important;border:1px solid #1a1a3a!important;border-radius:3px!important; }
       #witch-overlay-v11 .cell-safe { background:#064e3b!important;color:#34d399!important;font-weight:bold!important; }
+      #witch-overlay-v11 .cell-rng-hot  { background:#7f1d1d!important;color:#fca5a5!important;font-weight:bold!important;font-size:9px!important; }
+      #witch-overlay-v11 .cell-rng-cold { background:#1e3a5f!important;color:#93c5fd!important;font-weight:bold!important;font-size:9px!important; }
+      #witch-overlay-v11 .cell-rng-warm { background:#3b2400!important;color:#fbbf24!important;font-size:9px!important; }
+      #witch-overlay-v11 .cell-rng-cool { background:#0c1a2e!important;color:#6b97cc!important;font-size:9px!important; }
+      #witch-overlay-v11 .cell-rng-neutral { background:#13132a!important;color:#666!important;font-size:9px!important; }
       #witch-overlay-v11 .cell-unsafe { background:#1f0a0a!important;color:#3a1010!important; }
       #witch-overlay-v11 .cell-freq-high { background:#064e3b!important;color:#34d399!important;font-weight:bold!important; }
       #witch-overlay-v11 .cell-freq-mid { background:#1a2e1a!important;color:#6ee7b7!important; }
