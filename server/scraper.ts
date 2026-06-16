@@ -1,4 +1,4 @@
-import cloudscraper from 'cloudscraper';
+import httpClient from './http-client';
 import * as cheerio from 'cheerio';
 import { type Match, type MatchDetails } from '@shared/schema';
 import { VERIFIED_LEAGUE_MAPPINGS, getVerifiedLeagueSlug } from './verified-league-mappings';
@@ -58,7 +58,7 @@ export async function scrapeFixtures(date: Date): Promise<Match[]> {
     
     // Use cloudscraper to bypass Cloudflare protection
     const html: string = await new Promise((resolve, reject) => {
-      cloudscraper.get({
+      httpClient.get({
         uri: url,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -252,7 +252,7 @@ export async function scrapeBasketballFixtures(date: Date): Promise<Match[]> {
     console.log(`Scraping basketball fixtures from: ${url}`);
     
     const html: string = await new Promise((resolve, reject) => {
-      cloudscraper.get({
+      httpClient.get({
         uri: url,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -427,7 +427,7 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
     
     // Use cloudscraper to bypass Cloudflare protection
     const html: string = await new Promise((resolve, reject) => {
-      cloudscraper.get({
+      httpClient.get({
         uri: matchUrl,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -475,7 +475,7 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
       console.log(`Fetching stats from HTMX endpoint: ${fullStatsUrl}`);
       
       statsHtml = await new Promise((resolve, reject) => {
-        cloudscraper.get({
+        httpClient.get({
           uri: fullStatsUrl,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -506,7 +506,7 @@ export async function scrapeMatchDetails(matchUrl: string): Promise<MatchDetails
       console.log(`Fetching form from HTMX endpoint: ${fullFormUrl}`);
       
       formHtml = await new Promise((resolve, reject) => {
-        cloudscraper.get({
+        httpClient.get({
           uri: fullFormUrl,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -1479,7 +1479,7 @@ export async function scrapeBasketballMatchDetails(matchUrl: string): Promise<an
     console.log(`Scraping basketball match details from: ${matchUrl}`);
     
     const html: string = await new Promise((resolve, reject) => {
-      cloudscraper.get({
+      httpClient.get({
         uri: matchUrl,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -1593,7 +1593,7 @@ export async function scrapeBasketballMatchDetails(matchUrl: string): Promise<an
       console.log(`Fetching basketball stats from: ${fullStatsUrl}`);
       
       const statsHtml: string = await new Promise((resolve, reject) => {
-        cloudscraper.get({
+        httpClient.get({
           uri: fullStatsUrl,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -1706,7 +1706,7 @@ export async function scrapeBasketballMatchDetails(matchUrl: string): Promise<an
       console.log(`Fetching basketball form from: ${fullFormUrl}`);
       
       const formHtml: string = await new Promise((resolve, reject) => {
-        cloudscraper.get({
+        httpClient.get({
           uri: fullFormUrl,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -1838,7 +1838,7 @@ export async function scrapeLeagueStats(competitionName: string): Promise<League
     console.log(`Scraping league stats for "${competitionName}" from: ${statsUrl}`);
     
     const html: string = await new Promise((resolve, reject) => {
-      cloudscraper.get({
+      httpClient.get({
         uri: statsUrl,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -2108,7 +2108,7 @@ export async function getLeagueYears(competitionName: string): Promise<number[]>
     console.log(`Fetching available years from: ${url}`);
     
     const html: string = await new Promise((resolve, reject) => {
-      cloudscraper.get({
+      httpClient.get({
         uri: url,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -2221,7 +2221,7 @@ async function tryFetchLeaguePage(
 ): Promise<{ success: boolean; html?: string; error?: any }> {
   try {
     const html: string = await new Promise((resolve, reject) => {
-      cloudscraper.get({
+      httpClient.get({
         uri: url,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -2268,7 +2268,7 @@ async function tryFetchLeaguePageWithHX(
 ): Promise<{ success: boolean; html?: string; error?: any }> {
   try {
     const html: string = await new Promise((resolve, reject) => {
-      cloudscraper.get({
+      httpClient.get({
         uri: url,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -2610,7 +2610,7 @@ export async function scrapeLeagueMatches(
     
     // Fetch the initial matches page to determine round range
     const matchesHtml: string = await new Promise((resolve, reject) => {
-      cloudscraper.get({
+      httpClient.get({
         uri: fullMatchesUrl,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -2673,7 +2673,7 @@ export async function scrapeLeagueMatches(
         onProgress?.(`Fetching round ${round}/${maxRound}... Found ${allMatches.length} matches so far`, allMatches.length);
         
         const roundHtml: string = await new Promise((resolve, reject) => {
-          cloudscraper.get({
+          httpClient.get({
             uri: roundUrl,
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -2904,7 +2904,7 @@ export async function scrapeBasketballLeagueMatches(
     
     // Fetch the initial matches page
     const matchesHtml: string = await new Promise((resolve, reject) => {
-      cloudscraper.get({
+      httpClient.get({
         uri: fullMatchesUrl,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -2967,7 +2967,7 @@ export async function scrapeBasketballLeagueMatches(
         onProgress?.(`Fetching round ${round}/${maxRound}... Found ${allMatches.length} matches so far`, allMatches.length);
         
         const roundHtml: string = await new Promise((resolve, reject) => {
-          cloudscraper.get({
+          httpClient.get({
             uri: roundUrl,
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -3060,7 +3060,7 @@ export async function scrapeTeamMatches(
         console.log(`Fetching round ${round} for ${teamName}: ${fullUrl}`);
         
         const html: string = await new Promise((resolve, reject) => {
-          cloudscraper.get({
+          httpClient.get({
             uri: fullUrl,
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

@@ -3,7 +3,7 @@
  * Tests each mapping to ensure URLs are accessible
  */
 
-import cloudscraper from 'cloudscraper';
+import httpClient from './http-client';
 import { COMPREHENSIVE_LEAGUE_MAPPINGS } from './league-mappings-comprehensive';
 import * as fs from 'fs';
 
@@ -25,7 +25,7 @@ async function testLeagueUrl(slug: string): Promise<{ success: boolean; statusCo
   
   try {
     const result: any = await new Promise((resolve, reject) => {
-      cloudscraper.get({
+      httpClient.get({
         uri: url,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

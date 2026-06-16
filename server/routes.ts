@@ -1253,7 +1253,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const { extractLeagueSlug } = await import('./scraper');
-      const cloudscraper = (await import('cloudscraper')).default;
+      const { default: httpClient } = await import('./http-client');
       const cheerio = await import('cheerio');
 
       const leagueSlug = extractLeagueSlug(competition as string);
@@ -1268,7 +1268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Base URL: ${baseUrl}`);
 
       const html: string = await new Promise((resolve, reject) => {
-        cloudscraper.get({
+        httpClient.get({
           uri: baseUrl,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

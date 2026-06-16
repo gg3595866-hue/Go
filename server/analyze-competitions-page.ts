@@ -3,13 +3,13 @@
  * to understand how to extract league information
  */
 
-import cloudscraper from 'cloudscraper';
+import httpClient from './http-client';
 import * as cheerio from 'cheerio';
 import * as fs from 'fs';
 
 async function fetchPage(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    cloudscraper.get({
+    httpClient.get({
       uri: url,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
