@@ -34,7 +34,10 @@
       const txt = (playEl.textContent || '').trim().toLowerCase();
       if (classList.includes('play') || classList.includes('start') || txt.includes('play')) {
         playButtonClickedAt = Date.now();
-        console.log('%c[WITCH TIMING] PLAY BUTTON CLICKED — tagging next response', 'color: #ff00ff; font-weight: bold;');
+        // ===== CRITICAL: Clear old grid so each new game gets a fresh RS[0].F =====
+        capturedSolutionGrid = null;
+        console.log('%c[WITCH TIMING] PLAY BUTTON CLICKED — grid cleared, watching for RS[0].F response...',
+          'color: #ff00ff; font-weight: bold;');
         sendToContentScript('play_button_clicked', { timestamp: getTimestamp() });
       }
     }
@@ -1022,16 +1025,19 @@
     }
     if (!bodyToCheck) return;
 
+    // Also extract seeds/nonces from every response regardless of grid
+    extractSeedsFromBody(bodyToCheck, response.url || '');
+
     var grid = parseSolutionGrid(bodyToCheck);
     if (grid && grid.length >= 5) {
       capturedSolutionGrid = grid;
       lastGridCaptureTime = Date.now();
 
-      console.log('%c[WITCH GRID] ========== SOLUTION GRID CAPTURED! ==========',
+      console.log('%c[WITCH GRID] ========== POST-GAME GRID CAPTURED (RS[0].F) ==========',
         'color: #00ff00; font-weight: bold; font-size: 18px; background: #002200;');
       console.log('%c[WITCH GRID] Source URL:', 'color: #ffff00;', response.url || 'unknown');
 
-      // Log each row's safe cells clearly
+      // Log each row's safe cells
       for (var rowIdx = 0; rowIdx < capturedSolutionGrid.length; rowIdx++) {
         var row = capturedSolutionGrid[rowIdx];
         var safeCells = [];
@@ -1039,19 +1045,198 @@
           if (row[ci]) safeCells.push(ci + 1);
         }
         console.log(
-          '%c[WITCH GRID] Row ' + (rowIdx + 1) + ': CLICK any of cells [' + safeCells.join(', ') + ']',
+          '%c[WITCH GRID] Row ' + (rowIdx + 1) + ': Safe cells = [' + safeCells.join(', ') + ']',
           'color: #00ffff; font-weight: bold;'
         );
       }
 
-      // Send to webapp via WebSocket
+      // ===== SAVE TO PRNG HISTORY =====
+      // This grid is the post-game reveal — save it to build frequency model
+      var meta = {
+        url: response.url || '',
+        gameId: bodyToCheck.AI || null,
+        SB: bodyToCheck.SB,
+        AN: bodyToCheck.AN,
+        BS: bodyToCheck.BS
+      };
+      var history = saveGridToHistory(capturedSolutionGrid, meta);
+
+      // Build updated frequency table to send to webapp
+      var ft = buildFrequencyTable();
+
+      // Send grid + updated frequency to webapp
       sendToContentScript('solution_grid_captured', {
         grid: capturedSolutionGrid,
         source: response.url || 'unknown',
         timestamp: getTimestamp(),
-        rowCount: capturedSolutionGrid.length
+        rowCount: capturedSolutionGrid.length,
+        totalGames: history ? history.totalGames : 0,
+        frequencyTable: ft ? ft.freqTable : null
       });
     }
+  }
+
+  // ========== PRNG PATTERN LEARNING SYSTEM ==========
+  // Every post-game RS[0].F grid reveal is stored in localStorage.
+  // Over time we build a frequency map: which cells are safe most often per row.
+  // During live play, the statistically safest cell is clicked — no live grid needed.
+  // ----------------------------------------------------------------------------------
+
+  var GRID_HISTORY_KEY = 'witch_prng_v2';
+  var MAX_HISTORY = 500;
+
+  function loadGridHistory() {
+    try {
+      var raw = localStorage.getItem(GRID_HISTORY_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch(e) {}
+    return { grids: [], seeds: [], totalGames: 0 };
+  }
+
+  function saveGridToHistory(grid, meta) {
+    if (!grid || grid.length < 5) return null;
+    var history = loadGridHistory();
+    history.grids.push({ grid: grid, ts: Date.now(), meta: meta || {} });
+    if (history.grids.length > MAX_HISTORY) {
+      history.grids = history.grids.slice(-MAX_HISTORY);
+    }
+    history.totalGames = history.grids.length;
+    try { localStorage.setItem(GRID_HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
+    console.log('%c[WITCH PRNG] Grid saved to history. Total games: ' + history.totalGames,
+      'color: #88ff88; font-weight: bold;');
+    return history;
+  }
+
+  // Build frequency table from stored grids.
+  // freqTable[rowIdx][cellIdx] = { safeCount, total, rate }
+  function buildFrequencyTable() {
+    var history = loadGridHistory();
+    if (!history.grids || history.grids.length === 0) return null;
+    var safeCounts = [], totalCounts = [];
+    for (var r = 0; r < 10; r++) {
+      safeCounts.push([0,0,0,0,0]);
+      totalCounts.push([0,0,0,0,0]);
+    }
+    for (var g = 0; g < history.grids.length; g++) {
+      var grid = history.grids[g].grid;
+      if (!grid) continue;
+      for (var r = 0; r < grid.length && r < 10; r++) {
+        var row = grid[r];
+        if (!row || row.length < 5) continue;
+        for (var c = 0; c < 5; c++) {
+          totalCounts[r][c]++;
+          if (row[c] === true) safeCounts[r][c]++;
+        }
+      }
+    }
+    var freqTable = [];
+    for (var r = 0; r < 10; r++) {
+      var rowFreqs = [];
+      for (var c = 0; c < 5; c++) {
+        var tot = totalCounts[r][c];
+        rowFreqs.push({
+          safeCount: safeCounts[r][c],
+          total: tot,
+          rate: tot > 0 ? safeCounts[r][c] / tot : null
+        });
+      }
+      freqTable.push(rowFreqs);
+    }
+    return { freqTable: freqTable, totalGames: history.grids.length };
+  }
+
+  // Returns best cell index for a row, with confidence info.
+  // Priority: (1) live grid, (2) frequency model, (3) random
+  function getRecommendedCell(rowIndex) {
+    // Priority 1: live grid
+    if (capturedSolutionGrid && rowIndex < capturedSolutionGrid.length) {
+      var liveRow = capturedSolutionGrid[rowIndex];
+      if (liveRow) {
+        for (var i = 0; i < liveRow.length; i++) {
+          if (liveRow[i] === true) return { cellIndex: i, method: 'live_grid', confidence: 1.0, totalGames: 0 };
+        }
+      }
+    }
+    // Priority 2: frequency model
+    var ft = buildFrequencyTable();
+    if (ft && ft.totalGames >= 3 && rowIndex < ft.freqTable.length) {
+      var rowFreqs = ft.freqTable[rowIndex];
+      var bestIdx = 0, bestRate = -1;
+      for (var c = 0; c < rowFreqs.length; c++) {
+        if (rowFreqs[c].rate !== null && rowFreqs[c].rate > bestRate) {
+          bestRate = rowFreqs[c].rate;
+          bestIdx = c;
+        }
+      }
+      // Expected safe rate for this row (by game rules)
+      var expectedRate = rowIndex < 4 ? 0.8 : rowIndex < 7 ? 0.6 : rowIndex < 9 ? 0.4 : 0.2;
+      var bias = bestRate - expectedRate; // positive = cell is luckier than expected
+      return {
+        cellIndex: bestIdx,
+        method: 'frequency',
+        safeRate: bestRate,
+        bias: bias,
+        confidence: Math.min(1, ft.totalGames / 50),
+        totalGames: ft.totalGames
+      };
+    }
+    // Priority 3: random
+    return { cellIndex: Math.floor(Math.random() * 5), method: 'random', confidence: 0, totalGames: ft ? ft.totalGames : 0 };
+  }
+
+  // ========== SEED / NONCE EXTRACTOR ==========
+  // Scan every response body for cryptographic seeds, nonces, game IDs.
+  // These are used by the casino's PRNG — collecting them enables sequence analysis.
+  var extractedSeeds = [];
+
+  function extractSeedsFromBody(body, url) {
+    if (!body || typeof body !== 'object') return;
+
+    // First: extract the full RS response metadata (confirmed fields from screenshot)
+    // SB=3, CF=0, SW=0, AN=5, BS=1, AI=17397883
+    if (body.RS && Array.isArray(body.RS)) {
+      var meta = {
+        SB: body.SB,   // possibly: stake/bet
+        CF: body.CF,   // possibly: cashout factor
+        SW: body.SW,   // possibly: sweep/win
+        AN: body.AN,   // possibly: ante/number
+        BS: body.BS,   // possibly: base stake
+        AI: body.AI,   // GAME ID — critical for PRNG sequencing
+        UC: body.RS[0] ? body.RS[0].UC : null, // unknown counters
+        url: url,
+        timestamp: Date.now()
+      };
+      if (body.AI) { // AI appears to be the unique game round ID
+        extractedSeeds.push({ type: 'game_id', key: 'AI', value: body.AI, url: url, timestamp: Date.now() });
+        sendToContentScript('seed_extracted', { type: 'game_id', key: 'AI', value: body.AI, url: url });
+      }
+      sendToContentScript('rs_metadata_extracted', meta);
+    }
+
+    // Generic seed/hash field scanner
+    var seedKeywords = ['seed', 'nonce', 'hash', 'salt', 'rng', 'prng', 'random', 'token', 'secret', 'key', 'hmac', 'sha'];
+    function scanObj(obj, depth) {
+      if (depth > 6 || !obj || typeof obj !== 'object' || Array.isArray(obj)) return;
+      var keys = Object.keys(obj);
+      for (var k = 0; k < keys.length; k++) {
+        var key = keys[k];
+        var val = obj[key];
+        var keyL = key.toLowerCase();
+        var isSeedKey = false;
+        for (var s = 0; s < seedKeywords.length; s++) {
+          if (keyL.includes(seedKeywords[s])) { isSeedKey = true; break; }
+        }
+        if (isSeedKey && (typeof val === 'string' || typeof val === 'number')) {
+          var entry = { type: 'seed_field', key: key, value: val, url: url, timestamp: Date.now() };
+          extractedSeeds.push(entry);
+          sendToContentScript('seed_extracted', entry);
+          console.log('%c[WITCH SEED] Extracted seed field: ' + key + ' = ' + String(val).substring(0, 32),
+            'color: #ff88ff; font-weight: bold;');
+        }
+        if (typeof val === 'object') scanObj(val, depth + 1);
+      }
+    }
+    scanObj(body, 0);
   }
 
   // ========== RETROACTIVE SCAN ==========
@@ -1084,11 +1269,44 @@
       if (!capturedSolutionGrid || rowIndex >= capturedSolutionGrid.length) return null;
       var row = capturedSolutionGrid[rowIndex];
       for (var i = 0; i < row.length; i++) {
-        if (row[i] === true) return i; // first safe cell index (0-based)
+        if (row[i] === true) return i;
       }
       return null;
+    },
+    // PRNG pattern learning API
+    getHistory: loadGridHistory,
+    getFrequencyTable: buildFrequencyTable,
+    getRecommendedCell: getRecommendedCell,
+    clearHistory: function() {
+      localStorage.removeItem(GRID_HISTORY_KEY);
+      console.log('%c[WITCH PRNG] History cleared.', 'color: #ff8888;');
+    },
+    getSeeds: function() { return extractedSeeds; },
+    broadcastFrequency: function() {
+      var ft = buildFrequencyTable();
+      var h = loadGridHistory();
+      sendToContentScript('rs_metadata_extracted', { broadcastOnly: true, totalGames: h.totalGames });
+      if (ft) sendToContentScript('solution_grid_captured', {
+        grid: null, source: 'broadcast', timestamp: new Date().toISOString(),
+        rowCount: 0, totalGames: ft.totalGames, frequencyTable: ft.freqTable
+      });
+      return ft;
     }
   };
+
+  // On init, broadcast existing frequency table so the webapp shows history immediately
+  setTimeout(function() {
+    var ft = buildFrequencyTable();
+    var h = loadGridHistory();
+    if (ft && ft.totalGames > 0) {
+      console.log('%c[WITCH PRNG] Broadcasting existing history (' + ft.totalGames + ' games) to webapp...',
+        'color: #88ff88; font-weight: bold;');
+      sendToContentScript('solution_grid_captured', {
+        grid: null, source: 'init_broadcast', timestamp: new Date().toISOString(),
+        rowCount: 0, totalGames: ft.totalGames, frequencyTable: ft.freqTable
+      });
+    }
+  }, 1500);
   console.log('%c[WITCH GRID] Grid capture system ready. window.WITCH_GRID exposed for debugging.',
     'color: #00ff88; font-weight: bold;');
 
@@ -1197,161 +1415,149 @@
     lastCellCount = 0;
     lastRowClicked = -1;
     pendingClickTimeouts = [];
-    
-    console.log('%c[WITCH AUTO] RACING ATTACK STARTED - Syncing with game progression!', 'color: #00ff00; font-weight: bold; font-size: 16px;');
+
+    console.log('%c[WITCH AUTO] ★ STARTED — waiting up to 3s for RS[0].F grid before clicking ANY cell...',
+      'color: #ffff00; font-weight: bold; font-size: 16px; background: #220022;');
     sendToContentScript('auto_click_started', {});
-    
-    // Keep attacking rows continuously as they appear (same as working extension)
-    racingAttackInterval = setInterval(() => {
-      // MASTER KILL SWITCH - if game ended, don't do anything
-      if (gameEndedMaster) return;
-      
-      // Re-scan for cells each time - only from ACTIVE ROW
-      const freshCells = findActiveRowCells();
-      const pageText = document.body.innerText || '';
-      
-      // GAME END DETECTION
-      if (isGameLost()) {
-        gameEndedMaster = true;
-        console.log('%c[WITCH AUTO] GAME ENDED - Cancelling all pending clicks!', 'color: #ff0000; font-weight: bold;');
-        
-        // Cancel ALL pending timeouts
-        pendingClickTimeouts.forEach(id => clearTimeout(id));
-        pendingClickTimeouts = [];
-        
-        // Stop the interval
-        clearInterval(racingAttackInterval);
-        racingAttackInterval = null;
-        console.log(`%c[WITCH AUTO] FINAL SCORE: ${successfulRows}/${totalRowsClicked} rows cleared`, 'color: #ff6600; font-weight: bold; font-size: 14px;');
+
+    // ===== PHASE 1: WAIT FOR GRID =====
+    // Do NOT click anything yet. Wait until capturedSolutionGrid is populated
+    // (the Play HTTP response with RS[0].F arrives in ~200-800ms)
+    const gridWaitStart = Date.now();
+    const MAX_GRID_WAIT_MS = 3000; // wait up to 3 seconds
+
+    const gridWaitInterval = setInterval(function() {
+      if (gameEndedMaster) {
+        clearInterval(gridWaitInterval);
         racingAttackActive = false;
-        sendToContentScript('auto_click_stopped', { totalRows: totalRowsClicked, successful: successfulRows });
         return;
       }
-      
-      // Check if we have cells AND "Choose a cell" is visible (row is active)
-      const rowActive = pageText.includes('Choose a cell') && freshCells.length > 0;
-      
-      if (!rowActive) {
-        return; // Wait for next row
-      }
-      
-      // Detect NEW row by checking if cell count changed (previous row was revealed)
-      const currentCellCount = freshCells.length;
-      
-      // Check if cells have unrevealed status (not wine/poison yet)
-      const unrevealed = freshCells.filter(cell => isUnrevealedCell(cell));
-      
-      // Only attack if we have unrevealed cells and this is a new row
-      if (unrevealed.length > 0) {
-        const isNewRow = currentCellCount !== lastCellCount || lastRowClicked === -1;
-        
-        if (isNewRow && pageText.includes('Choose a cell')) {
-          totalRowsClicked++;
-          lastRowClicked = totalRowsClicked;
-          lastCellCount = currentCellCount;
-          
-          // ===== SMART CLICK vs RANDOM ATTACK =====
-          const rowIndex = totalRowsClicked - 1; // 0-indexed for grid
-          let safeCellIndices = [];
-          let usingSolutionGrid = false;
 
-          if (capturedSolutionGrid && rowIndex < capturedSolutionGrid.length) {
-            const rowSolution = capturedSolutionGrid[rowIndex];
-            if (rowSolution && Array.isArray(rowSolution)) {
-              for (let si = 0; si < rowSolution.length; si++) {
-                if (rowSolution[si] === true) safeCellIndices.push(si);
-              }
-              if (safeCellIndices.length > 0) usingSolutionGrid = true;
-            }
+      const elapsed = Date.now() - gridWaitStart;
+
+      if (capturedSolutionGrid) {
+        clearInterval(gridWaitInterval);
+        console.log(
+          '%c[WITCH AUTO] ★★★ RS[0].F GRID RECEIVED in ' + elapsed + 'ms — SMART MODE ACTIVE ★★★',
+          'color: #00ff00; font-weight: bold; font-size: 18px; background: #003300;'
+        );
+        // Log the full grid one more time for confirmation
+        for (var r = 0; r < capturedSolutionGrid.length; r++) {
+          var safeC = [];
+          for (var c = 0; c < capturedSolutionGrid[r].length; c++) {
+            if (capturedSolutionGrid[r][c]) safeC.push(c + 1);
           }
-
-          if (usingSolutionGrid) {
-            // ===== SMART MODE: Click EXACTLY ONE safe cell =====
-            console.log(`%c[WITCH AUTO] ★ SMART MODE ★ Row ${totalRowsClicked}: Safe cell indices [${safeCellIndices.join(', ')}] → clicking cell ${safeCellIndices[0] + 1}`,
-              'color: #00ff00; font-weight: bold; font-size: 14px; background: #002200;');
-
-            const timeoutId = setTimeout(() => {
-              if (gameEndedMaster) return;
-              const allRowCells = findActiveRowCells();
-              // Pick the first safe cell index
-              const safeIdx = safeCellIndices[0];
-              let targetCell = null;
-              if (safeIdx < allRowCells.length) {
-                targetCell = allRowCells[safeIdx];
-                console.log(`%c[WITCH AUTO] SMART CLICK → Cell ${safeIdx + 1} (confirmed SAFE by RS[0].F grid)`,
-                  'color: #00ff00; font-weight: bold;');
-              } else {
-                // Index mismatch fallback
-                targetCell = unrevealed[0];
-                console.log('%c[WITCH AUTO] Index mismatch — clicking first unrevealed', 'color: #ffff00;');
-              }
-              if (targetCell) {
-                targetCell.click();
-                sendToContentScript('auto_cell_clicked', {
-                  row: totalRowsClicked,
-                  clickNum: 1,
-                  usedSolutionGrid: true,
-                  safeIdx: safeIdx,
-                  timestamp: getTimestamp()
-                });
-              }
-            }, 100);
-            pendingClickTimeouts.push(timeoutId);
-
-          } else {
-            // ===== RANDOM MODE: Racing attack (no grid available yet) =====
-            const clickCount = Math.min(4, unrevealed.length);
-            console.log(`%c[WITCH AUTO] RANDOM MODE Row ${totalRowsClicked}: clicking ${clickCount} random cells (no grid yet)`,
-              'color: #ffaa00; font-weight: bold;');
-
-            for (let i = 0; i < clickCount; i++) {
-              const timeoutId = setTimeout(() => {
-                if (gameEndedMaster) return;
-                const targetCell = unrevealed[Math.floor(Math.random() * unrevealed.length)];
-                if (targetCell) {
-                  targetCell.click();
-                  sendToContentScript('auto_cell_clicked', {
-                    row: totalRowsClicked,
-                    clickNum: i + 1,
-                    usedSolutionGrid: false,
-                    timestamp: getTimestamp()
-                  });
-                }
-              }, i * 50);
-              pendingClickTimeouts.push(timeoutId);
-            }
-          }
-          
-          // Wait and check result
-          const checkResultId = setTimeout(() => {
-            // CHECK KILL SWITCH before checking result
-            if (gameEndedMaster) return;
-            
-            const resultPoison = document.querySelectorAll('[class*="poison"], [class*="w-lose"]');
-            if (resultPoison.length === 0) {
-              console.log(`%c[WITCH AUTO] Row ${totalRowsClicked}: SURVIVED!`, 'color: #00ff00; font-weight: bold;');
-              successfulRows++;
-            } else {
-              console.log(`%c[WITCH AUTO] Row ${totalRowsClicked}: Poison hit`, 'color: #ff0000;');
-            }
-            // Reset for next row detection
-            lastCellCount = 0;
-          }, 2000);
-          
-          pendingClickTimeouts.push(checkResultId);
+          console.log('%c[WITCH AUTO] Row ' + (r + 1) + ' → click cell ' + safeC[0] + ' (safe: ' + safeC.join(',') + ')',
+            'color: #00ffff;');
+        }
+        startRowLoop(); // Begin clicking rows with the known grid
+      } else if (elapsed >= MAX_GRID_WAIT_MS) {
+        clearInterval(gridWaitInterval);
+        console.log(
+          '%c[WITCH AUTO] ⚠ Grid wait TIMEOUT (' + MAX_GRID_WAIT_MS + 'ms) — no RS[0].F found. Random fallback.',
+          'color: #ff6600; font-weight: bold;'
+        );
+        sendToContentScript('auto_grid_timeout', { elapsed: elapsed });
+        startRowLoop(); // Start without grid (random mode)
+      } else {
+        // Still waiting — check 10x per second
+        if (elapsed % 500 < 105) {
+          console.log('%c[WITCH AUTO] Waiting for grid... ' + elapsed + 'ms (DO NOT CLICK YET)',
+            'color: #888888;');
         }
       }
-    }, 500); // Check every 500ms for more responsive detection (same as working extension)
-    
-    // Auto-stop after 120 seconds (safety timeout)
-    setTimeout(() => {
-      if (!gameEndedMaster) {
-        gameEndedMaster = true;
-        pendingClickTimeouts.forEach(id => clearTimeout(id));
-        console.log('%c[WITCH AUTO] Safety timeout - stopping after 2 minutes', 'color: #ff6600; font-weight: bold;');
-        stopRacingAttack();
-      }
-    }, 120000);
+    }, 100);
+
+    // ===== PHASE 2: ROW LOOP (starts only after grid is ready or timed out) =====
+    function startRowLoop() {
+      racingAttackInterval = setInterval(function() {
+        if (gameEndedMaster) return;
+
+        const freshCells = findActiveRowCells();
+        const pageText = document.body.innerText || '';
+
+        // GAME END DETECTION
+        if (isGameLost()) {
+          gameEndedMaster = true;
+          console.log('%c[WITCH AUTO] GAME ENDED', 'color: #ff0000; font-weight: bold;');
+          pendingClickTimeouts.forEach(function(id) { clearTimeout(id); });
+          pendingClickTimeouts = [];
+          clearInterval(racingAttackInterval);
+          racingAttackInterval = null;
+          racingAttackActive = false;
+          sendToContentScript('auto_click_stopped', { totalRows: totalRowsClicked, successful: successfulRows });
+          return;
+        }
+
+        // Only proceed when a row is active
+        const rowActive = pageText.includes('Choose a cell') && freshCells.length > 0;
+        if (!rowActive) return;
+
+        const unrevealed = freshCells.filter(function(cell) { return isUnrevealedCell(cell); });
+        if (unrevealed.length === 0) return;
+
+        const currentCellCount = freshCells.length;
+        const isNewRow = currentCellCount !== lastCellCount || lastRowClicked === -1;
+        if (!isNewRow) return;
+
+        // ===== NEW ROW DETECTED =====
+        totalRowsClicked++;
+        lastRowClicked = totalRowsClicked;
+        lastCellCount = currentCellCount;
+
+        const rowIndex = totalRowsClicked - 1; // 0-based grid index
+
+        // ===== USE getRecommendedCell() — covers live grid, frequency model, random =====
+        var rec = getRecommendedCell(rowIndex);
+        var targetIdx = rec.cellIndex;
+
+        var modeLabel = rec.method === 'live_grid'
+          ? '★ LIVE GRID'
+          : rec.method === 'frequency'
+            ? ('FREQ[' + rec.totalGames + ' games, ' + (rec.safeRate * 100).toFixed(0) + '% safe]')
+            : 'RANDOM';
+
+        console.log(
+          '%c[WITCH AUTO] ' + modeLabel + ' Row ' + totalRowsClicked + ': click cell ' + (targetIdx + 1),
+          'color: #00ff00; font-weight: bold; font-size: 13px; background: #002200;'
+        );
+
+        const tid = setTimeout(function() {
+          if (gameEndedMaster) return;
+          const rowCells = findActiveRowCells();
+          let target = targetIdx < rowCells.length ? rowCells[targetIdx] : (unrevealed[0] || null);
+          if (target) {
+            target.click();
+            sendToContentScript('auto_cell_clicked', {
+              row: totalRowsClicked,
+              clickNum: 1,
+              method: rec.method,
+              cellIndex: targetIdx,
+              safeRate: rec.safeRate || null,
+              totalGames: rec.totalGames,
+              timestamp: getTimestamp()
+            });
+          }
+        }, 80);
+        pendingClickTimeouts.push(tid);
+
+        // Reset row detection after 2s
+        const resetTid = setTimeout(function() {
+          if (!gameEndedMaster) lastCellCount = 0;
+        }, 2000);
+        pendingClickTimeouts.push(resetTid);
+
+      }, 250); // poll every 250ms (faster than before = less lag per row)
+
+      // Safety stop after 2 minutes
+      setTimeout(function() {
+        if (!gameEndedMaster) {
+          gameEndedMaster = true;
+          pendingClickTimeouts.forEach(function(id) { clearTimeout(id); });
+          stopRacingAttack();
+        }
+      }, 120000);
+    }
   }
 
   function startAutoClickIfGameActive() {

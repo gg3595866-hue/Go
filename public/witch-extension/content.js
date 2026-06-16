@@ -219,8 +219,18 @@ window.addEventListener('message', function(event) {
       break;
       
     case 'auto_cell_clicked':
-      logDetailed('AUTO', `Auto-click: Row ${data.row}, Click #${data.clickNum}${data.usedSolutionGrid ? ' (SMART)' : ''}`, data);
+      logDetailed('AUTO', `Auto-click: Row ${data.row} method=${data.method} cell=${data.cellIndex+1}`, data);
       sendGameEvent({ type: 'auto_cell_clicked', data });
+      break;
+
+    case 'seed_extracted':
+      // Relay seed/nonce/crypto field extracted from network traffic
+      sendGameEvent({ type: 'seed_extracted', ...data });
+      break;
+
+    case 'rs_metadata_extracted':
+      // Relay RS response metadata (AI=game ID, SB, AN, BS fields)
+      sendGameEvent({ type: 'rs_metadata_extracted', ...data });
       break;
   }
 });

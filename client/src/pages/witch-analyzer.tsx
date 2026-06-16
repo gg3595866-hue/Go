@@ -91,6 +91,11 @@ export default function WitchAnalyzerPage() {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [playResponses, setPlayResponses] = useState<any[]>([]);
   const [cellTimings, setCellTimings] = useState<any[]>([]);
+  // PRNG Pattern Learning state
+  const [frequencyTable, setFrequencyTable] = useState<any[][] | null>(null);
+  const [totalGamesCollected, setTotalGamesCollected] = useState(0);
+  const [extractedSeeds, setExtractedSeeds] = useState<any[]>([]);
+  const [rsMetadataLog, setRsMetadataLog] = useState<any[]>([]);
   const [grid, setGrid] = useState<CellState[][]>(() => 
     Array.from({ length: 10 }, (_, rowIndex) =>
       Array.from({ length: 5 }, (_, cellIndex) => ({
@@ -319,15 +324,23 @@ export default function WitchAnalyzerPage() {
         break;
 
       case "mimick_solution_grid":
+        // data.data.grid may be null for init_broadcast (only frequency table is sent)
+        if (data.data?.frequencyTable) {
+          setFrequencyTable(data.data.frequencyTable);
+        }
+        if (data.data?.totalGames != null) {
+          setTotalGamesCollected(data.data.totalGames);
+        }
         if (data.data?.grid && Array.isArray(data.data.grid)) {
           setSolutionGrid(data.data.grid);
           setSolutionGridSource(data.data.source || "unknown");
           setSolutionGridTime(new Date());
+          const gamesMsg = data.data.totalGames ? ` | PRNG db: ${data.data.totalGames} games` : '';
           addLog({
             type: "success",
             row: null,
             cell: null,
-            message: `SOLUTION GRID CAPTURED (${data.data.source || "unknown"}) — ${data.data.rowCount || data.data.grid.length} rows. Safe cells ready!`,
+            message: `POST-GAME GRID CAPTURED (${data.data.source || "unknown"}) — ${data.data.rowCount || data.data.grid.length} rows saved to PRNG database${gamesMsg}`,
             source: "mimick",
           });
           // Log each row's safe cells
@@ -395,6 +408,28 @@ export default function WitchAnalyzerPage() {
           cell: null,
           message: `Cell timing: ${data.data?.elapsedMs}ms → ${data.data?.result}`,
           source: "mimick",
+        });
+        break;
+
+      case "seed_extracted":
+        setExtractedSeeds(prev => [data, ...prev.slice(0, 199)]);
+        addLog({
+          type: "token",
+          row: null,
+          cell: null,
+          message: `Seed/nonce extracted: ${data.key} = ${String(data.value).substring(0, 32)}`,
+          source: "extension",
+        });
+        break;
+
+      case "rs_metadata_extracted":
+        setRsMetadataLog(prev => [data, ...prev.slice(0, 199)]);
+        addLog({
+          type: "network",
+          row: null,
+          cell: null,
+          message: `RS metadata: AI=${data.AI} SB=${data.SB} AN=${data.AN} BS=${data.BS}`,
+          source: "extension",
         });
         break;
 
@@ -747,14 +782,213 @@ export default function WitchAnalyzerPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="inspector" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+      <Tabs defaultValue="patterns" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="patterns" data-testid="tab-patterns">Patterns</TabsTrigger>
           <TabsTrigger value="grid" data-testid="tab-grid">Game Grid</TabsTrigger>
           <TabsTrigger value="sessions" data-testid="tab-sessions">Sessions</TabsTrigger>
           <TabsTrigger value="inspector" data-testid="tab-inspector">Inspector</TabsTrigger>
           <TabsTrigger value="network" data-testid="tab-network">Network</TabsTrigger>
-          <TabsTrigger value="tokens" data-testid="tab-tokens">Tokens</TabsTrigger>
+          <TabsTrigger value="tokens" data-testid="tab-tokens">Seeds</TabsTrigger>
         </TabsList>
+
+        {/* ===== PATTERNS TAB — PRNG Frequency Heatmap ===== */}
+        <TabsContent value="patterns">
+          {/* Header + Stats row */}
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <Card>
+              <CardContent className="p-4 text-center">
+                <div className="text-2xl font-bold text-green-500" data-testid="text-games-collected">{totalGamesCollected}</div>
+                <div className="text-xs text-muted-foreground mt-1">Games Collected</div>
+                <div className="text-xs text-muted-foreground">Need ≥10 for predictions</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <div className="text-2xl font-bold text-purple-500">{extractedSeeds.length}</div>
+                <div className="text-xs text-muted-foreground mt-1">Seeds/Nonces Extracted</div>
+                <div className="text-xs text-muted-foreground">For PRNG analysis</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <div className="text-2xl font-bold text-cyan-500">{rsMetadataLog.length}</div>
+                <div className="text-xs text-muted-foreground mt-1">RS Responses Logged</div>
+                <div className="text-xs text-muted-foreground">Game round metadata</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Strategy explanation */}
+          <Card className="mb-4 border-yellow-500/30 bg-yellow-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-semibold text-yellow-600 dark:text-yellow-400">How it works: </span>
+                  The game sends the full 10×5 grid only <strong>after</strong> each game ends (provably-fair reveal).
+                  The extension automatically saves every post-game RS[0].F grid to localStorage.
+                  After enough games, if the casino PRNG has any bias, it will show up here as cells with
+                  higher-than-expected safe rates. Auto-click uses this data to predict the safest cell per row.
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Frequency Heatmap */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Target className="w-4 h-4 text-green-500" />
+                PRNG Frequency Heatmap
+                {totalGamesCollected > 0 && (
+                  <Badge variant="outline" className="text-xs">{totalGamesCollected} games</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4">
+              {frequencyTable && frequencyTable.length > 0 ? (
+                <div className="space-y-1">
+                  {/* Column headers */}
+                  <div className="flex items-center gap-1 mb-2">
+                    <div className="w-14 text-xs text-muted-foreground text-center">Row</div>
+                    {[1,2,3,4,5].map(c => (
+                      <div key={c} className="flex-1 text-xs text-muted-foreground text-center font-medium">C{c}</div>
+                    ))}
+                    <div className="w-20 text-xs text-muted-foreground text-center">Best Cell</div>
+                  </div>
+                  {frequencyTable.map((rowFreqs: any[], rowIdx: number) => {
+                    // Expected safe rate for this row based on game rules
+                    const expectedRate = rowIdx < 4 ? 0.8 : rowIdx < 7 ? 0.6 : rowIdx < 9 ? 0.4 : 0.2;
+                    // Find best cell
+                    let bestIdx = 0, bestRate = -1;
+                    rowFreqs.forEach((cell: any, ci: number) => {
+                      const rate = cell?.rate ?? cell;
+                      if (rate != null && rate > bestRate) { bestRate = rate; bestIdx = ci; }
+                    });
+                    return (
+                      <div key={rowIdx} className="flex items-center gap-1">
+                        <div className="w-14 text-xs font-medium text-center">
+                          Row {rowIdx + 1}
+                          <div className="text-muted-foreground" style={{fontSize:'9px'}}>exp {(expectedRate*100).toFixed(0)}%</div>
+                        </div>
+                        {rowFreqs.map((cell: any, ci: number) => {
+                          const rate = cell?.rate ?? cell;
+                          const safeCount = cell?.safeCount ?? null;
+                          const total = cell?.total ?? null;
+                          const pct = rate != null ? Math.round(rate * 100) : null;
+                          const bias = rate != null ? rate - expectedRate : 0;
+                          // Color: green if above expected, red if below, neutral if null
+                          const isBest = ci === bestIdx && pct != null;
+                          const bgColor = pct == null
+                            ? 'bg-muted/30'
+                            : bias > 0.08 ? 'bg-green-500/30'
+                            : bias > 0.03 ? 'bg-green-500/15'
+                            : bias < -0.08 ? 'bg-red-500/30'
+                            : bias < -0.03 ? 'bg-red-500/15'
+                            : 'bg-muted/20';
+                          return (
+                            <div
+                              key={ci}
+                              className={`flex-1 rounded-md p-1 text-center ${bgColor} ${isBest ? 'ring-1 ring-green-500' : ''}`}
+                              title={safeCount != null ? `Safe: ${safeCount}/${total}` : 'No data'}
+                            >
+                              <div className="text-xs font-bold">
+                                {pct != null ? `${pct}%` : '—'}
+                              </div>
+                              {bias !== 0 && pct != null && (
+                                <div className={`text-muted-foreground ${bias > 0 ? 'text-green-500' : 'text-red-500'}`} style={{fontSize:'9px'}}>
+                                  {bias > 0 ? '+' : ''}{(bias * 100).toFixed(0)}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        <div className="w-20 text-center">
+                          {bestRate >= 0 ? (
+                            <Badge variant="outline" className={`text-xs ${bestRate > expectedRate + 0.05 ? 'border-green-500 text-green-600 dark:text-green-400' : ''}`}>
+                              Cell {bestIdx + 1} {bestRate > expectedRate + 0.05 ? '↑' : ''}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="mt-3 pt-3 border-t flex flex-wrap gap-3 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-green-500/30"></span> Above expected (PRNG bias)</span>
+                    <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-500/30"></span> Below expected</span>
+                    <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded ring-1 ring-green-500"></span> Auto-click target</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Database className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm font-medium">No pattern data yet</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Play games with the extension active. After each game ends, the RS[0].F grid
+                    reveal is automatically saved. Collect 10+ games to see statistical patterns.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Even with 0 pattern data, Auto-Click still uses random selection as fallback.
+                    As data grows, it switches to frequency-based prediction automatically.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* RS Metadata Log — Game IDs for PRNG sequence analysis */}
+          {rsMetadataLog.length > 0 && (
+            <Card className="mt-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Key className="w-4 h-4 text-purple-500" />
+                  RS Response Metadata — Game Round IDs
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-36">
+                  <div className="p-3 space-y-1">
+                    {rsMetadataLog.slice(0, 50).map((meta: any, idx: number) => (
+                      <div key={idx} className="text-xs font-mono flex flex-wrap gap-2 py-1 border-b border-border/30">
+                        <Badge variant="outline" className="text-xs">AI:{meta.AI || '?'}</Badge>
+                        <span className="text-muted-foreground">SB:{meta.SB} AN:{meta.AN} BS:{meta.BS}</span>
+                        <span className="text-muted-foreground text-xs">{new Date(meta.timestamp || 0).toLocaleTimeString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Extracted Seeds/Nonces */}
+          {extractedSeeds.length > 0 && (
+            <Card className="mt-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Key className="w-4 h-4 text-yellow-500" />
+                  Extracted Cryptographic Fields
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-36">
+                  <div className="p-3 space-y-1">
+                    {extractedSeeds.slice(0, 50).map((seed: any, idx: number) => (
+                      <div key={idx} className="text-xs font-mono flex flex-wrap gap-2 py-1 border-b border-border/30">
+                        <Badge variant="secondary" className="text-xs">{seed.key}</Badge>
+                        <span className="text-muted-foreground truncate max-w-[200px]">{String(seed.value).substring(0, 48)}</span>
+                        <span className="text-muted-foreground text-xs">{new Date(seed.timestamp || 0).toLocaleTimeString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
 
         <TabsContent value="grid">
           {solutionGrid && (

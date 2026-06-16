@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Witch Game Analyzer Pro",
-  "version": "9.0",
-  "description": "Witch Analyzer v9 — RS[0].F grid auto-capture, smart single-cell click, retroactive scan",
+  "version": "10.0",
+  "description": "Witch Analyzer v10 — PRNG pattern learning, frequency heatmap, seed extraction, RS[0].F post-game collector",
   "permissions": [
     "activeTab",
     "storage",
