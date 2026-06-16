@@ -714,7 +714,7 @@ export default function WitchAnalyzerPage() {
   return (
     <div className="container mx-auto p-4 max-w-7xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-2">Witch Analyzer Pro <span className="text-sm font-normal text-green-400 ml-2">v11.0 — Passive Mode</span></h1>
+        <h1 className="text-2xl font-bold mb-2">Witch Analyzer Pro <span className="text-sm font-normal text-green-400 ml-2">v12.0 — Passive Mode</span></h1>
         <p className="text-muted-foreground">
           Passive packet capture from page load · Safe cell overlay · RNG seed analysis · Server probing tools · Zero auto-clicking
         </p>
@@ -1747,12 +1747,12 @@ export default function WitchAnalyzerPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Extension v11.0</CardTitle>
+            <CardTitle className="text-lg">Extension v12.0</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Passive packet capture from page load. Overlay shows safe cells. Zero auto-clicking. Advanced server probing tools.
+                Advanced decoder engine — tries Base64, Hex, XOR, Bitmask50, Diff, and Timeline analysis on every server response. Passive only.
               </p>
               <Button
                 onClick={handleDownloadExtension}
@@ -1760,16 +1760,16 @@ export default function WitchAnalyzerPage() {
                 data-testid="button-download-extension"
               >
                 <Download className="w-4 h-4" />
-                Download Extension (v11.0)
+                Download Extension (v12.0)
               </Button>
               <div className="text-xs text-muted-foreground">
-                <p className="font-medium mb-1 text-green-400">New in v11.0:</p>
+                <p className="font-medium mb-1 text-green-400">New in v12.0:</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li>✅ Captures ALL packets before Play button</li>
-                  <li>✅ Floating overlay with safe cell grid on game page</li>
-                  <li>✅ Statistical frequency heatmap (historical)</li>
-                  <li>✅ Server probe tool — replay/vary any request</li>
-                  <li>✅ RNG seed pattern analysis (LCG, hash detection)</li>
+                  <li>✅ Decoder Engine — Base64 · Hex→ASCII · XOR · URL · Double-JSON · Reverse</li>
+                  <li>✅ Bitmask50 — tests any integer as 10×5 grid (LSB + MSB)</li>
+                  <li>✅ Response Diff — field-by-field comparison between games</li>
+                  <li>✅ Game Event Timeline — GAME_START vs ROW_CLICK classifier</li>
+                  <li>✅ 7 analysis tabs: Grid · Decode · Diff · Packets · RNG · Probe · Server</li>
                   <li>🚫 Zero auto-clicking — purely passive</li>
                 </ul>
               </div>

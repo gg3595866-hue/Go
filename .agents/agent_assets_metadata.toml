@@ -5,4 +5,4 @@ generated = []
 id = "G1M07pWTAz_9U90AwXXz1"
 uri = "file://witch-analyzer-v12.zip"
 type = "unspecified"
-title = "Witch Analyzer Pro v12 — Extension"
+title = "Witch Analyzer v12 — Fixed (correct WebSocket path)"

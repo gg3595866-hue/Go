@@ -173,7 +173,7 @@
 
     var wsUrl = serverUrl
       .replace(/^https?:\/\//, function(m) { return m === 'https://' ? 'wss://' : 'ws://'; })
-      .replace(/\/$/, '') + '/ws';
+      .replace(/\/$/, '') + '/ws/witch?source=extension';
 
     console.log('[Witch BG v11] Connecting to:', wsUrl);
 
