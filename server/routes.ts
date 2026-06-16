@@ -2231,6 +2231,197 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true });
   });
 
+  // ========== SESSION DEEP ANALYZER ==========
+  function tryFindGridInData(data: any, depth = 0): boolean[][] | null {
+    if (!data || depth > 8) return null;
+
+    if (Array.isArray(data)) {
+      // Direct 10x5 boolean grid
+      if (data.length >= 5 && data.length <= 15) {
+        const boolRows = data.filter((row: any) =>
+          Array.isArray(row) && row.length === 5 &&
+          row.every((v: any) => typeof v === 'boolean')
+        );
+        if (boolRows.length >= 5) return boolRows;
+
+        // 0/1 encoded grid
+        const numRows = data.filter((row: any) =>
+          Array.isArray(row) && row.length === 5 &&
+          row.every((v: any) => v === 0 || v === 1)
+        );
+        if (numRows.length >= 5) return numRows.map((row: any) => row.map((v: any) => v === 1));
+      }
+
+      for (const item of data) {
+        const found = tryFindGridInData(item, depth + 1);
+        if (found) return found;
+      }
+    } else if (data && typeof data === 'object') {
+      for (const [, value] of Object.entries(data)) {
+        const found = tryFindGridInData(value, depth + 1);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  function findArraysOfLength(data: any, len: number, results: any[] = [], depth = 0): any[] {
+    if (!data || depth > 6) return results;
+    if (Array.isArray(data)) {
+      if (data.length === len) results.push(data);
+      data.forEach((item: any) => findArraysOfLength(item, len, results, depth + 1));
+    } else if (data && typeof data === 'object') {
+      Object.values(data).forEach((v: any) => findArraysOfLength(v, len, results, depth + 1));
+    }
+    return results;
+  }
+
+  function tryDecodeAllFormats(raw: string) {
+    const results: Record<string, any> = {};
+    // Base64 decode
+    try {
+      const decoded = Buffer.from(raw, 'base64').toString('utf8');
+      try { results.base64_json = JSON.parse(decoded); } catch { results.base64_text = decoded.substring(0, 200); }
+    } catch {}
+    // Try hex decode
+    if (/^[0-9a-fA-F]+$/.test(raw) && raw.length % 2 === 0) {
+      try {
+        const hexDecoded = Buffer.from(raw, 'hex').toString('utf8');
+        results.hex_decoded = hexDecoded.substring(0, 200);
+      } catch {}
+    }
+    // Try URL decode
+    try { results.url_decoded = decodeURIComponent(raw).substring(0, 200); } catch {}
+    return results;
+  }
+
+  app.get("/api/witch/analyze-session/:id", (req, res) => {
+    const session = 
+      mimickSpyStorage.sessions.find(s => s.id === req.params.id) ||
+      mimickSpyStorage.goldenFlows.find(s => s.id === req.params.id);
+
+    if (!session) return res.status(404).json({ error: "Session not found" });
+
+    const analysis: any = {
+      sessionId: session.id,
+      startTime: session.startTime,
+      requestCount: (session as any).requests?.length || 0,
+      responseCount: (session as any).responses?.length || 0,
+      wsCount: (session as any).websockets?.length || 0,
+      clickCount: session.cellClicks?.length || 0,
+      playRequests: [] as any[],
+      gameRelatedRequests: [] as any[],
+      gridCandidates: [] as any[],
+      allResponses: [] as any[],
+      timingStats: null as any,
+      summary: ""
+    };
+
+    const playKeywords = ['start', 'play', 'spin', 'bet', 'init', 'game', 'witch', 'round', 'session', 'minigame'];
+
+    // Analyze all responses
+    for (const resp of ((session as any).responses || [])) {
+      if (!resp) continue;
+      const url = (resp.url || '').toLowerCase();
+      const isPlayRelated = playKeywords.some((k: string) => url.includes(k)) || resp.isPlayResponse;
+
+      const responseEntry: any = {
+        url: resp.url,
+        method: resp.method,
+        status: resp.status,
+        bodyLength: resp.bodyLength || (resp.rawText?.length) || JSON.stringify(resp.body || '').length,
+        timestamp: resp.timestamp,
+        isGameRelated: resp.isGameRelated,
+        isPlayResponse: resp.isPlayResponse,
+        msSincePlayClick: resp.msSincePlayClick,
+        bodyPreview: typeof resp.body === 'string' 
+          ? resp.body.substring(0, 300)
+          : JSON.stringify(resp.body || {}).substring(0, 300),
+        allArraysOf5: findArraysOfLength(resp.body, 5).slice(0, 5),
+        allArraysOf10: findArraysOfLength(resp.body, 10).slice(0, 3),
+        gridFound: null as any
+      };
+
+      // Try to find grid
+      const grid = tryFindGridInData(resp.body);
+      if (grid) {
+        responseEntry.gridFound = grid;
+        analysis.gridCandidates.push({ source: 'fetch_response', url: resp.url, grid });
+      }
+
+      // Try to decode any long base64/encoded strings in the body
+      if (resp.body && typeof resp.body === 'object') {
+        const decodeAttempts: any[] = [];
+        const flattenStrings = (obj: any, path: string, depth = 0): void => {
+          if (depth > 5 || !obj) return;
+          if (typeof obj === 'string' && obj.length > 20 && obj.length < 5000) {
+            const decoded = tryDecodeAllFormats(obj);
+            if (Object.keys(decoded).length > 0) {
+              const gridInDecoded = tryFindGridInData(decoded.base64_json);
+              decodeAttempts.push({ path, decoded, gridFound: gridInDecoded || null });
+              if (gridInDecoded) {
+                analysis.gridCandidates.push({ source: 'encoded_in_response', url: resp.url, path, grid: gridInDecoded });
+              }
+            }
+          } else if (typeof obj === 'object') {
+            Object.entries(obj).forEach(([k, v]) => flattenStrings(v, `${path}.${k}`, depth + 1));
+          }
+        };
+        flattenStrings(resp.body, 'body');
+        if (decodeAttempts.length > 0) responseEntry.decodeAttempts = decodeAttempts.slice(0, 3);
+      }
+
+      if (isPlayRelated || resp.isGameRelated) {
+        analysis.playRequests.push(responseEntry);
+      }
+      if (resp.isGameRelated || isPlayRelated) {
+        analysis.gameRelatedRequests.push(responseEntry);
+      }
+      analysis.allResponses.push(responseEntry);
+    }
+
+    // Analyze WebSocket messages
+    for (const ws of ((session as any).websockets || [])) {
+      if (!ws) continue;
+      const grid = tryFindGridInData(ws.parsedData || ws.data);
+      if (grid) {
+        analysis.gridCandidates.push({ source: 'websocket', direction: ws.direction, grid });
+      }
+      if (ws.decodedFormats) {
+        for (const fmt of ws.decodedFormats) {
+          const g = tryFindGridInData(fmt.data);
+          if (g) analysis.gridCandidates.push({ source: `ws_decoded_${fmt.type}`, grid: g });
+        }
+      }
+    }
+
+    // Timing stats from cell clicks
+    if (session.cellClicks && session.cellClicks.length > 0) {
+      analysis.timingStats = {
+        clickCount: session.cellClicks.length,
+        clicks: session.cellClicks.slice(0, 50)
+      };
+    }
+
+    analysis.summary = `Requests: ${analysis.requestCount} | Responses: ${analysis.responseCount} | WS msgs: ${analysis.wsCount} | Grid candidates: ${analysis.gridCandidates.length} | Play-related: ${analysis.playRequests.length}`;
+
+    res.json(analysis);
+  });
+
+  // Get raw captures for network inspector
+  app.get("/api/witch/raw-responses", (req, res) => {
+    // Collect all responses across all sessions
+    const allResponses: any[] = [];
+    for (const session of mimickSpyStorage.sessions) {
+      for (const resp of ((session as any).responses || [])) {
+        allResponses.push({ ...resp, sessionId: session.id });
+      }
+    }
+    // Sort by timestamp desc, return last 200
+    allResponses.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+    res.json({ responses: allResponses.slice(0, 200), total: allResponses.length });
+  });
+
   // Extension download route
   app.get("/api/witch/extension/download", (req, res) => {
     const extensionDir = path.join(process.cwd(), "public", "witch-extension");

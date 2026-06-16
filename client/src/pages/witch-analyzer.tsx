@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Play, 
   Pause, 
@@ -23,7 +24,12 @@ import {
   RotateCcw,
   Network,
   Database,
-  Key
+  Key,
+  Search,
+  ChevronDown,
+  ChevronRight,
+  AlertTriangle,
+  Timer
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -79,6 +85,12 @@ export default function WitchAnalyzerPage() {
   const [solutionGrid, setSolutionGrid] = useState<boolean[][] | null>(null);
   const [solutionGridSource, setSolutionGridSource] = useState<string>("");
   const [solutionGridTime, setSolutionGridTime] = useState<Date | null>(null);
+  // Inspector tab state
+  const [inspectorSessionId, setInspectorSessionId] = useState<string>("");
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [playResponses, setPlayResponses] = useState<any[]>([]);
+  const [cellTimings, setCellTimings] = useState<any[]>([]);
   const [grid, setGrid] = useState<CellState[][]>(() => 
     Array.from({ length: 10 }, (_, rowIndex) =>
       Array.from({ length: 5 }, (_, cellIndex) => ({
@@ -118,6 +130,24 @@ export default function WitchAnalyzerPage() {
         row: null,
         cell: null,
         message: "Golden flow saved successfully",
+        source: "system"
+      });
+    }
+  });
+
+  const analyzeSessionMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      const resp = await fetch(`/api/witch/analyze-session/${sessionId}`);
+      if (!resp.ok) throw new Error('Analysis failed');
+      return resp.json();
+    },
+    onSuccess: (data) => {
+      setAnalysisResult(data);
+      addLog({
+        type: data.gridCandidates?.length > 0 ? "success" : "warning",
+        row: null,
+        cell: null,
+        message: `Analysis complete: ${data.summary}`,
         source: "system"
       });
     }
@@ -332,6 +362,38 @@ export default function WitchAnalyzerPage() {
           row: null,
           cell: null,
           message: "Replay completed",
+          source: "mimick",
+        });
+        break;
+
+      case "play_button_clicked":
+        addLog({
+          type: "info",
+          row: null,
+          cell: null,
+          message: "Play button clicked — watching for Play response...",
+          source: "mimick",
+        });
+        break;
+
+      case "play_response_captured":
+        setPlayResponses(prev => [{ ...data.data, receivedAt: new Date() }, ...prev.slice(0, 9)]);
+        addLog({
+          type: "success",
+          row: null,
+          cell: null,
+          message: `PLAY RESPONSE captured — URL: ${data.data?.url?.substring(0, 60) || 'unknown'} | Body: ${data.data?.rawText?.substring(0, 80) || '(empty)'}`,
+          source: "mimick",
+        });
+        break;
+
+      case "cell_timing":
+        setCellTimings(prev => [data.data, ...prev.slice(0, 99)]);
+        addLog({
+          type: "info",
+          row: null,
+          cell: null,
+          message: `Cell timing: ${data.data?.elapsedMs}ms → ${data.data?.result}`,
           source: "mimick",
         });
         break;
@@ -685,10 +747,11 @@ export default function WitchAnalyzerPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="grid" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+      <Tabs defaultValue="inspector" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="grid" data-testid="tab-grid">Game Grid</TabsTrigger>
           <TabsTrigger value="sessions" data-testid="tab-sessions">Sessions</TabsTrigger>
+          <TabsTrigger value="inspector" data-testid="tab-inspector">Inspector</TabsTrigger>
           <TabsTrigger value="network" data-testid="tab-network">Network</TabsTrigger>
           <TabsTrigger value="tokens" data-testid="tab-tokens">Tokens</TabsTrigger>
         </TabsList>
@@ -1016,6 +1079,255 @@ export default function WitchAnalyzerPage() {
           </div>
         </TabsContent>
 
+        <TabsContent value="inspector">
+          <div className="space-y-4">
+            {/* Play Response Panel — most important */}
+            <Card className={playResponses.length > 0 ? "border-pink-500/50 bg-pink-500/5" : ""}>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-pink-500" />
+                  <CardTitle className="text-lg">Play Response Capture</CardTitle>
+                  <Badge variant="outline" className="text-xs">{playResponses.length} captured</Badge>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setPlayResponses([])} data-testid="button-clear-play-responses">
+                  <Trash2 className="w-4 h-4 mr-1" />Clear
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {playResponses.length === 0 ? (
+                  <div className="text-sm text-muted-foreground py-4">
+                    <p className="font-medium mb-1">How to use:</p>
+                    <ol className="list-decimal list-inside space-y-1 text-xs">
+                      <li>Install the extension and connect it to this server</li>
+                      <li>Go to 1xbet and open the Witch game</li>
+                      <li>Click the Play button in the game</li>
+                      <li>The extension will capture the API response and show it here</li>
+                      <li>Look at the body for any arrays with 5 elements (these could be row data)</li>
+                    </ol>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {playResponses.map((pr, idx) => (
+                      <div key={idx} className="border rounded-md p-3 border-pink-500/30">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <Badge className="bg-pink-500/20 text-pink-600 border-pink-500">PLAY RESPONSE</Badge>
+                          <Badge variant="outline">{pr.status}</Badge>
+                          <span className="text-xs text-muted-foreground font-mono truncate max-w-xs">{pr.url}</span>
+                        </div>
+                        <div className="bg-muted/50 rounded-md p-2 mt-2">
+                          <p className="text-xs font-mono text-foreground break-all whitespace-pre-wrap max-h-48 overflow-auto">
+                            {pr.rawText || JSON.stringify(pr.body, null, 2)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Cell Timing Probe */}
+            <Card className={cellTimings.length > 0 ? "border-cyan-500/50" : ""}>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <div className="flex items-center gap-2">
+                  <Timer className="w-5 h-5 text-cyan-500" />
+                  <CardTitle className="text-lg">Timing Probe</CardTitle>
+                  <Badge variant="outline" className="text-xs">{cellTimings.length} clicks</Badge>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setCellTimings([])} data-testid="button-clear-timings">
+                  <Trash2 className="w-4 h-4 mr-1" />Clear
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {cellTimings.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    Cell click → result timing will appear here. Safe and poison cells may have different response times — this reveals the pattern.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {(() => {
+                      const wins = cellTimings.filter(t => t.result === 'win' || t.result === 'WIN');
+                      const losses = cellTimings.filter(t => t.result === 'lose' || t.result === 'LOSE');
+                      const avgWin = wins.length ? Math.round(wins.reduce((a,b) => a + b.elapsedMs, 0) / wins.length) : 0;
+                      const avgLoss = losses.length ? Math.round(losses.reduce((a,b) => a + b.elapsedMs, 0) / losses.length) : 0;
+                      return (
+                        <div className="grid grid-cols-3 gap-2 mb-3">
+                          <div className="bg-green-500/10 rounded-md p-2 text-center">
+                            <div className="text-lg font-bold text-green-600">{avgWin}ms</div>
+                            <div className="text-xs text-muted-foreground">Avg WIN time</div>
+                          </div>
+                          <div className="bg-red-500/10 rounded-md p-2 text-center">
+                            <div className="text-lg font-bold text-red-600">{avgLoss}ms</div>
+                            <div className="text-xs text-muted-foreground">Avg LOSE time</div>
+                          </div>
+                          <div className={`rounded-md p-2 text-center ${Math.abs(avgLoss - avgWin) > 50 ? 'bg-yellow-500/10' : 'bg-muted/30'}`}>
+                            <div className={`text-lg font-bold ${Math.abs(avgLoss - avgWin) > 50 ? 'text-yellow-600' : 'text-muted-foreground'}`}>
+                              {Math.abs(avgLoss - avgWin)}ms
+                            </div>
+                            <div className="text-xs text-muted-foreground">Delta {Math.abs(avgLoss - avgWin) > 50 ? '⚡ EXPLOITABLE' : ''}</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    <ScrollArea className="h-40">
+                      <div className="space-y-1">
+                        {cellTimings.map((t, idx) => (
+                          <div key={idx} className={`flex items-center gap-2 p-1 rounded text-xs ${
+                            (t.result === 'win' || t.result === 'WIN') ? 'bg-green-500/10' : 'bg-red-500/10'
+                          }`}>
+                            <span className={`font-bold ${(t.result === 'win' || t.result === 'WIN') ? 'text-green-600' : 'text-red-600'}`}>
+                              {t.elapsedMs}ms
+                            </span>
+                            <span className="text-muted-foreground">{t.result}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Session Deep Analyzer */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <div className="flex items-center gap-2">
+                  <Search className="w-5 h-5 text-purple-500" />
+                  <CardTitle className="text-lg">Session Deep Analyzer</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2 mb-4">
+                  <Select value={inspectorSessionId} onValueChange={setInspectorSessionId}>
+                    <SelectTrigger className="flex-1" data-testid="select-inspector-session">
+                      <SelectValue placeholder="Select a session to analyze..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sessionsData?.sessions?.map(s => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.id.substring(0, 24)}... — {new Date(s.startTime).toLocaleTimeString()}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={() => inspectorSessionId && analyzeSessionMutation.mutate(inspectorSessionId)}
+                    disabled={!inspectorSessionId || analyzeSessionMutation.isPending}
+                    data-testid="button-analyze-session"
+                  >
+                    <Search className="w-4 h-4 mr-1" />
+                    {analyzeSessionMutation.isPending ? 'Analyzing...' : 'Analyze'}
+                  </Button>
+                </div>
+
+                {analysisResult && (
+                  <div className="space-y-4">
+                    <div className="text-xs text-muted-foreground bg-muted/50 rounded-md p-3 font-mono">
+                      {analysisResult.summary}
+                    </div>
+
+                    {/* Grid candidates — this is the jackpot */}
+                    {analysisResult.gridCandidates?.length > 0 ? (
+                      <div className="border border-green-500/50 rounded-md p-3 bg-green-500/5">
+                        <div className="flex items-center gap-2 mb-2">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span className="font-medium text-green-600 dark:text-green-400 text-sm">
+                            GRID DATA FOUND — {analysisResult.gridCandidates.length} candidate(s)
+                          </span>
+                        </div>
+                        {analysisResult.gridCandidates.map((c: any, idx: number) => (
+                          <div key={idx} className="mt-2 p-2 bg-green-500/10 rounded text-xs">
+                            <div className="font-medium mb-1">Source: {c.source} {c.url ? `| ${c.url.substring(0, 50)}` : ''}</div>
+                            {c.grid && c.grid.map((row: boolean[], rIdx: number) => (
+                              <div key={rIdx} className="flex gap-1 mb-1">
+                                <span className="w-6 text-muted-foreground">R{rIdx+1}</span>
+                                {row.map((v: boolean, ci: number) => (
+                                  <span key={ci} className={`w-5 h-5 flex items-center justify-center rounded text-xs font-bold ${v ? 'bg-green-500/30 text-green-600' : 'bg-red-500/20 text-red-500/50'}`}>
+                                    {ci+1}
+                                  </span>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="border border-yellow-500/30 rounded-md p-3 bg-yellow-500/5">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                          <span className="text-sm text-yellow-600 dark:text-yellow-400">No grid data found in JSON responses. Game may use binary protocol or per-click determination.</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Game-related requests */}
+                    {analysisResult.gameRelatedRequests?.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium mb-2">Game-Related Responses ({analysisResult.gameRelatedRequests.length})</p>
+                        <div className="space-y-2">
+                          {analysisResult.gameRelatedRequests.map((r: any, idx: number) => (
+                            <div key={idx} className={`border rounded-md overflow-hidden ${r.isPlayResponse ? 'border-pink-500/50' : 'border-border'}`}>
+                              <button
+                                className="w-full flex items-center gap-2 p-2 text-xs text-left hover-elevate"
+                                onClick={() => {
+                                  const key = `resp-${idx}`;
+                                  setExpandedItems(prev => {
+                                    const next = new Set(prev);
+                                    next.has(key) ? next.delete(key) : next.add(key);
+                                    return next;
+                                  });
+                                }}
+                                data-testid={`expand-response-${idx}`}
+                              >
+                                {expandedItems.has(`resp-${idx}`) ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
+                                {r.isPlayResponse && <Badge className="text-xs bg-pink-500/20 text-pink-600 border-pink-500">PLAY</Badge>}
+                                <Badge variant={r.status < 400 ? "default" : "destructive"}>{r.status}</Badge>
+                                <span className="font-mono truncate flex-1">{r.url}</span>
+                                <span className="shrink-0 text-muted-foreground">{r.bodyLength}b</span>
+                              </button>
+                              {expandedItems.has(`resp-${idx}`) && (
+                                <div className="p-2 bg-muted/30 border-t border-border">
+                                  {r.allArraysOf5?.length > 0 && (
+                                    <div className="mb-2 p-2 bg-yellow-500/10 rounded text-xs">
+                                      <span className="font-medium text-yellow-600">Arrays of 5 found:</span>
+                                      {r.allArraysOf5.map((arr: any, ai: number) => (
+                                        <div key={ai} className="font-mono mt-1">{JSON.stringify(arr)}</div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <pre className="text-xs font-mono break-all whitespace-pre-wrap text-muted-foreground max-h-48 overflow-auto">
+                                    {r.bodyPreview}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* All responses list */}
+                    <details>
+                      <summary className="text-sm font-medium cursor-pointer text-muted-foreground">
+                        All Responses ({analysisResult.allResponses?.length || 0})
+                      </summary>
+                      <div className="mt-2 space-y-1 max-h-60 overflow-auto">
+                        {analysisResult.allResponses?.map((r: any, idx: number) => (
+                          <div key={idx} className="flex items-center gap-2 text-xs p-1 rounded border-b border-border/50">
+                            <Badge variant="outline" className="text-xs shrink-0">{r.status}</Badge>
+                            <span className="font-mono truncate flex-1 text-muted-foreground">{r.url}</span>
+                            <span className="shrink-0 text-muted-foreground">{r.bodyLength}b</span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
         <TabsContent value="network">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
@@ -1038,12 +1350,17 @@ export default function WitchAnalyzerPage() {
                       <div
                         key={idx}
                         className={`p-3 rounded-md border text-xs ${
-                          capture.captureType === 'mimick_request' 
+                          capture.isPlayResponse
+                            ? 'border-pink-500/50 bg-pink-500/5'
+                            : capture.captureType === 'mimick_request' 
                             ? 'border-blue-500/30 bg-blue-500/5' 
                             : 'border-green-500/30 bg-green-500/5'
                         }`}
                       >
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          {capture.isPlayResponse && (
+                            <Badge className="text-xs bg-pink-500/20 text-pink-600 border-pink-500">PLAY</Badge>
+                          )}
                           <Badge variant="outline" className="text-xs">
                             {capture.captureType === 'mimick_request' ? 'REQ' : 'RES'}
                           </Badge>
@@ -1053,12 +1370,25 @@ export default function WitchAnalyzerPage() {
                               {capture.status}
                             </Badge>
                           )}
+                          {capture.bodyLength && (
+                            <span className="text-muted-foreground">{capture.bodyLength}b</span>
+                          )}
                         </div>
                         <p className="font-mono text-muted-foreground truncate">{capture.url}</p>
                         {capture.isGameRelated && (
                           <Badge className="mt-1 bg-purple-500/20 text-purple-600 border-purple-500">
                             Game Related
                           </Badge>
+                        )}
+                        {/* Show body preview for game-related responses */}
+                        {(capture.isGameRelated || capture.isPlayResponse) && capture.captureType !== 'mimick_request' && capture.body && (
+                          <div className="mt-2 bg-muted/50 rounded p-2">
+                            <p className="font-mono text-xs break-all">
+                              {typeof capture.body === 'string' 
+                                ? capture.body.substring(0, 200) 
+                                : JSON.stringify(capture.body).substring(0, 200)}
+                            </p>
+                          </div>
                         )}
                       </div>
                     ))}
@@ -1192,7 +1522,7 @@ export default function WitchAnalyzerPage() {
           <CardContent>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Download v7.0 with Mimick Spy for full network capture and replay.
+                Download v8.0 with Play response tagging and cell timing probe.
               </p>
               <Button
                 onClick={handleDownloadExtension}
@@ -1200,15 +1530,16 @@ export default function WitchAnalyzerPage() {
                 data-testid="button-download-extension"
               >
                 <Download className="w-4 h-4" />
-                Download Extension (v7.0)
+                Download Extension (v8.0)
               </Button>
               <div className="text-xs text-muted-foreground">
-                <p className="font-medium mb-1">Features:</p>
+                <p className="font-medium mb-1">New in v8.0:</p>
                 <ul className="list-disc list-inside space-y-1">
+                  <li>Play button response tagged automatically</li>
+                  <li>Cell click → result timing measurement</li>
+                  <li>Timing attack: detects safe/poison speed difference</li>
                   <li>Full network request/response capture</li>
                   <li>Session recording and replay</li>
-                  <li>Token and auth header capture</li>
-                  <li>Golden flow saving for auto-play</li>
                 </ul>
               </div>
             </div>

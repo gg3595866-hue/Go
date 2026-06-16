@@ -11,6 +11,35 @@
     isRecording: false
   };
 
+  // Track Play button clicks to tag the immediately-following API response
+  let playButtonClickedAt = 0;
+  let lastCellClickedAt = 0;
+  let lastCellClickedElement = null;
+  let cellTimings = []; // { row, cell, clickTime, resolveTime, elapsedMs, result }
+
+  // Track cell click timing via document-level listener (capture phase = fires first)
+  document.addEventListener('click', function(e) {
+    const target = e.target;
+    if (!target) return;
+    const el = target.closest ? target.closest('[class*="witch-game__box"], [class*="box"], [class*="cell"]') : null;
+    if (el) {
+      lastCellClickedAt = Date.now();
+      lastCellClickedElement = el;
+      console.log('%c[WITCH TIMING] Cell clicked at:', 'color: #ff00ff;', Date.now());
+    }
+    // Detect Play/Start button
+    const playEl = target.closest ? target.closest('[class*="play"], [class*="start"], [class*="btn"]') : null;
+    if (playEl) {
+      const classList = (playEl.className || '').toLowerCase();
+      const txt = (playEl.textContent || '').trim().toLowerCase();
+      if (classList.includes('play') || classList.includes('start') || txt.includes('play')) {
+        playButtonClickedAt = Date.now();
+        console.log('%c[WITCH TIMING] PLAY BUTTON CLICKED — tagging next response', 'color: #ff00ff; font-weight: bold;');
+        sendToContentScript('play_button_clicked', { timestamp: getTimestamp() });
+      }
+    }
+  }, true);
+
   function getTimestamp() {
     return new Date().toISOString();
   }
@@ -98,6 +127,16 @@
           parsedBody = JSON.parse(text);
         } catch (e) {}
         
+        // Check if this response came within 3 seconds of Play button click
+        const msSincePlayClick = Date.now() - playButtonClickedAt;
+        const isPlayResponse = playButtonClickedAt > 0 && msSincePlayClick < 3000;
+        if (isPlayResponse) {
+          playButtonClickedAt = 0; // reset so only first response is tagged
+          console.log('%c[WITCH TIMING] *** PLAY RESPONSE CAPTURED ***', 'color: #ff00ff; font-weight: bold; font-size: 14px;');
+          console.log('[WITCH TIMING] URL:', url);
+          console.log('[WITCH TIMING] Body:', JSON.stringify(parsedBody).substring(0, 500));
+        }
+
         const capturedResponse = {
           id: requestId,
           type: 'fetch_response',
@@ -106,14 +145,29 @@
           statusText: response.statusText,
           headers: extractHeaders(response.headers),
           body: parsedBody,
+          rawText: text,
+          bodyLength: text.length,
           timestamp: getTimestamp(),
-          isGameRelated: capturedRequest.isGameRelated
+          isGameRelated: capturedRequest.isGameRelated,
+          isPlayResponse: isPlayResponse,
+          msSincePlayClick: msSincePlayClick < 30000 ? msSincePlayClick : null
         };
 
         MIMICK_SPY.capturedResponses.push(capturedResponse);
         sendToContentScript('network_response', capturedResponse);
 
-        if (capturedRequest.isGameRelated) {
+        if (isPlayResponse) {
+          // Send special event for Play response so webapp can highlight it
+          sendToContentScript('play_response_captured', {
+            url: url,
+            status: response.status,
+            body: parsedBody,
+            rawText: text.substring(0, 2000),
+            timestamp: getTimestamp()
+          });
+        }
+
+        if (capturedRequest.isGameRelated || isPlayResponse) {
           extractTokensFromResponse(capturedResponse);
           // Try to capture solution grid from game responses
           processResponseForSolutionGrid(capturedResponse);
@@ -748,7 +802,100 @@
   }
 
   sendToContentScript('injected_ready', { timestamp: getTimestamp() });
-  console.log('[Mimick Spy] Injected script initialized - v7.0');
+  console.log('[Mimick Spy] Injected script initialized - v8.0');
+
+  // ========== CELL TIMING MEASUREMENT ==========
+  // MutationObserver to measure time from cell click → DOM result update
+  // This is the timing attack: safe cells may respond faster or slower than poison cells
+  (function setupTimingObserver() {
+    let pendingCellTiming = null; // { el, clickTime }
+    
+    // Override cell click tracking with more precise data
+    document.addEventListener('click', function(e) {
+      const cell = e.target.closest ? e.target.closest('[class*="witch-game__box"]') : null;
+      if (cell) {
+        pendingCellTiming = { el: cell, clickTime: Date.now(), classAtClick: cell.className };
+        console.log('%c[TIMING PROBE] Cell click recorded:', 'color: #ff88ff;', {
+          class: cell.className.substring(0, 60),
+          time: Date.now()
+        });
+      }
+    }, true);
+
+    const timingObserver = new MutationObserver(function(mutations) {
+      if (!pendingCellTiming) return;
+      
+      for (const mutation of mutations) {
+        if (mutation.type !== 'attributes' && mutation.type !== 'childList') continue;
+        
+        const target = mutation.target;
+        const classList = target.className || '';
+        
+        // Check if a cell just received a result (poison or win class added)
+        const hasResult = classList.includes('poison') || classList.includes('w-lose') || 
+                          classList.includes('wine') || classList.includes('w-win') ||
+                          classList.includes('is-open') || classList.includes('open');
+        const wasResultAttr = mutation.type === 'attributes' && 
+                              mutation.attributeName === 'data-result' && 
+                              target.getAttribute('data-result');
+        
+        if (hasResult || wasResultAttr) {
+          const elapsedMs = Date.now() - pendingCellTiming.clickTime;
+          const result = classList.includes('poison') || classList.includes('w-lose') ? 'LOSE' : 'WIN';
+          const dataResult = target.getAttribute ? target.getAttribute('data-result') : null;
+          
+          const timing = {
+            clickTime: pendingCellTiming.clickTime,
+            resolveTime: Date.now(),
+            elapsedMs: elapsedMs,
+            result: dataResult || result,
+            cellClass: classList.substring(0, 80)
+          };
+          
+          cellTimings.push(timing);
+          
+          console.log(`%c[TIMING PROBE] Cell resolved in ${elapsedMs}ms — Result: ${timing.result}`,
+            timing.result === 'WIN' || timing.result === 'win' ? 'color: #00ff00; font-weight: bold;' : 'color: #ff4444; font-weight: bold;');
+          
+          sendToContentScript('cell_timing', timing);
+          pendingCellTiming = null; // reset for next click
+        }
+      }
+    });
+
+    if (document.body) {
+      timingObserver.observe(document.body, { 
+        subtree: true, 
+        attributes: true, 
+        attributeFilter: ['class', 'data-result'],
+        childList: true
+      });
+    }
+    
+    console.log('%c[TIMING PROBE] Cell timing observer ready', 'color: #ff88ff;');
+  })();
+
+  // Expose timing data
+  window.WITCH_TIMINGS = {
+    getTimings: () => [...cellTimings],
+    clearTimings: () => { cellTimings = []; },
+    getStats: () => {
+      if (cellTimings.length === 0) return { count: 0 };
+      const wins = cellTimings.filter(t => t.result === 'WIN' || t.result === 'win');
+      const losses = cellTimings.filter(t => t.result === 'LOSE' || t.result === 'lose');
+      const avgWin = wins.length ? wins.reduce((a, b) => a + b.elapsedMs, 0) / wins.length : 0;
+      const avgLoss = losses.length ? losses.reduce((a, b) => a + b.elapsedMs, 0) / losses.length : 0;
+      return {
+        count: cellTimings.length,
+        wins: wins.length,
+        losses: losses.length,
+        avgWinMs: Math.round(avgWin),
+        avgLossMs: Math.round(avgLoss),
+        timingDeltaMs: Math.round(avgLoss - avgWin),
+        allTimings: cellTimings
+      };
+    }
+  };
 
   // ========== SOLUTION GRID CAPTURE SYSTEM ==========
   // Stores the captured solution grid from the Play button response
