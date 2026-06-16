@@ -1,1249 +1,753 @@
-let isPlaying = false;
-let autoPlay = false;
-let currentRow = 1;
-let observer = null;
-let lastCellCount = 0;
-let pollInterval = null;
-let networkLogs = [];
-let eventLogs = [];
-let autoClickInterval = null;
-let lastClickedRow = 0;
+(function() {
+  'use strict';
 
-const MIMICK_SPY_DATA = {
-  capturedRequests: [],
-  capturedResponses: [],
-  capturedWebSockets: [],
-  capturedTokens: {},
-  gameFlows: [],
-  currentGameSession: null,
-  isRecording: false,
-  replayQueue: [],
-  isReplaying: false
-};
+  // ============================================================
+  // WITCH GAME ANALYZER PRO v11.0 — CONTENT SCRIPT
+  // Pure passive analysis. NO auto-clicking. Ever.
+  // ============================================================
 
-function getTimestamp() {
-  return new Date().toISOString().split('T')[1].slice(0, 12);
-}
-
-function log(message, data) {
-  const timestamp = getTimestamp();
-  const logEntry = { timestamp, message, data };
-  eventLogs.push(logEntry);
-  
-  if (data !== undefined) {
-    console.log(`[Witch ${timestamp}]`, message, data);
-  } else {
-    console.log(`[Witch ${timestamp}]`, message);
-  }
-}
-
-function logDetailed(category, message, data) {
-  const timestamp = getTimestamp();
-  const prefix = `[Witch ${timestamp}] [${category}]`;
-  
-  if (data !== undefined) {
-    console.log(prefix, message, data);
-  } else {
-    console.log(prefix, message);
-  }
-  
-  sendGameEvent({
-    type: 'detailed_log',
-    category,
-    message,
-    data,
-    timestamp
-  });
-}
-
-function injectMimickSpy() {
-  try {
-    const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('injected.js');
-    script.onload = function() {
-      this.remove();
-      log('Mimick Spy injected successfully');
-    };
-    script.onerror = function() {
-      log('Failed to inject Mimick Spy script, using fallback');
-      injectMimickSpyInline();
-    };
-    (document.head || document.documentElement).appendChild(script);
-  } catch (e) {
-    log('Error injecting Mimick Spy:', e.message);
-    injectMimickSpyInline();
-  }
-}
-
-function injectMimickSpyInline() {
-  const script = document.createElement('script');
-  script.textContent = `
-    (function() {
-      const MIMICK_SPY = { capturedRequests: [], capturedResponses: [], sessionTokens: {} };
-      
-      const originalFetch = window.fetch;
-      window.fetch = async function(input, init) {
-        const url = typeof input === 'string' ? input : input?.url || 'unknown';
-        const method = init?.method || 'GET';
-        
-        window.postMessage({
-          source: 'mimick-spy-injected',
-          type: 'network_request',
-          data: { url, method, timestamp: new Date().toISOString() }
-        }, '*');
-        
-        const response = await originalFetch.apply(this, arguments);
-        return response;
-      };
-      
-      window.MIMICK_SPY = MIMICK_SPY;
-      console.log('[Mimick Spy] Fallback injected');
-    })();
-  `;
-  (document.head || document.documentElement).appendChild(script);
-  script.remove();
-}
-
-window.addEventListener('message', function(event) {
-  if (event.source !== window) return;
-  if (!event.data || event.data.source !== 'mimick-spy-injected') return;
-  
-  const { type, data, timestamp } = event.data;
-  
-  switch (type) {
-    case 'network_request':
-      MIMICK_SPY_DATA.capturedRequests.push({ ...data, timestamp });
-      if (data.isGameRelated) {
-        logDetailed('NETWORK', `Game request: ${data.method} ${data.url}`, data);
-        sendGameEvent({
-          type: 'mimick_request',
-          data: data
-        });
-      }
-      break;
-      
-    case 'network_response':
-      MIMICK_SPY_DATA.capturedResponses.push({ ...data, timestamp });
-      if (data.isGameRelated) {
-        logDetailed('NETWORK', `Game response: ${data.status} ${data.url}`, data);
-        sendGameEvent({
-          type: 'mimick_response',
-          data: data
-        });
-      }
-      break;
-      
-    case 'websocket_message':
-      MIMICK_SPY_DATA.capturedWebSockets.push({ ...data, timestamp });
-      if (data.isGameRelated) {
-        logDetailed('WEBSOCKET', `WS ${data.direction}: ${typeof data.data === 'object' ? JSON.stringify(data.data) : data.data}`, data);
-        sendGameEvent({
-          type: 'mimick_websocket',
-          data: data
-        });
-      }
-      break;
-      
-    case 'token_captured':
-      MIMICK_SPY_DATA.capturedTokens[data.key] = data.value;
-      logDetailed('TOKEN', `Captured: ${data.key}`, data.value);
-      sendGameEvent({
-        type: 'mimick_token',
-        data: data
-      });
-      break;
-      
-    case 'dom_tokens':
-      Object.assign(MIMICK_SPY_DATA.capturedTokens, data);
-      logDetailed('TOKEN', 'DOM tokens captured', data);
-      sendGameEvent({
-        type: 'mimick_dom_tokens',
-        data: data
-      });
-      break;
-      
-    case 'recording_started':
-      MIMICK_SPY_DATA.isRecording = true;
-      MIMICK_SPY_DATA.currentGameSession = {
-        id: data.flowId,
-        startTime: timestamp,
-        events: [],
-        requests: [],
-        results: []
-      };
-      logDetailed('RECORD', 'Recording started', data);
-      sendGameEvent({
-        type: 'recording_started',
-        data: data
-      });
-      break;
-      
-    case 'recording_stopped':
-      MIMICK_SPY_DATA.isRecording = false;
-      MIMICK_SPY_DATA.gameFlows.push(data);
-      logDetailed('RECORD', 'Recording stopped', data);
-      sendGameEvent({
-        type: 'recording_stopped',
-        data: data
-      });
-      break;
-      
-    case 'injected_ready':
-      logDetailed('INIT', 'Mimick Spy injected and ready', data);
-      break;
-      
-    case 'solution_grid_captured':
-      logDetailed('GRID', '========== SOLUTION GRID CAPTURED! ==========', data);
-      MIMICK_SPY_DATA.capturedSolutionGrid = data.grid;
-      MIMICK_SPY_DATA.gridCaptureTime = data.timestamp;
-      
-      sendGameEvent({
-        type: 'mimick_solution_grid',
-        data: data
-      });
-      
-      data.grid.forEach((row, rowIdx) => {
-        const safeCells = row.map((v, i) => v ? i + 1 : null).filter(v => v !== null);
-        logDetailed('GRID', `Row ${rowIdx + 1}: Safe cells = [${safeCells.join(', ')}]`);
-      });
-      break;
-      
-    case 'auto_click_started':
-      logDetailed('AUTO', 'Racing attack started from injected.js');
-      sendGameEvent({ type: 'auto_click_started', data });
-      break;
-      
-    case 'auto_click_stopped':
-      logDetailed('AUTO', 'Racing attack stopped', data);
-      sendGameEvent({ type: 'auto_click_stopped', data });
-      break;
-      
-    case 'auto_cell_clicked':
-      logDetailed('AUTO', `Auto-click: Row ${data.row} method=${data.method} cell=${data.cellIndex+1}`, data);
-      sendGameEvent({ type: 'auto_cell_clicked', data });
-      break;
-
-    case 'seed_extracted':
-      // Relay seed/nonce/crypto field extracted from network traffic
-      sendGameEvent({ type: 'seed_extracted', ...data });
-      break;
-
-    case 'rs_metadata_extracted':
-      // Relay RS response metadata (AI=game ID, SB, AN, BS fields)
-      sendGameEvent({ type: 'rs_metadata_extracted', ...data });
-      break;
-  }
-});
-
-function sendGameEvent(eventData) {
-  try {
-    if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
-      chrome.runtime.sendMessage({ type: 'game_event', data: eventData });
-    }
-  } catch (e) {
-    log('Failed to send message:', e.message);
-  }
-}
-
-function findGameCells() {
-  let cells = Array.from(document.querySelectorAll('.witch-game__box'));
-  if (cells.length > 0) return cells;
-  
-  cells = Array.from(document.querySelectorAll('[class*="witch"][class*="box"]'));
-  if (cells.length > 0) return cells;
-  
-  cells = Array.from(document.querySelectorAll('[class*="game"][class*="cell"]'));
-  if (cells.length > 0) return cells;
-  
-  cells = Array.from(document.querySelectorAll('[class*="game-cell"]'));
-  if (cells.length > 0) return cells;
-  
-  const rows = findGameRows();
-  if (rows.length > 0) {
-    cells = [];
-    rows.forEach(row => {
-      const rowCells = row.querySelectorAll('div[class*="box"], div[class*="cell"], div[class*="item"]');
-      cells.push(...Array.from(rowCells));
-    });
-    if (cells.length > 0) return cells;
-  }
-  
-  return cells;
-}
-
-function findGameRows() {
-  let rows = Array.from(document.querySelectorAll('.witch-game__row'));
-  if (rows.length > 0) return rows;
-  
-  rows = Array.from(document.querySelectorAll('[class*="witch"][class*="row"]'));
-  if (rows.length > 0) return rows;
-  
-  rows = Array.from(document.querySelectorAll('[class*="game-row"]'));
-  if (rows.length > 0) return rows;
-  
-  rows = Array.from(document.querySelectorAll('[class*="game"][class*="row"]'));
-  if (rows.length > 0) return rows;
-  
-  const gameContainer = document.querySelector('[class*="witch-game"], [class*="game-grid"], [class*="game-board"]');
-  if (gameContainer) {
-    rows = Array.from(gameContainer.children).filter(child => {
-      const childCells = child.querySelectorAll('div');
-      return childCells.length >= 4 && childCells.length <= 6;
-    });
-  }
-  
-  return rows;
-}
-
-function findActiveRow() {
-  let activeRow = document.querySelector('.witch-game__row--is-active');
-  if (activeRow) return activeRow;
-  
-  activeRow = document.querySelector('.witch-game__row.active');
-  if (activeRow) return activeRow;
-  
-  activeRow = document.querySelector('[class*="witch-game"][class*="row"][class*="active"]');
-  if (activeRow) return activeRow;
-  
-  activeRow = document.querySelector('[class*="row"][class*="is-active"]');
-  if (activeRow) return activeRow;
-  
-  const rows = findGameRows();
-  for (const row of rows) {
-    const style = window.getComputedStyle(row);
-    const boxShadow = style.boxShadow;
-    const outline = style.outline;
-    const border = style.border;
-    
-    if (boxShadow && boxShadow !== 'none' && boxShadow.includes('rgb')) {
-      logDetailed('DETECT', 'Found active row via boxShadow', { boxShadow });
-      return row;
-    }
-    if (outline && outline !== 'none' && !outline.includes('0px')) {
-      logDetailed('DETECT', 'Found active row via outline', { outline });
-      return row;
-    }
-    if (border && border.includes('rgb(255') || border.includes('yellow')) {
-      logDetailed('DETECT', 'Found active row via border color', { border });
-      return row;
-    }
-  }
-  
-  for (const row of rows) {
-    const cells = row.querySelectorAll('.witch-game__box, [class*="box"], [class*="cell"]');
-    const hasUnrevealed = Array.from(cells).some(cell => getCellState(cell) === 'unrevealed');
-    if (hasUnrevealed) {
-      const rowIndex = rows.indexOf(row);
-      const prevRows = rows.slice(0, rowIndex);
-      const allPrevRevealed = prevRows.every(prevRow => {
-        const prevCells = prevRow.querySelectorAll('.witch-game__box, [class*="box"], [class*="cell"]');
-        return Array.from(prevCells).some(cell => getCellState(cell) !== 'unrevealed');
-      });
-      if (allPrevRevealed || rowIndex === 0) {
-        logDetailed('DETECT', 'Found active row via unrevealed cells logic', { rowIndex: rowIndex + 1 });
-        return row;
-      }
-    }
-  }
-  
-  return null;
-}
-
-function isGameActive() {
-  const pageText = document.body.innerText || '';
-  const cells = findGameCells();
-  const activeRow = findActiveRow();
-  return cells.length > 0 && (pageText.includes('Choose a cell') || activeRow !== null);
-}
-
-function isGameEnded() {
-  const pageText = document.body.innerText || '';
-  return pageText.includes('Better luck next time') || 
-         pageText.includes('GAME LOSS') || 
-         pageText.includes('game is over');
-}
-
-function getCellState(cell) {
-  const dataResult = cell.getAttribute('data-result');
-  if (dataResult === 'lose') return 'lose';
-  if (dataResult === 'win') return 'win';
-  const classList = cell.classList.toString();
-  if (classList.includes('--is-open')) return 'revealed';
-  return 'unrevealed';
-}
-
-function detectGameElements() {
-  const cells = findGameCells();
-  const rows = findGameRows();
-  const activeRow = findActiveRow();
-  const gameActive = isGameActive();
-  const gameEnded = isGameEnded();
-  
-  const revealedCells = cells.filter(c => getCellState(c) !== 'unrevealed');
-  const unrevealedCells = cells.filter(c => getCellState(c) === 'unrevealed');
-  
-  let activeRowIndex = -1;
-  if (activeRow) {
-    activeRowIndex = rows.indexOf(activeRow) + 1;
-  }
-  
-  const gameState = {
-    rows: rows.length,
-    cells: cells.length,
-    unrevealedCells: unrevealedCells.length,
-    revealedCells: revealedCells.length,
-    activeRow: activeRowIndex,
-    isGameActive: gameActive,
-    isGameEnded: gameEnded,
-    hasGameContainer: cells.length > 0,
-    rowResults: []
+  var state = {
+    grid: null,
+    gridSource: null,
+    frequency: null,
+    stats: { totalGames: 0, requestsCaptured: 0, hasLiveGrid: false },
+    recentRequests: [],
+    recentResponses: [],
+    seedHistory: [],
+    isMinimized: false,
+    overlayVisible: true
   };
 
-  rows.forEach((row, rowIdx) => {
-    const rowCells = Array.from(row.querySelectorAll('.witch-game__box'));
-    const rowResult = {
-      row: rowIdx + 1,
-      cells: rowCells.map((cell, cellIdx) => ({
-        cell: cellIdx + 1,
-        state: getCellState(cell),
-        dataResult: cell.getAttribute('data-result')
-      }))
-    };
-    gameState.rowResults.push(rowResult);
-  });
-
-  return gameState;
-}
-
-function getRowAndCellFromElement(element) {
-  const rows = findGameRows();
-  
-  for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
-    const rowElement = rows[rowIdx];
-    const rowCells = Array.from(rowElement.querySelectorAll('.witch-game__box'));
-    const cellIdx = rowCells.indexOf(element);
-    if (cellIdx !== -1) {
-      return { row: rowIdx + 1, cell: cellIdx + 1 };
-    }
-  }
-  
-  const allCells = findGameCells();
-  const cellIndex = allCells.indexOf(element);
-  if (cellIndex !== -1) {
-    const row = Math.floor(cellIndex / 5) + 1;
-    const cell = (cellIndex % 5) + 1;
-    return { row, cell };
-  }
-  
-  return null;
-}
-
-function getElementInfo(element) {
-  if (!element) return null;
-  
-  return {
-    tagName: element.tagName,
-    id: element.id || null,
-    className: element.className || null,
-    textContent: (element.textContent || '').slice(0, 100),
-    attributes: Array.from(element.attributes || []).reduce((acc, attr) => {
-      acc[attr.name] = attr.value;
-      return acc;
-    }, {}),
-    rect: element.getBoundingClientRect ? {
-      x: Math.round(element.getBoundingClientRect().x),
-      y: Math.round(element.getBoundingClientRect().y),
-      width: Math.round(element.getBoundingClientRect().width),
-      height: Math.round(element.getBoundingClientRect().height)
-    } : null
-  };
-}
-
-function findAllButtons() {
-  const buttons = [];
-  const playButtons = document.querySelectorAll('[class*="play"], [class*="start"], [class*="bet"], button');
-  playButtons.forEach(btn => {
-    const info = getElementInfo(btn);
-    if (info) {
-      buttons.push({ type: 'potential_play', ...info });
-    }
-  });
-  return buttons;
-}
-
-function clickCell(row, cell) {
-  logDetailed('ACTION', `=== CLICK CELL COMMAND: row ${row}, cell ${cell} ===`);
-  
-  const rows = findGameRows();
-  logDetailed('ACTION', `Found ${rows.length} game rows`);
-  
-  if (row > 0 && row <= rows.length) {
-    const rowElement = rows[row - 1];
-    const rowCells = Array.from(rowElement.querySelectorAll('.witch-game__box'));
-    logDetailed('ACTION', `Row ${row} has ${rowCells.length} cells`);
-    
-    if (cell > 0 && cell <= rowCells.length) {
-      const targetCell = rowCells[cell - 1];
-      const cellState = getCellState(targetCell);
-      logDetailed('ACTION', `Target cell state: ${cellState}`, getElementInfo(targetCell));
-      
-      if (targetCell) {
-        logDetailed('ACTION', `Clicking cell element now!`);
-        
-        try {
-          targetCell.click();
-          logDetailed('ACTION', `Method 1 (click) executed`);
-        } catch (e) {
-          logDetailed('ACTION', `Method 1 failed: ${e.message}`);
-        }
-        
-        try {
-          const clickEvent = new MouseEvent('click', {
-            bubbles: true,
-            cancelable: true,
-            view: window
-          });
-          targetCell.dispatchEvent(clickEvent);
-          logDetailed('ACTION', `Method 2 (dispatchEvent) executed`);
-        } catch (e) {
-          logDetailed('ACTION', `Method 2 failed: ${e.message}`);
-        }
-        
-        log(`Clicked cell ${cell} in row ${row}`);
-        
-        sendGameEvent({
-          type: 'cell_clicked_from_webapp',
-          row,
-          cell,
-          success: true
-        });
-        
-        return true;
-      }
-    } else {
-      logDetailed('ACTION', `Cell ${cell} out of range (max: ${rowCells.length})`);
-    }
-  } else {
-    logDetailed('ACTION', `Row ${row} out of range (max: ${rows.length})`);
-  }
-  
-  log(`Failed to find/click cell ${cell} in row ${row}`);
-  sendGameEvent({
-    type: 'cell_clicked_from_webapp',
-    row,
-    cell,
-    success: false,
-    error: 'Cell not found'
-  });
-  return false;
-}
-
-function autoClickActiveRow() {
-  if (!autoPlay || !isPlaying) {
-    logDetailed('AUTO', 'Auto-click skipped - autoPlay or isPlaying is false', { autoPlay, isPlaying });
-    return;
-  }
-  
-  const activeRow = findActiveRow();
-  if (!activeRow) {
-    logDetailed('AUTO', 'No active row found for auto-click');
-    return;
-  }
-  
-  const rows = findGameRows();
-  const activeRowIndex = rows.indexOf(activeRow) + 1;
-  
-  if (activeRowIndex <= lastClickedRow) {
-    logDetailed('AUTO', `Row ${activeRowIndex} already clicked (lastClickedRow: ${lastClickedRow})`);
-    return;
-  }
-  
-  if (isGameEnded()) {
-    logDetailed('AUTO', 'Game ended - stopping auto-click');
-    stopAutoClick();
-    return;
-  }
-  
-  const unrevealedCells = Array.from(activeRow.querySelectorAll('.witch-game__box'))
-    .filter(cell => getCellState(cell) === 'unrevealed');
-  
-  if (unrevealedCells.length === 0) {
-    logDetailed('AUTO', 'No unrevealed cells in active row');
-    return;
-  }
-  
-  // Try to use the captured solution grid first (smart click)
-  let targetCell = null;
-  let usedSolutionGrid = false;
-
-  if (MIMICK_SPY_DATA.capturedSolutionGrid && activeRowIndex <= MIMICK_SPY_DATA.capturedSolutionGrid.length) {
-    const gridRow = MIMICK_SPY_DATA.capturedSolutionGrid[activeRowIndex - 1];
-    if (gridRow && Array.isArray(gridRow)) {
-      const safeCellIndices = gridRow.map((v, i) => v ? i : -1).filter(i => i !== -1);
-      logDetailed('AUTO', `Solution grid row ${activeRowIndex}: safe cells = [${safeCellIndices.map(i => i + 1).join(', ')}]`);
-
-      for (const safeIdx of safeCellIndices) {
-        const cellElement = unrevealedCells.find(cell => {
-          const pos = getRowAndCellFromElement(cell);
-          return pos && pos.cell === safeIdx + 1;
-        });
-        if (cellElement) {
-          targetCell = cellElement;
-          usedSolutionGrid = true;
-          logDetailed('AUTO', `=== SMART CLICK: using solution grid cell ${safeIdx + 1} for row ${activeRowIndex} ===`);
-          break;
-        }
-      }
-    }
-  }
-
-  if (!targetCell) {
-    const randomIndex = Math.floor(Math.random() * unrevealedCells.length);
-    targetCell = unrevealedCells[randomIndex];
-    logDetailed('AUTO', 'No solution grid available — using random cell fallback');
-  }
-
-  const position = getRowAndCellFromElement(targetCell);
-  
-  if (position) {
-    logDetailed('AUTO', `=== AUTO-CLICKING: row ${position.row}, cell ${position.cell} ${usedSolutionGrid ? '(SMART - solution grid)' : '(RANDOM - no grid)'} ===`);
-    lastClickedRow = position.row;
-    
+  // ============================================================
+  // INJECT injected.js INTO PAGE CONTEXT
+  // ============================================================
+  function inject() {
     try {
-      targetCell.click();
-      logDetailed('AUTO', `Auto-click executed${usedSolutionGrid ? ' [SMART]' : ' [RANDOM]'}`);
-      
-      sendGameEvent({
-        type: 'cell_selected',
-        row: position.row,
-        cell: position.cell,
-        autoClicked: true,
-        usedSolutionGrid: usedSolutionGrid
-      });
-    } catch (e) {
-      logDetailed('AUTO', `Auto-click failed: ${e.message}`);
+      var s = document.createElement('script');
+      s.src = chrome.runtime.getURL('injected.js');
+      s.onload = function() { this.remove(); };
+      (document.head || document.documentElement).prepend(s);
+    } catch(e) {
+      console.error('[Witch v11] Inject failed:', e);
     }
   }
-}
 
-function startAutoClick() {
-  if (autoClickInterval) {
-    clearInterval(autoClickInterval);
+  inject();
+
+  // ============================================================
+  // LISTEN TO MESSAGES FROM injected.js
+  // ============================================================
+  window.addEventListener('message', function(evt) {
+    if (!evt.data || evt.data.source !== 'witch-injected-v11') return;
+    var type = evt.data.type;
+    var data = evt.data.data;
+
+    switch (type) {
+      case 'ready':
+        console.log('[Witch v11] Injected script ready. History:', data.historyCount, 'games');
+        requestState();
+        break;
+
+      case 'grid_captured':
+        state.grid = data.grid;
+        state.gridSource = data.source;
+        state.frequency = data.frequency;
+        state.stats.hasLiveGrid = true;
+        state.stats.totalGames = data.totalGames || state.stats.totalGames;
+        updateOverlay();
+        notifyBackground('grid_captured', data);
+        console.log('[Witch v11] Grid captured from:', data.source);
+        break;
+
+      case 'frequency_ready':
+        state.frequency = data;
+        updateOverlay();
+        break;
+
+      case 'seeds_extracted':
+        state.seedHistory.unshift(data);
+        if (state.seedHistory.length > 20) state.seedHistory.pop();
+        notifyBackground('seeds_extracted', data);
+        break;
+
+      case 'rng_analysis':
+        notifyBackground('rng_analysis', data);
+        updateRngPanel(data);
+        break;
+
+      case 'request':
+        state.recentRequests.unshift(data);
+        if (state.recentRequests.length > 30) state.recentRequests.pop();
+        state.stats.requestsCaptured = (state.stats.requestsCaptured || 0) + 1;
+        updateStatsBar();
+        break;
+
+      case 'response':
+        state.recentResponses.unshift(data);
+        if (state.recentResponses.length > 30) state.recentResponses.pop();
+        break;
+
+      case 'state':
+        state.grid = data.grid;
+        state.gridSource = data.gridSource;
+        state.frequency = data.frequency;
+        state.stats = data.stats;
+        state.recentRequests = data.recentRequests || [];
+        state.seedHistory = data.seedHistory || [];
+        updateOverlay();
+        break;
+
+      case 'probe_result':
+        updateProbeResult(data);
+        notifyBackground('probe_result', data);
+        break;
+
+      case 'history_cleared':
+        state.grid = null;
+        state.frequency = null;
+        state.stats.hasLiveGrid = false;
+        updateOverlay();
+        break;
+
+      case 'ws_message':
+        notifyBackground('ws_message', data);
+        break;
+    }
+  });
+
+  function sendToInjected(cmd, payload) {
+    window.postMessage({ source: 'witch-content-v11', cmd: cmd, ...(payload || {}) }, '*');
   }
-  
-  logDetailed('AUTO', '=== STARTING AUTO-CLICK MODE ===');
-  lastClickedRow = 0;
-  
-  setTimeout(() => {
-    autoClickActiveRow();
-  }, 500);
-  
-  autoClickInterval = setInterval(() => {
-    if (!autoPlay || !isPlaying) {
-      stopAutoClick();
+
+  function requestState() {
+    sendToInjected('get_state');
+  }
+
+  function notifyBackground(type, data) {
+    try {
+      chrome.runtime.sendMessage({ type: type, data: data });
+    } catch(e) {}
+  }
+
+  // ============================================================
+  // OVERLAY PANEL UI
+  // ============================================================
+  var overlay = null;
+  var rngPanel = null;
+
+  function createOverlay() {
+    if (overlay) return;
+
+    overlay = document.createElement('div');
+    overlay.id = 'witch-overlay-v11';
+    overlay.innerHTML = getOverlayHTML();
+    applyOverlayStyles(overlay);
+    document.body.appendChild(overlay);
+
+    // Drag support
+    makeDraggable(overlay, overlay.querySelector('.witch-header'));
+
+    // Buttons
+    overlay.querySelector('#witch-minimize').addEventListener('click', toggleMinimize);
+    overlay.querySelector('#witch-close').addEventListener('click', hideOverlay);
+    overlay.querySelector('#witch-clear').addEventListener('click', clearHistory);
+    overlay.querySelector('#witch-probe-btn').addEventListener('click', runProbe);
+    overlay.querySelector('#witch-refresh').addEventListener('click', requestState);
+
+    updateOverlay();
+  }
+
+  function getOverlayHTML() {
+    return `
+      <div class="witch-header">
+        <span class="witch-title">🔮 Witch Analyzer v11</span>
+        <div class="witch-controls">
+          <button id="witch-refresh" title="Refresh data">↻</button>
+          <button id="witch-minimize" title="Minimize">−</button>
+          <button id="witch-close" title="Close">✕</button>
+        </div>
+      </div>
+      <div class="witch-body" id="witch-body">
+        <div id="witch-stats-bar" class="witch-stats-bar">
+          <span id="witch-stat-games">Games: 0</span>
+          <span id="witch-stat-reqs">Requests: 0</span>
+          <span id="witch-stat-grid">Grid: —</span>
+        </div>
+
+        <div id="witch-grid-section" class="witch-section">
+          <div class="witch-section-title" id="witch-grid-label">
+            📋 Cell Recommendations
+            <span id="witch-confidence-badge" class="badge badge-gray">No Data</span>
+          </div>
+          <div id="witch-grid-display"></div>
+          <div id="witch-source-label" class="witch-source"></div>
+        </div>
+
+        <div id="witch-probe-section" class="witch-section">
+          <div class="witch-section-title">🔬 Server Probe</div>
+          <div class="witch-row">
+            <input id="witch-probe-url" placeholder="URL to probe..." />
+          </div>
+          <div class="witch-row">
+            <textarea id="witch-probe-body" placeholder='{"key":"val"} or leave empty' rows="2"></textarea>
+          </div>
+          <button id="witch-probe-btn" class="witch-btn">Send Probe</button>
+          <div id="witch-probe-result" class="witch-result-box"></div>
+        </div>
+
+        <div id="witch-rng-section" class="witch-section">
+          <div class="witch-section-title">🧬 RNG Analysis</div>
+          <div id="witch-rng-display" class="witch-result-box">Capturing data...</div>
+        </div>
+
+        <div class="witch-row">
+          <button id="witch-clear" class="witch-btn witch-btn-danger">🗑 Clear History</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function applyOverlayStyles(el) {
+    var style = document.createElement('style');
+    style.textContent = `
+      #witch-overlay-v11 {
+        position: fixed !important;
+        top: 80px !important;
+        right: 16px !important;
+        width: 280px !important;
+        max-height: 90vh !important;
+        background: #0f0f1a !important;
+        border: 1px solid #2a2a5a !important;
+        border-radius: 10px !important;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+        z-index: 2147483647 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace !important;
+        font-size: 12px !important;
+        color: #e0e0ff !important;
+        overflow: hidden !important;
+        user-select: none !important;
+      }
+      #witch-overlay-v11 .witch-header {
+        background: #1a1a3a !important;
+        padding: 8px 12px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        cursor: move !important;
+        border-bottom: 1px solid #2a2a5a !important;
+      }
+      #witch-overlay-v11 .witch-title {
+        font-weight: bold !important;
+        font-size: 13px !important;
+        color: #a78bfa !important;
+      }
+      #witch-overlay-v11 .witch-controls {
+        display: flex !important;
+        gap: 4px !important;
+      }
+      #witch-overlay-v11 .witch-controls button {
+        background: #2a2a4a !important;
+        border: 1px solid #3a3a6a !important;
+        color: #ccc !important;
+        width: 22px !important;
+        height: 22px !important;
+        border-radius: 4px !important;
+        cursor: pointer !important;
+        font-size: 11px !important;
+        padding: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
+      #witch-overlay-v11 .witch-controls button:hover {
+        background: #3a3a6a !important;
+        color: #fff !important;
+      }
+      #witch-overlay-v11 .witch-body {
+        overflow-y: auto !important;
+        max-height: calc(90vh - 44px) !important;
+        padding: 8px !important;
+      }
+      #witch-overlay-v11 .witch-stats-bar {
+        display: flex !important;
+        gap: 8px !important;
+        padding: 4px 8px !important;
+        background: #1a1a2e !important;
+        border-radius: 6px !important;
+        margin-bottom: 8px !important;
+        font-size: 10px !important;
+        color: #888 !important;
+        flex-wrap: wrap !important;
+      }
+      #witch-overlay-v11 .witch-section {
+        background: #13132a !important;
+        border: 1px solid #2a2a4a !important;
+        border-radius: 8px !important;
+        padding: 8px !important;
+        margin-bottom: 8px !important;
+      }
+      #witch-overlay-v11 .witch-section-title {
+        font-weight: bold !important;
+        font-size: 11px !important;
+        color: #a78bfa !important;
+        margin-bottom: 6px !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+      }
+      #witch-overlay-v11 .badge {
+        font-size: 9px !important;
+        padding: 1px 5px !important;
+        border-radius: 4px !important;
+        font-weight: normal !important;
+      }
+      #witch-overlay-v11 .badge-green { background: #064e3b !important; color: #34d399 !important; }
+      #witch-overlay-v11 .badge-yellow { background: #451a03 !important; color: #fbbf24 !important; }
+      #witch-overlay-v11 .badge-gray { background: #1f2937 !important; color: #9ca3af !important; }
+      #witch-overlay-v11 .badge-red { background: #450a0a !important; color: #f87171 !important; }
+      #witch-overlay-v11 .witch-grid-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        font-size: 11px !important;
+      }
+      #witch-overlay-v11 .witch-grid-table th {
+        color: #6366f1 !important;
+        padding: 2px 3px !important;
+        text-align: center !important;
+        font-size: 10px !important;
+        border-bottom: 1px solid #2a2a4a !important;
+      }
+      #witch-overlay-v11 .witch-grid-table td {
+        padding: 2px 3px !important;
+        text-align: center !important;
+        border: 1px solid #1a1a3a !important;
+        border-radius: 3px !important;
+        cursor: default !important;
+      }
+      #witch-overlay-v11 .cell-safe {
+        background: #064e3b !important;
+        color: #34d399 !important;
+        font-weight: bold !important;
+      }
+      #witch-overlay-v11 .cell-unsafe {
+        background: #1f0a0a !important;
+        color: #4a1a1a !important;
+      }
+      #witch-overlay-v11 .cell-freq-high {
+        background: #064e3b !important;
+        color: #34d399 !important;
+        font-weight: bold !important;
+      }
+      #witch-overlay-v11 .cell-freq-mid {
+        background: #1a2e1a !important;
+        color: #6ee7b7 !important;
+      }
+      #witch-overlay-v11 .cell-freq-low {
+        background: #1f1a0a !important;
+        color: #92400e !important;
+      }
+      #witch-overlay-v11 .cell-empty {
+        background: #111 !important;
+        color: #333 !important;
+      }
+      #witch-overlay-v11 .row-label {
+        color: #6366f1 !important;
+        font-size: 10px !important;
+        font-weight: bold !important;
+        width: 22px !important;
+      }
+      #witch-overlay-v11 .witch-row {
+        margin-bottom: 6px !important;
+      }
+      #witch-overlay-v11 input, #witch-overlay-v11 textarea {
+        width: 100% !important;
+        background: #1a1a2e !important;
+        border: 1px solid #3a3a5a !important;
+        color: #e0e0ff !important;
+        padding: 4px 6px !important;
+        border-radius: 4px !important;
+        font-size: 10px !important;
+        box-sizing: border-box !important;
+        resize: vertical !important;
+      }
+      #witch-overlay-v11 .witch-btn {
+        width: 100% !important;
+        padding: 5px 8px !important;
+        background: #4f46e5 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 5px !important;
+        cursor: pointer !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+      }
+      #witch-overlay-v11 .witch-btn:hover { background: #4338ca !important; }
+      #witch-overlay-v11 .witch-btn-danger {
+        background: #7f1d1d !important;
+        margin-top: 4px !important;
+      }
+      #witch-overlay-v11 .witch-btn-danger:hover { background: #991b1b !important; }
+      #witch-overlay-v11 .witch-result-box {
+        background: #0a0a18 !important;
+        border: 1px solid #2a2a4a !important;
+        border-radius: 4px !important;
+        padding: 6px !important;
+        font-size: 10px !important;
+        color: #a0a0cc !important;
+        max-height: 120px !important;
+        overflow-y: auto !important;
+        margin-top: 6px !important;
+        white-space: pre-wrap !important;
+        word-break: break-all !important;
+      }
+      #witch-overlay-v11 .witch-source {
+        font-size: 9px !important;
+        color: #555 !important;
+        margin-top: 4px !important;
+        word-break: break-all !important;
+      }
+      #witch-overlay-v11.minimized .witch-body { display: none !important; }
+      #witch-overlay-v11 .rng-pattern {
+        background: #0a1a0a !important;
+        border: 1px solid #1a3a1a !important;
+        border-radius: 4px !important;
+        padding: 4px !important;
+        margin-bottom: 4px !important;
+      }
+      #witch-overlay-v11 .rng-high { color: #34d399 !important; font-weight: bold !important; }
+      #witch-overlay-v11 .rng-med { color: #fbbf24 !important; }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // ============================================================
+  // UPDATE OVERLAY WITH CURRENT STATE
+  // ============================================================
+  function updateOverlay() {
+    if (!overlay) return;
+
+    updateStatsBar();
+
+    var gridDisplay = overlay.querySelector('#witch-grid-display');
+    var sourceLabel = overlay.querySelector('#witch-source-label');
+    var badge = overlay.querySelector('#witch-confidence-badge');
+
+    if (state.grid) {
+      // HIGH CONFIDENCE: live RS[0].F grid
+      badge.className = 'badge badge-green';
+      badge.textContent = '🟢 Live Grid';
+      sourceLabel.textContent = 'Source: ' + (state.gridSource || 'unknown').split('/').pop();
+      gridDisplay.innerHTML = buildGridTable(state.grid, 'live');
+
+    } else if (state.frequency && state.frequency.recommendations && state.frequency.recommendations.length > 0) {
+      // MEDIUM CONFIDENCE: frequency table
+      badge.className = 'badge badge-yellow';
+      badge.textContent = '🟡 Statistical (' + (state.frequency.totalGames || 0) + ' games)';
+      sourceLabel.textContent = 'Based on ' + (state.frequency.totalGames || 0) + ' historical games';
+      gridDisplay.innerHTML = buildFrequencyTable(state.frequency);
+
+    } else {
+      // NO DATA
+      badge.className = 'badge badge-gray';
+      badge.textContent = 'No Data';
+      sourceLabel.textContent = '';
+      gridDisplay.innerHTML = '<div style="color:#555;font-size:10px;padding:8px;text-align:center;">Waiting for game data...<br>Open the Witch game page.</div>';
+    }
+  }
+
+  function buildGridTable(grid, mode) {
+    var html = '<table class="witch-grid-table">';
+    html += '<tr><th class="row-label">Row</th><th>C1</th><th>C2</th><th>C3</th><th>C4</th><th>C5</th></tr>';
+    for (var r = 0; r < grid.length; r++) {
+      var row = grid[r];
+      html += '<tr>';
+      html += '<td class="row-label">' + (r + 1) + '</td>';
+      for (var c = 0; c < 5; c++) {
+        var safe = row[c];
+        html += '<td class="' + (safe ? 'cell-safe' : 'cell-unsafe') + '">' +
+                (safe ? '✓' : '✗') + '</td>';
+      }
+      html += '</tr>';
+    }
+    html += '</table>';
+    return html;
+  }
+
+  function buildFrequencyTable(ft) {
+    if (!ft || !ft.freq) {
+      // Simple recommendations list
+      if (ft && ft.recommendations) {
+        var html = '<table class="witch-grid-table">';
+        html += '<tr><th class="row-label">Row</th><th colspan="5">Best Cell → Win%</th></tr>';
+        for (var i = 0; i < ft.recommendations.length; i++) {
+          var rec = ft.recommendations[i];
+          html += '<tr><td class="row-label">' + rec.row + '</td>';
+          html += '<td colspan="5" style="color:#34d399;text-align:left;padding-left:4px;">Cell ' + rec.cell + ' → ' + rec.pct + '% (' + (rec.games || 0) + 'g)</td>';
+          html += '</tr>';
+        }
+        html += '</table>';
+        return html;
+      }
+      return '<div style="color:#555;font-size:10px;padding:4px;">No frequency data yet</div>';
+    }
+
+    var html = '<table class="witch-grid-table">';
+    html += '<tr><th class="row-label">Row</th><th>C1</th><th>C2</th><th>C3</th><th>C4</th><th>C5</th></tr>';
+    for (var r = 0; r < 10; r++) {
+      if (!ft.freq[r]) continue;
+      var rowData = ft.freq[r];
+      // Find best cell
+      var bestPct = -1;
+      for (var c2 = 0; c2 < 5; c2++) {
+        if (rowData[c2] && rowData[c2].pct > bestPct) bestPct = rowData[c2].pct;
+      }
+      html += '<tr><td class="row-label">' + (r + 1) + '</td>';
+      for (var c = 0; c < 5; c++) {
+        var f = rowData[c];
+        var pct = f ? f.pct : 0;
+        var cls = pct >= 50 ? 'cell-freq-high' : pct >= 30 ? 'cell-freq-mid' : pct > 0 ? 'cell-freq-low' : 'cell-empty';
+        var label = f && f.total > 0 ? pct + '%' : '?';
+        var isBest = pct === bestPct && pct > 0 ? ' title="Best cell for this row"' : '';
+        html += '<td class="' + cls + '"' + isBest + '>' + label + '</td>';
+      }
+      html += '</tr>';
+    }
+    html += '</table>';
+    return html;
+  }
+
+  function updateStatsBar() {
+    if (!overlay) return;
+    var s = state.stats;
+    var bar = overlay.querySelector('#witch-stats-bar');
+    if (!bar) return;
+    bar.innerHTML = `
+      <span id="witch-stat-games" style="color:${s.totalGames > 0 ? '#34d399' : '#888'}">
+        Games: ${s.totalGames || 0}
+      </span>
+      <span id="witch-stat-reqs" style="color:${s.requestsCaptured > 0 ? '#60a5fa' : '#888'}">
+        Reqs: ${s.requestsCaptured || 0}
+      </span>
+      <span id="witch-stat-grid" style="color:${s.hasLiveGrid ? '#34d399' : '#888'}">
+        Grid: ${s.hasLiveGrid ? '✓ Live' : '—'}
+      </span>
+    `;
+  }
+
+  function updateRngPanel(analysis) {
+    if (!overlay) return;
+    var panel = overlay.querySelector('#witch-rng-display');
+    if (!panel) return;
+
+    var html = '';
+    if (analysis.patterns && analysis.patterns.length > 0) {
+      for (var i = 0; i < analysis.patterns.length; i++) {
+        var p = analysis.patterns[i];
+        html += '<div class="rng-pattern">';
+        html += '<span class="rng-high">⚡ ' + p.type + '</span>\n';
+        html += 'Field: ' + p.field + '\n';
+        if (p.increment !== undefined) html += 'Increment: ' + p.increment + '\n';
+        if (p.nextPredicted !== undefined) html += 'Next predicted: <span class="rng-high">' + p.nextPredicted + '</span>\n';
+        if (p.modulus) html += 'Modulus: ' + p.modulus + '\n';
+        html += 'Confidence: ' + p.confidence;
+        html += '</div>';
+      }
+    }
+    if (analysis.rngHints && analysis.rngHints.length > 0) {
+      for (var j = 0; j < analysis.rngHints.length; j++) {
+        var h = analysis.rngHints[j];
+        html += '<div class="rng-pattern">';
+        html += '<span class="rng-med">🔑 ' + h.type + '</span>\n';
+        html += 'Field: ' + h.field + '\n';
+        html += 'Note: ' + h.note + '\n';
+        html += 'Samples: ' + h.count;
+        html += '</div>';
+      }
+    }
+    if (!html) html = 'Samples: ' + analysis.totalSamples + '\nFields: ' + (analysis.fieldNames || []).join(', ') + '\nNo patterns detected yet...';
+    panel.innerHTML = html;
+  }
+
+  function updateProbeResult(data) {
+    if (!overlay) return;
+    var box = overlay.querySelector('#witch-probe-result');
+    if (!box) return;
+    if (data.status === 'error') {
+      box.innerHTML = '<span style="color:#f87171">Error: ' + data.error + '</span>';
+    } else {
+      var summary = 'Status: ' + (data.rawText ? 'OK' : 'Empty') + '\n';
+      if (data.parsed) {
+        // Check if grid found
+        if (data.parsed.RS) summary += '⚡ RS field found!\n';
+        summary += JSON.stringify(data.parsed).substring(0, 800);
+      } else {
+        summary += (data.rawText || '').substring(0, 500);
+      }
+      box.textContent = summary;
+    }
+  }
+
+  // ============================================================
+  // BUTTON HANDLERS
+  // ============================================================
+  function toggleMinimize() {
+    state.isMinimized = !state.isMinimized;
+    overlay.classList.toggle('minimized', state.isMinimized);
+    overlay.querySelector('#witch-minimize').textContent = state.isMinimized ? '+' : '−';
+  }
+
+  function hideOverlay() {
+    if (overlay) {
+      overlay.style.display = 'none';
+    }
+  }
+
+  function clearHistory() {
+    if (confirm('Clear all saved game history? This cannot be undone.')) {
+      sendToInjected('clear_history');
+      state.grid = null;
+      state.frequency = null;
+      state.stats.hasLiveGrid = false;
+      state.stats.totalGames = 0;
+      updateOverlay();
+    }
+  }
+
+  function runProbe() {
+    var urlInput = overlay.querySelector('#witch-probe-url');
+    var bodyInput = overlay.querySelector('#witch-probe-body');
+    var url = urlInput ? urlInput.value.trim() : '';
+    if (!url) {
+      // Auto-fill last captured game URL if available
+      if (state.recentRequests.length > 0) {
+        for (var i = 0; i < state.recentRequests.length; i++) {
+          var req = state.recentRequests[i];
+          if (req.url && (req.url.includes('game') || req.url.includes('bet') || req.url.includes('witch'))) {
+            urlInput.value = req.url;
+            url = req.url;
+            break;
+          }
+        }
+      }
+    }
+    if (!url) {
+      var box = overlay.querySelector('#witch-probe-result');
+      if (box) box.textContent = 'Enter a URL to probe. Tip: Captured game request URLs appear in the probe URL field automatically.';
       return;
     }
-    autoClickActiveRow();
-  }, 300);
-}
-
-function stopAutoClick() {
-  if (autoClickInterval) {
-    clearInterval(autoClickInterval);
-    autoClickInterval = null;
-    logDetailed('AUTO', '=== STOPPED AUTO-CLICK MODE ===');
+    var body = null;
+    if (bodyInput && bodyInput.value.trim()) {
+      try { body = JSON.parse(bodyInput.value.trim()); } catch(e) {}
+    }
+    var probeId = 'probe_' + Date.now();
+    var box = overlay.querySelector('#witch-probe-result');
+    if (box) box.textContent = 'Probing...';
+    sendToInjected('probe', { config: { url: url, method: body ? 'POST' : 'GET', body: body, probeId: probeId } });
   }
-  lastClickedRow = 0;
-}
 
-function startMimickRecording() {
-  logDetailed('MIMICK', 'Starting mimick recording');
-  MIMICK_SPY_DATA.isRecording = true;
-  MIMICK_SPY_DATA.currentGameSession = {
-    id: `session_${Date.now()}`,
-    startTime: getTimestamp(),
-    requests: [],
-    responses: [],
-    websockets: [],
-    tokens: { ...MIMICK_SPY_DATA.capturedTokens },
-    cellClicks: [],
-    rowResults: []
-  };
-  
-  try {
-    const script = document.createElement('script');
-    script.textContent = `if(window.MIMICK_SPY) window.MIMICK_SPY.startRecording();`;
-    document.documentElement.appendChild(script);
-    script.remove();
-  } catch (e) {}
-  
-  sendGameEvent({
-    type: 'mimick_recording_started',
-    sessionId: MIMICK_SPY_DATA.currentGameSession.id
-  });
-}
-
-function stopMimickRecording() {
-  logDetailed('MIMICK', 'Stopping mimick recording');
-  MIMICK_SPY_DATA.isRecording = false;
-  
-  if (MIMICK_SPY_DATA.currentGameSession) {
-    MIMICK_SPY_DATA.currentGameSession.endTime = getTimestamp();
-    MIMICK_SPY_DATA.currentGameSession.requests = [...MIMICK_SPY_DATA.capturedRequests];
-    MIMICK_SPY_DATA.currentGameSession.responses = [...MIMICK_SPY_DATA.capturedResponses];
-    MIMICK_SPY_DATA.currentGameSession.websockets = [...MIMICK_SPY_DATA.capturedWebSockets];
-    MIMICK_SPY_DATA.currentGameSession.tokens = { ...MIMICK_SPY_DATA.capturedTokens };
-    MIMICK_SPY_DATA.currentGameSession.gameState = detectGameElements();
-    
-    MIMICK_SPY_DATA.gameFlows.push(MIMICK_SPY_DATA.currentGameSession);
-    
-    sendGameEvent({
-      type: 'mimick_recording_stopped',
-      session: MIMICK_SPY_DATA.currentGameSession
+  // ============================================================
+  // DRAG SUPPORT
+  // ============================================================
+  function makeDraggable(el, handle) {
+    var ox = 0, oy = 0, ex = 0, ey = 0;
+    handle.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      ex = e.clientX; ey = e.clientY;
+      document.onmousemove = drag;
+      document.onmouseup = stopDrag;
     });
-    
-    MIMICK_SPY_DATA.currentGameSession = null;
+    function drag(e) {
+      ox = ex - e.clientX; oy = ey - e.clientY;
+      ex = e.clientX; ey = e.clientY;
+      el.style.top = (el.offsetTop - oy) + 'px';
+      el.style.left = (el.offsetLeft - ox) + 'px';
+      el.style.right = 'auto';
+    }
+    function stopDrag() {
+      document.onmouseup = null;
+      document.onmousemove = null;
+    }
   }
-  
-  try {
-    const script = document.createElement('script');
-    script.textContent = `if(window.MIMICK_SPY) window.MIMICK_SPY.stopRecording();`;
-    document.documentElement.appendChild(script);
-    script.remove();
-  } catch (e) {}
-}
 
-function getMimickData() {
-  return {
-    requests: MIMICK_SPY_DATA.capturedRequests,
-    responses: MIMICK_SPY_DATA.capturedResponses,
-    websockets: MIMICK_SPY_DATA.capturedWebSockets,
-    tokens: MIMICK_SPY_DATA.capturedTokens,
-    gameFlows: MIMICK_SPY_DATA.gameFlows,
-    isRecording: MIMICK_SPY_DATA.isRecording,
-    currentSession: MIMICK_SPY_DATA.currentGameSession
-  };
-}
-
-function clearMimickData() {
-  MIMICK_SPY_DATA.capturedRequests = [];
-  MIMICK_SPY_DATA.capturedResponses = [];
-  MIMICK_SPY_DATA.capturedWebSockets = [];
-  MIMICK_SPY_DATA.capturedTokens = {};
-  MIMICK_SPY_DATA.gameFlows = [];
-  
-  try {
-    const script = document.createElement('script');
-    script.textContent = `if(window.MIMICK_SPY) window.MIMICK_SPY.clearData();`;
-    document.documentElement.appendChild(script);
-    script.remove();
-  } catch (e) {}
-  
-  logDetailed('MIMICK', 'Mimick data cleared');
-  sendGameEvent({ type: 'mimick_data_cleared' });
-}
-
-function startGamePolling() {
-  if (pollInterval) return;
-  
-  log('Starting game polling...');
-  
-  pollInterval = setInterval(() => {
-    const cells = findGameCells();
-    const currentCellCount = cells.length;
-    
-    if (currentCellCount !== lastCellCount) {
-      lastCellCount = currentCellCount;
-      const gameState = detectGameElements();
-      logDetailed('STATE', 'Game state changed', gameState);
-      sendGameEvent({ type: 'game_state', state: gameState });
-    }
-    
-    if (isGameEnded()) {
-      isPlaying = false;
-      stopAutoClick();
-      logDetailed('GAME', 'Game ended - detected loss');
-      sendGameEvent({ type: 'game_state', state: { status: 'lose', isGameEnded: true } });
-      
-      if (MIMICK_SPY_DATA.isRecording) {
-        stopMimickRecording();
-      }
-    }
-  }, 500);
-}
-
-function setupCellClickCapture() {
-  document.addEventListener('click', (event) => {
-    const target = event.target;
-    const timestamp = getTimestamp();
-    
-    logDetailed('CLICK', 'Click detected', {
-      target: getElementInfo(target),
-      clientX: event.clientX,
-      clientY: event.clientY,
-      button: event.button,
-      isTrusted: event.isTrusted
-    });
-    
-    const clickedBox = target.closest('.witch-game__box');
-    if (clickedBox) {
-      const position = getRowAndCellFromElement(clickedBox);
-      if (position) {
-        logDetailed('CELL', `Cell clicked: row ${position.row}, cell ${position.cell}`, {
-          position,
-          cellState: getCellState(clickedBox),
-          cellInfo: getElementInfo(clickedBox)
-        });
-        
-        if (!isPlaying && position.row === 1) {
-          isPlaying = true;
-          currentRow = 1;
-          logDetailed('GAME', 'Game started via first cell click - isPlaying set to true');
-          sendGameEvent({ type: 'play_started' });
-          startMimickRecording();
-          
-          if (autoPlay) {
-            logDetailed('AUTO', 'Auto-play is enabled, starting auto-click after first cell click');
-            setTimeout(() => startAutoClick(), 500);
-          }
-        }
-        
-        if (MIMICK_SPY_DATA.currentGameSession) {
-          MIMICK_SPY_DATA.currentGameSession.cellClicks.push({
-            row: position.row,
-            cell: position.cell,
-            timestamp: timestamp,
-            isTrusted: event.isTrusted
-          });
-        }
-        
-        sendGameEvent({
-          type: 'cell_selected',
-          row: position.row,
-          cell: position.cell,
-          autoClicked: false
-        });
-      }
-    }
-    
-    const targetText = target.textContent?.toLowerCase() || '';
-    const targetClasses = target.className?.toString()?.toLowerCase() || '';
-    const parentClasses = target.parentElement?.className?.toString()?.toLowerCase() || '';
-    
-    const isPlayButton = targetText.includes('play') || targetText.includes('bet') || 
-                         targetClasses.includes('play') || targetClasses.includes('start') ||
-                         parentClasses.includes('play') || parentClasses.includes('start') ||
-                         target.closest('.witch-game__controls') ||
-                         target.closest('[class*="game-controls"]') ||
-                         target.closest('[class*="bet-button"]') ||
-                         target.closest('[class*="play-button"]') ||
-                         target.closest('[class*="start-button"]');
-    
-    const isWitchGameControl = target.closest('.witch-game') && 
-                               (target.tagName === 'BUTTON' || target.closest('button'));
-    
-    if (isPlayButton || isWitchGameControl) {
-      logDetailed('PLAY', '=== PLAY/CONTROL BUTTON CLICKED ===', {
-        element: getElementInfo(target),
-        parentElement: getElementInfo(target.parentElement),
-        targetText,
-        targetClasses,
-        wasPlaying: isPlaying,
-        isWitchGameControl,
-        currentGameState: detectGameElements()
-      });
-      
-      const allButtons = findAllButtons();
-      logDetailed('PLAY', 'All buttons on page at click time', allButtons);
-      
-      if (!isPlaying) {
-        isPlaying = true;
-        currentRow = 1;
-        sendGameEvent({ type: 'play_started' });
-        logDetailed('GAME', 'Game started - isPlaying set to true');
-        
-        startMimickRecording();
-        
-        if (autoPlay) {
-          logDetailed('AUTO', 'Auto-play is enabled, starting auto-click');
-          startAutoClick();
-        }
-      }
-    }
-    
-    const isTakeButton = targetText.includes('take') || targetText.includes('collect') ||
-                         targetClasses.includes('take') || targetClasses.includes('collect') ||
-                         targetText.includes('cashout') || targetClasses.includes('cashout');
-    
-    if (isTakeButton) {
-      logDetailed('PLAY', '=== TAKE/COLLECT BUTTON CLICKED ===', {
-        element: getElementInfo(target),
-        targetText,
-        wasPlaying: isPlaying
-      });
-      
-      isPlaying = false;
-      stopAutoClick();
-      sendGameEvent({ type: 'play_stopped' });
-      logDetailed('GAME', 'Player took winnings - isPlaying set to false');
-      
-      if (MIMICK_SPY_DATA.isRecording) {
-        stopMimickRecording();
-      }
-    }
-  }, true);
-  
-  document.addEventListener('mousedown', (event) => {
-    logDetailed('MOUSE', 'Mousedown', {
-      target: getElementInfo(event.target),
-      clientX: event.clientX,
-      clientY: event.clientY
-    });
-  }, true);
-  
-  document.addEventListener('mouseup', (event) => {
-    logDetailed('MOUSE', 'Mouseup', {
-      target: getElementInfo(event.target),
-      clientX: event.clientX,
-      clientY: event.clientY
-    });
-  }, true);
-  
-  document.addEventListener('touchstart', (event) => {
-    const touch = event.touches[0];
-    logDetailed('TOUCH', 'Touchstart', {
-      target: getElementInfo(event.target),
-      clientX: touch?.clientX,
-      clientY: touch?.clientY
-    });
-  }, true);
-  
-  document.addEventListener('touchend', (event) => {
-    logDetailed('TOUCH', 'Touchend', {
-      target: getElementInfo(event.target)
-    });
-  }, true);
-  
-  log('Click capture with detailed logging enabled');
-}
-
-function observeGameChanges() {
-  const gameContainer = document.querySelector('.witch-game') || 
-                        document.querySelector('[class*="witch"]') || 
-                        document.body;
-  
-  observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      const target = mutation.target;
-      
-      if (mutation.type === 'attributes') {
-        if (mutation.attributeName === 'data-result') {
-          const state = getCellState(target);
-          if (state === 'win' || state === 'lose') {
-            const position = getRowAndCellFromElement(target);
-            if (position) {
-              logDetailed('RESULT', `Cell result revealed: ${state}`, {
-                position,
-                state,
-                elementInfo: getElementInfo(target),
-                oldValue: mutation.oldValue
-              });
-              
-              if (MIMICK_SPY_DATA.currentGameSession) {
-                MIMICK_SPY_DATA.currentGameSession.rowResults.push({
-                  row: position.row,
-                  cell: position.cell,
-                  result: state,
-                  timestamp: getTimestamp()
-                });
-              }
-              
-              sendGameEvent({
-                type: 'row_result',
-                row: position.row,
-                success: state === 'win',
-                cellClicked: position.cell,
-                cellState: state
-              });
-            }
-          }
-        }
-        
-        if (mutation.attributeName === 'class') {
-          const classList = target.classList?.toString() || '';
-          if (classList.includes('witch-game__box') && classList.includes('--is-open')) {
-            const state = getCellState(target);
-            if (state !== 'unrevealed') {
-              const position = getRowAndCellFromElement(target);
-              if (position) {
-                logDetailed('RESULT', `Cell opened via class change`, {
-                  position,
-                  state,
-                  newClass: classList
-                });
-                
-                sendGameEvent({
-                  type: 'row_result',
-                  row: position.row,
-                  success: state === 'win',
-                  cellClicked: position.cell,
-                  cellState: state
-                });
-              }
-            }
-          }
-          
-          if (classList.includes('witch-game__row') && classList.includes('--is-active')) {
-            const rows = findGameRows();
-            const rowIndex = rows.indexOf(target) + 1;
-            logDetailed('ROW', `Row ${rowIndex} is now active`, { classList });
-          }
-        }
-      }
-      
-      if (mutation.type === 'childList') {
-        mutation.addedNodes.forEach(node => {
-          if (node.nodeType === 1) {
-            const text = node.textContent || '';
-            const className = node.className || '';
-            
-            if (text.includes('Better luck next time') || text.includes('GAME LOSS')) {
-              logDetailed('GAME', '=== GAME OVER - LOSS DETECTED ===', {
-                text: text.slice(0, 200),
-                className
-              });
-              isPlaying = false;
-              stopAutoClick();
-              sendGameEvent({ type: 'game_state', state: { status: 'lose', isGameEnded: true } });
-              
-              if (MIMICK_SPY_DATA.isRecording) {
-                stopMimickRecording();
-              }
-            }
-            
-            if (text.includes('You won') || text.includes('Congratulations')) {
-              logDetailed('GAME', '=== WIN MESSAGE DETECTED ===', {
-                text: text.slice(0, 200),
-                className
-              });
-              
-              if (MIMICK_SPY_DATA.isRecording) {
-                stopMimickRecording();
-              }
-            }
-            
-            if (className.includes && (className.includes('play') || className.includes('bet'))) {
-              logDetailed('DOM', 'Play/Bet element added to DOM', {
-                className,
-                text: text.slice(0, 100)
-              });
-            }
-          }
-        });
-        
-        mutation.removedNodes.forEach(node => {
-          if (node.nodeType === 1) {
-            const className = node.className || '';
-            if (className.includes && className.includes('witch-game')) {
-              logDetailed('DOM', 'Game element removed from DOM', { className });
-            }
-          }
-        });
+  // ============================================================
+  // SHOW/HIDE BUTTON (bottom-right corner)
+  // ============================================================
+  function createToggleButton() {
+    var btn = document.createElement('button');
+    btn.id = 'witch-toggle-v11';
+    btn.textContent = '🔮';
+    btn.title = 'Witch Analyzer';
+    btn.style.cssText = [
+      'position:fixed', 'bottom:20px', 'right:20px', 'width:44px', 'height:44px',
+      'border-radius:50%', 'background:#4f46e5', 'color:white', 'border:none',
+      'cursor:pointer', 'font-size:20px', 'z-index:2147483646',
+      'box-shadow:0 4px 12px rgba(0,0,0,0.4)', 'display:flex',
+      'align-items:center', 'justify-content:center'
+    ].join('!important;') + '!important';
+    btn.addEventListener('click', function() {
+      if (!overlay) {
+        createOverlay();
+      } else {
+        overlay.style.display = overlay.style.display === 'none' ? 'block' : 'none';
       }
     });
-  });
-  
-  observer.observe(gameContainer, {
-    attributes: true,
-    childList: true,
-    subtree: true,
-    attributeFilter: ['class', 'data-result'],
-    attributeOldValue: true
-  });
-  
-  logDetailed('INIT', 'Game observer started', { 
-    container: gameContainer.className || 'body',
-    containerInfo: getElementInfo(gameContainer)
-  });
-}
-
-function setupMessageListener() {
-  try {
-    if (!chrome || !chrome.runtime || !chrome.runtime.onMessage) {
-      log('Chrome runtime not available, retrying in 1s...');
-      setTimeout(setupMessageListener, 1000);
-      return;
-    }
-    
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      if (message.type === 'ws_connected') {
-        logDetailed('WS', 'WebSocket connected to server');
-        const gameState = detectGameElements();
-        sendGameEvent({ type: 'game_state', state: gameState });
-        sendResponse({ success: true });
-        
-      } else if (message.type === 'server_command') {
-        const { data } = message;
-        logDetailed('CMD', '=== SERVER COMMAND RECEIVED ===', data);
-        logDetailed('CMD', 'Data action:', data.action);
-        logDetailed('CMD', 'Data row:', data.row);
-        logDetailed('CMD', 'Data cell:', data.cell);
-        
-        switch (data.action) {
-          case 'click_cell':
-            logDetailed('CMD', `=== EXECUTING CLICK_CELL: row ${data.row}, cell ${data.cell} ===`);
-            const clicked = clickCell(data.row, data.cell);
-            logDetailed('CMD', `Click result: ${clicked}`);
-            if (clicked) {
-              sendGameEvent({
-                type: 'cell_selected',
-                row: data.row,
-                cell: data.cell,
-                autoClicked: true
-              });
-            }
-            break;
-            
-          case 'start_play':
-            logDetailed('CMD', 'Executing start_play command');
-            const playBtn = document.querySelector('[class*="play"], [class*="start"], button[class*="green"]');
-            logDetailed('CMD', 'Found play button', getElementInfo(playBtn));
-            if (playBtn && !isPlaying) {
-              playBtn.click();
-              isPlaying = true;
-              currentRow = 1;
-              sendGameEvent({ type: 'play_started' });
-              logDetailed('CMD', 'Play button clicked programmatically');
-              startMimickRecording();
-              
-              if (autoPlay) {
-                logDetailed('CMD', 'Auto-play is enabled, starting auto-click');
-                startAutoClick();
-                
-                window.postMessage({
-                  source: 'witch-content-script',
-                  command: 'start_play',
-                  data: {}
-                }, '*');
-              }
-            }
-            break;
-            
-          case 'stop_play':
-            logDetailed('CMD', 'Executing stop_play command');
-            const takeBtn = document.querySelector('[class*="take"], [class*="collect"], [class*="cashout"]');
-            logDetailed('CMD', 'Found take button', getElementInfo(takeBtn));
-            if (takeBtn && isPlaying) {
-              takeBtn.click();
-              isPlaying = false;
-              stopAutoClick();
-              sendGameEvent({ type: 'play_stopped' });
-              logDetailed('CMD', 'Take button clicked programmatically');
-              stopMimickRecording();
-              
-              window.postMessage({
-                source: 'witch-content-script',
-                command: 'stop_play',
-                data: {}
-              }, '*');
-            }
-            break;
-            
-          case 'set_auto_play':
-            autoPlay = data.enabled;
-            logDetailed('CMD', `Auto-play ${autoPlay ? 'enabled' : 'disabled'}`);
-            
-            window.postMessage({
-              source: 'witch-content-script',
-              command: 'set_auto_play',
-              data: { enabled: autoPlay }
-            }, '*');
-            
-            if (autoPlay && isPlaying) {
-              logDetailed('CMD', 'Auto-play enabled while playing - starting auto-click');
-              startAutoClick();
-            } else if (!autoPlay) {
-              stopAutoClick();
-            }
-            break;
-            
-          case 'get_state':
-            const state = detectGameElements();
-            logDetailed('CMD', 'Sending game state', state);
-            sendGameEvent({ type: 'game_state', state });
-            break;
-            
-          case 'get_buttons':
-            const buttons = findAllButtons();
-            logDetailed('CMD', 'Sending all buttons', buttons);
-            sendGameEvent({ type: 'buttons_info', buttons });
-            break;
-            
-          case 'start_mimick_recording':
-            startMimickRecording();
-            break;
-            
-          case 'stop_mimick_recording':
-            stopMimickRecording();
-            break;
-            
-          case 'get_mimick_data':
-            const mimickData = getMimickData();
-            logDetailed('CMD', 'Sending mimick data', mimickData);
-            sendGameEvent({ type: 'mimick_data', data: mimickData });
-            break;
-            
-          case 'clear_mimick_data':
-            clearMimickData();
-            break;
-        }
-        
-        sendResponse({ success: true });
-      }
-      
-      return true;
-    });
-    
-    logDetailed('INIT', 'Message listener setup complete');
-  } catch (e) {
-    log('Error setting up message listener:', e.message);
-    setTimeout(setupMessageListener, 1000);
+    document.body.appendChild(btn);
   }
-}
 
-function init() {
-  logDetailed('INIT', '=== Witch Extension Starting (v7.0 with Mimick Spy) ===', {
-    url: window.location.href,
-    userAgent: navigator.userAgent,
-    timestamp: new Date().toISOString()
+  // ============================================================
+  // LISTEN FOR MESSAGES FROM BACKGROUND/POPUP
+  // ============================================================
+  chrome.runtime.onMessage.addListener(function(msg) {
+    if (!msg) return;
+    if (msg.type === 'get_state') {
+      requestState();
+    } else if (msg.type === 'probe') {
+      sendToInjected('probe', { config: msg.config });
+    } else if (msg.type === 'clear_history') {
+      sendToInjected('clear_history');
+    } else if (msg.type === 'show_overlay') {
+      if (!overlay) createOverlay();
+      overlay.style.display = 'block';
+    }
   });
-  
-  injectMimickSpy();
-  
-  setupMessageListener();
-  setupCellClickCapture();
-  observeGameChanges();
-  startGamePolling();
-  
-  setTimeout(() => {
-    const gameState = detectGameElements();
-    logDetailed('INIT', 'Initial game state', gameState);
-    
-    const buttons = findAllButtons();
-    logDetailed('INIT', 'Initial buttons found', buttons);
-    
-    sendGameEvent({ type: 'game_state', state: gameState });
-    sendGameEvent({ 
-      type: 'mimick_spy_ready',
-      capturedTokens: MIMICK_SPY_DATA.capturedTokens
-    });
-  }, 2000);
-  
-  logDetailed('INIT', '=== Witch Extension Ready (v7.0) ===');
-}
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
+  // ============================================================
+  // INIT — wait for DOM, then inject overlay
+  // ============================================================
+  function init() {
+    // Detect if we're on a Witch game page
+    var url = window.location.href;
+    var isGamePage = url.includes('witch') || url.includes('1xbet') || url.includes('1x-bet');
+    if (!isGamePage) return;
+
+    // Wait a moment for DOM to settle
+    setTimeout(function() {
+      createToggleButton();
+      createOverlay();
+    }, 1500);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    setTimeout(init, 500);
+  }
+
+  // Also try after full load
+  window.addEventListener('load', function() {
+    if (!overlay && document.body) {
+      setTimeout(function() {
+        createToggleButton();
+        createOverlay();
+      }, 1000);
+    }
+  });
+
+  // Periodic state refresh
+  setInterval(function() {
+    requestState();
+  }, 10000);
+
+  console.log('[Witch v11] Content script loaded — passive mode, no auto-clicking');
+
+})();

@@ -1,1657 +1,660 @@
 (function() {
   'use strict';
-  
-  const MIMICK_SPY = {
-    capturedRequests: [],
-    capturedResponses: [],
-    capturedWebSockets: [],
-    sessionTokens: {},
-    gameFlows: [],
-    currentFlow: null,
-    isRecording: false
-  };
 
-  // Track Play button clicks to tag the immediately-following API response
-  let playButtonClickedAt = 0;
-  let lastCellClickedAt = 0;
-  let lastCellClickedElement = null;
-  let cellTimings = []; // { row, cell, clickTime, resolveTime, elapsedMs, result }
+  // ============================================================
+  // WITCH GAME ANALYZER PRO v11.0 — PASSIVE ONLY, NO AUTO-CLICK
+  // Captures ALL network traffic from page load before Play button
+  // ============================================================
 
-  // Track cell click timing via document-level listener (capture phase = fires first)
-  document.addEventListener('click', function(e) {
-    const target = e.target;
-    if (!target) return;
-    const el = target.closest ? target.closest('[class*="witch-game__box"], [class*="box"], [class*="cell"]') : null;
-    if (el) {
-      lastCellClickedAt = Date.now();
-      lastCellClickedElement = el;
-      console.log('%c[WITCH TIMING] Cell clicked at:', 'color: #ff00ff;', Date.now());
-    }
-    // Detect Play/Start button
-    const playEl = target.closest ? target.closest('[class*="play"], [class*="start"], [class*="btn"]') : null;
-    if (playEl) {
-      const classList = (playEl.className || '').toLowerCase();
-      const txt = (playEl.textContent || '').trim().toLowerCase();
-      if (classList.includes('play') || classList.includes('start') || txt.includes('play')) {
-        playButtonClickedAt = Date.now();
-        // ===== CRITICAL: Clear old grid so each new game gets a fresh RS[0].F =====
-        capturedSolutionGrid = null;
-        console.log('%c[WITCH TIMING] PLAY BUTTON CLICKED — grid cleared, watching for RS[0].F response...',
-          'color: #ff00ff; font-weight: bold;');
-        sendToContentScript('play_button_clicked', { timestamp: getTimestamp() });
-      }
-    }
-  }, true);
+  var GRID_HISTORY_KEY = 'witch_grids_v3';
+  var MAX_HISTORY = 300;
 
-  function getTimestamp() {
-    return new Date().toISOString();
-  }
+  // State
+  var capturedGrid = null;
+  var gridSource = null;
+  var allResponses = [];
+  var allRequests = [];
+  var wsMessages = [];
+  var probeResults = [];
+  var seedHistory = [];
 
-  function sendToContentScript(type, data) {
-    window.postMessage({
-      source: 'mimick-spy-injected',
-      type: type,
-      data: data,
-      timestamp: getTimestamp()
-    }, '*');
-  }
+  function ts() { return new Date().toISOString(); }
 
-  function extractHeaders(headers) {
-    if (!headers) return {};
-    if (headers instanceof Headers) {
-      const obj = {};
-      headers.forEach((value, key) => {
-        obj[key] = value;
-      });
-      return obj;
-    }
-    return headers;
-  }
-
-  function cloneRequestInit(init) {
-    if (!init) return {};
-    const cloned = {};
-    if (init.method) cloned.method = init.method;
-    if (init.headers) cloned.headers = extractHeaders(init.headers);
-    if (init.body) {
-      try {
-        if (typeof init.body === 'string') {
-          cloned.body = init.body;
-          try { cloned.bodyParsed = JSON.parse(init.body); } catch(e) {}
-        } else if (init.body instanceof FormData) {
-          cloned.body = '[FormData]';
-          cloned.bodyEntries = {};
-          init.body.forEach((value, key) => {
-            cloned.bodyEntries[key] = value instanceof File ? `[File: ${value.name}]` : value;
-          });
-        } else if (init.body instanceof Blob) {
-          cloned.body = '[Blob]';
-        } else if (init.body instanceof ArrayBuffer) {
-          cloned.body = '[ArrayBuffer]';
-        } else {
-          cloned.body = String(init.body);
-        }
-      } catch (e) {
-        cloned.body = '[Unable to clone body]';
-      }
-    }
-    if (init.credentials) cloned.credentials = init.credentials;
-    if (init.mode) cloned.mode = init.mode;
-    if (init.cache) cloned.cache = init.cache;
-    return cloned;
-  }
-
-  const originalFetch = window.fetch;
-  window.fetch = async function(input, init) {
-    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const url = typeof input === 'string' ? input : input?.url || 'unknown';
-    const method = init?.method || (input instanceof Request ? input.method : 'GET');
-    
-    const capturedRequest = {
-      id: requestId,
-      type: 'fetch',
-      url: url,
-      method: method,
-      timestamp: getTimestamp(),
-      init: cloneRequestInit(init),
-      isGameRelated: url.includes('witch') || url.includes('game') || url.includes('bet') || url.includes('play')
-    };
-
-    MIMICK_SPY.capturedRequests.push(capturedRequest);
-    sendToContentScript('network_request', capturedRequest);
-
+  function emit(type, data) {
     try {
-      const response = await originalFetch.apply(this, arguments);
-      const responseClone = response.clone();
-      
-      responseClone.text().then(text => {
-        let parsedBody = text;
-        try {
-          parsedBody = JSON.parse(text);
-        } catch (e) {}
-        
-        // Check if this response came within 3 seconds of Play button click
-        const msSincePlayClick = Date.now() - playButtonClickedAt;
-        const isPlayResponse = playButtonClickedAt > 0 && msSincePlayClick < 3000;
-        if (isPlayResponse) {
-          playButtonClickedAt = 0; // reset so only first response is tagged
-          console.log('%c[WITCH TIMING] *** PLAY RESPONSE CAPTURED ***', 'color: #ff00ff; font-weight: bold; font-size: 14px;');
-          console.log('[WITCH TIMING] URL:', url);
-          console.log('[WITCH TIMING] Body:', JSON.stringify(parsedBody).substring(0, 500));
-        }
-
-        const capturedResponse = {
-          id: requestId,
-          type: 'fetch_response',
-          url: url,
-          status: response.status,
-          statusText: response.statusText,
-          headers: extractHeaders(response.headers),
-          body: parsedBody,
-          rawText: text,
-          bodyLength: text.length,
-          timestamp: getTimestamp(),
-          isGameRelated: capturedRequest.isGameRelated,
-          isPlayResponse: isPlayResponse,
-          msSincePlayClick: msSincePlayClick < 30000 ? msSincePlayClick : null
-        };
-
-        MIMICK_SPY.capturedResponses.push(capturedResponse);
-        sendToContentScript('network_response', capturedResponse);
-
-        if (isPlayResponse) {
-          // Send special event for Play response so webapp can highlight it
-          sendToContentScript('play_response_captured', {
-            url: url,
-            status: response.status,
-            body: parsedBody,
-            rawText: text.substring(0, 2000),
-            timestamp: getTimestamp()
-          });
-        }
-
-        // Always try to capture solution grid from ANY response — the Play response
-        // may not have a "game related" URL but contains RS[0].F grid data
-        processResponseForSolutionGrid(capturedResponse);
-        if (capturedRequest.isGameRelated || isPlayResponse) {
-          extractTokensFromResponse(capturedResponse);
-        }
-      }).catch(() => {});
-      
-      return response;
-    } catch (error) {
-      sendToContentScript('network_error', {
-        id: requestId,
-        url: url,
-        error: error.message,
-        timestamp: getTimestamp()
-      });
-      throw error;
-    }
-  };
-
-  const originalXHROpen = XMLHttpRequest.prototype.open;
-  const originalXHRSend = XMLHttpRequest.prototype.send;
-  const originalXHRSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
-
-  XMLHttpRequest.prototype.open = function(method, url, ...args) {
-    this._mimickSpy = {
-      id: `xhr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      method: method,
-      url: url,
-      headers: {},
-      timestamp: getTimestamp(),
-      isGameRelated: url.includes('witch') || url.includes('game') || url.includes('bet') || url.includes('play')
-    };
-    return originalXHROpen.apply(this, [method, url, ...args]);
-  };
-
-  XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
-    if (this._mimickSpy) {
-      this._mimickSpy.headers[name] = value;
-    }
-    return originalXHRSetRequestHeader.apply(this, arguments);
-  };
-
-  XMLHttpRequest.prototype.send = function(body) {
-    const xhr = this;
-    const spyData = this._mimickSpy;
-    
-    if (spyData) {
-      spyData.body = body;
-      try {
-        if (typeof body === 'string') {
-          spyData.bodyParsed = JSON.parse(body);
-        }
-      } catch (e) {}
-      
-      MIMICK_SPY.capturedRequests.push(spyData);
-      sendToContentScript('network_request', { ...spyData, type: 'xhr' });
-
-      xhr.addEventListener('load', function() {
-        let responseBody = xhr.responseText;
-        try {
-          responseBody = JSON.parse(xhr.responseText);
-        } catch (e) {}
-        
-        const capturedResponse = {
-          id: spyData.id,
-          type: 'xhr_response',
-          url: spyData.url,
-          status: xhr.status,
-          statusText: xhr.statusText,
-          headers: xhr.getAllResponseHeaders(),
-          body: responseBody,
-          timestamp: getTimestamp(),
-          isGameRelated: spyData.isGameRelated
-        };
-
-        MIMICK_SPY.capturedResponses.push(capturedResponse);
-        sendToContentScript('network_response', capturedResponse);
-
-        // Always scan ALL responses for the RS[0].F grid — not just game-related
-        processResponseForSolutionGrid(capturedResponse);
-        if (spyData.isGameRelated) {
-          extractTokensFromResponse(capturedResponse);
-        }
-      });
-
-      xhr.addEventListener('error', function() {
-        sendToContentScript('network_error', {
-          id: spyData.id,
-          url: spyData.url,
-          error: 'XHR Error',
-          timestamp: getTimestamp()
-        });
-      });
-    }
-    
-    return originalXHRSend.apply(this, arguments);
-  };
-
-  // ========== ADVANCED BINARY DECODING UTILITIES ==========
-  
-  // Decode ArrayBuffer to various formats
-  function decodeArrayBuffer(buffer) {
-    const results = [];
-    const uint8 = new Uint8Array(buffer);
-    
-    // Try as UTF-8 string
-    try {
-      const decoder = new TextDecoder('utf-8');
-      const str = decoder.decode(buffer);
-      if (str && str.length > 0) {
-        results.push({ type: 'utf8', data: str });
-        // Try parsing as JSON
-        try {
-          const json = JSON.parse(str);
-          results.push({ type: 'json', data: json });
-        } catch (e) {}
-      }
-    } catch (e) {}
-    
-    // Check for gzip magic bytes (1f 8b)
-    if (uint8.length > 2 && uint8[0] === 0x1f && uint8[1] === 0x8b) {
-      try {
-        const decompressed = decompressGzip(uint8);
-        if (decompressed) {
-          results.push({ type: 'gzip', data: decompressed });
-        }
-      } catch (e) {}
-    }
-    
-    // Check for zlib magic bytes (78 9c, 78 da, 78 01)
-    if (uint8.length > 2 && uint8[0] === 0x78 && (uint8[1] === 0x9c || uint8[1] === 0xda || uint8[1] === 0x01)) {
-      try {
-        const decompressed = decompressZlib(uint8);
-        if (decompressed) {
-          results.push({ type: 'zlib', data: decompressed });
-        }
-      } catch (e) {}
-    }
-    
-    // Try msgpack-like decoding (look for array markers)
-    if (uint8.length > 10) {
-      try {
-        const msgpackResult = tryDecodeMsgpack(uint8);
-        if (msgpackResult) {
-          results.push({ type: 'msgpack', data: msgpackResult });
-        }
-      } catch (e) {}
-    }
-    
-    // Try to find boolean arrays in raw bytes
-    const boolArrays = extractBooleanArraysFromBytes(uint8);
-    if (boolArrays.length > 0) {
-      results.push({ type: 'bool_arrays', data: boolArrays });
-    }
-    
-    return results;
-  }
-  
-  // Simple gzip decompression using pako-like approach
-  function decompressGzip(data) {
-    // This is a simplified approach - real gzip needs pako library
-    // For now, try to extract readable content after header
-    try {
-      const decoder = new TextDecoder('utf-8', { fatal: false });
-      // Skip gzip header and try to decode
-      const content = decoder.decode(data.slice(10));
-      if (content.includes('[') || content.includes('{')) {
-        return content;
-      }
-    } catch (e) {}
-    return null;
-  }
-  
-  function decompressZlib(data) {
-    try {
-      const decoder = new TextDecoder('utf-8', { fatal: false });
-      const content = decoder.decode(data.slice(2));
-      if (content.includes('[') || content.includes('{')) {
-        return content;
-      }
-    } catch (e) {}
-    return null;
-  }
-  
-  // Try to decode msgpack-like binary format
-  function tryDecodeMsgpack(uint8) {
-    const results = [];
-    
-    // Look for fixarray markers (0x90 - 0x9f = array of 0-15 elements)
-    for (let i = 0; i < uint8.length - 10; i++) {
-      const byte = uint8[i];
-      
-      // fixarray of 5 elements (0x95) - could be a row
-      if (byte === 0x95) {
-        const row = [];
-        let valid = true;
-        for (let j = 0; j < 5 && valid; j++) {
-          const val = uint8[i + 1 + j];
-          if (val === 0xc3) row.push(true);      // msgpack true
-          else if (val === 0xc2) row.push(false); // msgpack false
-          else valid = false;
-        }
-        if (valid && row.length === 5) {
-          results.push(row);
-        }
-      }
-      
-      // array16 marker (0xdc) followed by size
-      if (byte === 0xdc && i + 2 < uint8.length) {
-        const size = (uint8[i + 1] << 8) | uint8[i + 2];
-        if (size >= 5 && size <= 10) {
-          console.log(`%c[WITCH BINARY] Found array16 marker, size: ${size}`, 'color: #ff00ff;');
-        }
-      }
-    }
-    
-    return results.length >= 5 ? results : null;
-  }
-  
-  // Extract boolean arrays from raw bytes
-  function extractBooleanArraysFromBytes(uint8) {
-    const rows = [];
-    
-    // Pattern 1: Sequential 0x00/0x01 bytes (raw booleans)
-    for (let i = 0; i <= uint8.length - 5; i++) {
-      let valid = true;
-      const row = [];
-      for (let j = 0; j < 5; j++) {
-        const val = uint8[i + j];
-        if (val === 0 || val === 1) {
-          row.push(val === 1);
-        } else {
-          valid = false;
-          break;
-        }
-      }
-      if (valid) {
-        rows.push({ offset: i, row });
-      }
-    }
-    
-    // Pattern 2: msgpack-style booleans (0xc2=false, 0xc3=true)
-    for (let i = 0; i <= uint8.length - 5; i++) {
-      let valid = true;
-      const row = [];
-      for (let j = 0; j < 5; j++) {
-        const val = uint8[i + j];
-        if (val === 0xc2) row.push(false);
-        else if (val === 0xc3) row.push(true);
-        else { valid = false; break; }
-      }
-      if (valid) {
-        rows.push({ offset: i, row, type: 'msgpack' });
-      }
-    }
-    
-    // Look for 10 consecutive rows of 5 booleans
-    if (rows.length >= 10) {
-      // Check for consecutive offsets
-      for (let i = 0; i <= rows.length - 10; i++) {
-        const group = rows.slice(i, i + 10);
-        const offsets = group.map(r => r.offset);
-        const isConsecutive = offsets.every((off, idx) => idx === 0 || off === offsets[idx - 1] + 5);
-        if (isConsecutive) {
-          return group.map(r => r.row);
-        }
-      }
-    }
-    
-    return [];
-  }
-
-  const originalWebSocket = window.WebSocket;
-  window.WebSocket = function(url, protocols) {
-    const wsId = `ws_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const isGameRelated = url.includes('witch') || url.includes('game') || url.includes('bet') || url.includes('1x');
-    
-    sendToContentScript('websocket_created', {
-      id: wsId,
-      url: url,
-      protocols: protocols,
-      timestamp: getTimestamp(),
-      isGameRelated: isGameRelated
-    });
-
-    const ws = protocols ? new originalWebSocket(url, protocols) : new originalWebSocket(url);
-    
-    const originalSend = ws.send.bind(ws);
-    ws.send = function(data) {
-      let parsedData = data;
-      let decodedFormats = [];
-      
-      try {
-        if (typeof data === 'string') {
-          parsedData = JSON.parse(data);
-        } else if (data instanceof ArrayBuffer) {
-          decodedFormats = decodeArrayBuffer(data);
-          parsedData = decodedFormats.length > 0 ? decodedFormats : '[Binary ArrayBuffer]';
-        } else if (data instanceof Blob) {
-          parsedData = '[Binary Blob]';
-        }
-      } catch (e) {}
-      
-      const wsMessage = {
-        id: wsId,
-        direction: 'outgoing',
-        data: parsedData,
-        raw: typeof data === 'string' ? data : `[Binary ${data.byteLength || data.size || 0} bytes]`,
-        decodedFormats: decodedFormats,
-        timestamp: getTimestamp(),
-        isGameRelated: isGameRelated
-      };
-      
-      MIMICK_SPY.capturedWebSockets.push(wsMessage);
-      sendToContentScript('websocket_message', wsMessage);
-      
-      return originalSend(data);
-    };
-
-    ws.addEventListener('message', function(event) {
-      let parsedData = event.data;
-      let decodedFormats = [];
-      let rawDescription = '';
-      
-      try {
-        if (typeof event.data === 'string') {
-          rawDescription = event.data.substring(0, 500);
-          try {
-            parsedData = JSON.parse(event.data);
-            // Scan JSON WebSocket text messages for RS[0].F grid
-            processResponseForSolutionGrid({ body: parsedData, url: url, rawText: event.data });
-          } catch (e) {
-            parsedData = event.data;
-          }
-        } else if (event.data instanceof ArrayBuffer) {
-          rawDescription = `[ArrayBuffer ${event.data.byteLength} bytes]`;
-          decodedFormats = decodeArrayBuffer(event.data);
-          console.log(`%c[WITCH WS] Binary message received: ${event.data.byteLength} bytes, decoded ${decodedFormats.length} formats`, 'color: #ff00ff;');
-          
-          // Check decoded formats for solution grid
-          for (const format of decodedFormats) {
-            if (format.type === 'json' && format.data) {
-              processResponseForSolutionGrid({ body: format.data, url: url });
-            }
-            if (format.type === 'bool_arrays' && format.data.length >= 5) {
-              console.log('%c[WITCH WS] Found boolean arrays in binary data!', 'color: #00ff00; font-weight: bold;');
-              processBinaryBooleanGrid(format.data);
-            }
-            if (format.type === 'msgpack' && format.data) {
-              console.log('%c[WITCH WS] Found msgpack data!', 'color: #00ff00; font-weight: bold;');
-              processBinaryBooleanGrid(format.data);
-            }
-          }
-          
-          parsedData = decodedFormats.length > 0 ? decodedFormats : '[Binary]';
-        } else if (event.data instanceof Blob) {
-          rawDescription = `[Blob ${event.data.size} bytes]`;
-          // Read blob as ArrayBuffer
-          event.data.arrayBuffer().then(buffer => {
-            const formats = decodeArrayBuffer(buffer);
-            console.log(`%c[WITCH WS] Blob decoded: ${formats.length} formats`, 'color: #ff00ff;');
-            for (const format of formats) {
-              if (format.type === 'json' && format.data) {
-                processResponseForSolutionGrid({ body: format.data, url: url });
-              }
-              if (format.type === 'bool_arrays' && format.data.length >= 5) {
-                processBinaryBooleanGrid(format.data);
-              }
-            }
-          }).catch(() => {});
-          parsedData = '[Blob - async decode]';
-        }
-      } catch (e) {
-        console.log('%c[WITCH WS] Decode error:', 'color: #ff0000;', e);
-      }
-      
-      const wsMessage = {
-        id: wsId,
-        direction: 'incoming',
-        data: parsedData,
-        raw: rawDescription || (typeof event.data === 'string' ? event.data : '[Binary]'),
-        decodedFormats: decodedFormats,
-        timestamp: getTimestamp(),
-        isGameRelated: isGameRelated
-      };
-      
-      MIMICK_SPY.capturedWebSockets.push(wsMessage);
-      sendToContentScript('websocket_message', wsMessage);
-    });
-
-    ws.addEventListener('open', function() {
-      sendToContentScript('websocket_open', { id: wsId, timestamp: getTimestamp() });
-    });
-
-    ws.addEventListener('close', function(event) {
-      sendToContentScript('websocket_close', { 
-        id: wsId, 
-        code: event.code, 
-        reason: event.reason,
-        timestamp: getTimestamp() 
-      });
-    });
-
-    ws.addEventListener('error', function() {
-      sendToContentScript('websocket_error', { id: wsId, timestamp: getTimestamp() });
-    });
-
-    return ws;
-  };
-  window.WebSocket.prototype = originalWebSocket.prototype;
-  window.WebSocket.CONNECTING = originalWebSocket.CONNECTING;
-  window.WebSocket.OPEN = originalWebSocket.OPEN;
-  window.WebSocket.CLOSING = originalWebSocket.CLOSING;
-  window.WebSocket.CLOSED = originalWebSocket.CLOSED;
-  
-  // Process binary boolean grid
-  function processBinaryBooleanGrid(grid) {
-    if (!grid || !Array.isArray(grid) || grid.length < 5) return;
-    
-    capturedSolutionGrid = grid;
-    lastGridCaptureTime = Date.now();
-    
-    console.log('%c[WITCH BINARY] ========== BINARY SOLUTION GRID CAPTURED! ==========', 'color: #00ff00; font-weight: bold; font-size: 16px;');
-    console.log('%c[WITCH BINARY] Grid:', 'color: #00ff00;', capturedSolutionGrid);
-    
-    capturedSolutionGrid.forEach((row, rowIdx) => {
-      const safeCells = row.map((v, i) => v ? i + 1 : null).filter(v => v !== null);
-      console.log(`%c[WITCH BINARY] Row ${rowIdx + 1}: Safe cells = [${safeCells.join(', ')}]`, 'color: #00ffff;');
-    });
-    
-    sendToContentScript('solution_grid_captured', {
-      grid: capturedSolutionGrid,
-      source: 'binary',
-      timestamp: getTimestamp(),
-      rowCount: capturedSolutionGrid.length
-    });
-  }
-  
-  // ========== HOOK JSON.parse TO CAPTURE DECODED DATA ==========
-  const originalJSONParse = JSON.parse;
-  JSON.parse = function(text, reviver) {
-    const result = originalJSONParse.call(this, text, reviver);
-    
-    // Check if this looks like game data
-    if (result && typeof result === 'object') {
-      // Delayed processing to avoid blocking
-      setTimeout(() => {
-        try {
-          processResponseForSolutionGrid({ body: result, url: 'json.parse' });
-        } catch (e) {}
-      }, 0);
-    }
-    
-    return result;
-  };
-  
-  // ========== HOOK atob TO CAPTURE BASE64 DECODED DATA ==========
-  const originalAtob = window.atob;
-  window.atob = function(encodedData) {
-    const result = originalAtob.call(this, encodedData);
-    
-    // Try to parse as JSON
-    try {
-      const parsed = JSON.parse(result);
-      if (parsed && typeof parsed === 'object') {
-        setTimeout(() => {
-          processResponseForSolutionGrid({ body: parsed, url: 'atob' });
-        }, 0);
-      }
-    } catch (e) {}
-    
-    return result;
-  };
-
-  function extractTokensFromResponse(response) {
-    if (!response.body || typeof response.body !== 'object') return;
-    
-    const tokenKeys = ['token', 'csrf', 'session', 'auth', 'key', 'signature', 'hash', 'nonce'];
-    
-    function extractFromObject(obj, prefix = '') {
-      if (!obj || typeof obj !== 'object') return;
-      
-      for (const [key, value] of Object.entries(obj)) {
-        const fullKey = prefix ? `${prefix}.${key}` : key;
-        
-        if (tokenKeys.some(tk => key.toLowerCase().includes(tk))) {
-          MIMICK_SPY.sessionTokens[fullKey] = value;
-          sendToContentScript('token_captured', { key: fullKey, value: value });
-        }
-        
-        if (typeof value === 'object' && value !== null) {
-          extractFromObject(value, fullKey);
-        }
-      }
-    }
-    
-    extractFromObject(response.body);
-  }
-
-  function scanDOMForTokens() {
-    const tokens = {};
-    
-    document.querySelectorAll('input[type="hidden"]').forEach(input => {
-      const name = input.name || input.id;
-      if (name && input.value) {
-        tokens[`hidden_${name}`] = input.value;
-      }
-    });
-
-    document.querySelectorAll('meta[name*="csrf"], meta[name*="token"]').forEach(meta => {
-      const name = meta.getAttribute('name');
-      const content = meta.getAttribute('content');
-      if (name && content) {
-        tokens[`meta_${name}`] = content;
-      }
-    });
-
-    document.querySelectorAll('script').forEach(script => {
-      const text = script.textContent || '';
-      const csrfMatch = text.match(/csrf[_-]?token['":\s]+['"]([^'"]+)['"]/i);
-      if (csrfMatch) {
-        tokens['script_csrf'] = csrfMatch[1];
-      }
-      const sessionMatch = text.match(/session[_-]?id['":\s]+['"]([^'"]+)['"]/i);
-      if (sessionMatch) {
-        tokens['script_session'] = sessionMatch[1];
-      }
-    });
-
-    if (Object.keys(tokens).length > 0) {
-      Object.assign(MIMICK_SPY.sessionTokens, tokens);
-      sendToContentScript('dom_tokens', tokens);
-    }
-  }
-
-  function captureGameState() {
-    const gameRows = document.querySelectorAll('.witch-game__row');
-    const gameState = {
-      rows: [],
-      isActive: false,
-      currentActiveRow: -1,
-      timestamp: getTimestamp()
-    };
-
-    gameRows.forEach((row, rowIndex) => {
-      const cells = row.querySelectorAll('.witch-game__box');
-      const rowData = {
-        index: rowIndex + 1,
-        isActive: row.classList.contains('witch-game__row--is-active'),
-        cells: []
-      };
-
-      if (rowData.isActive) {
-        gameState.currentActiveRow = rowIndex + 1;
-        gameState.isActive = true;
-      }
-
-      cells.forEach((cell, cellIndex) => {
-        const result = cell.getAttribute('data-result');
-        const isOpen = cell.classList.contains('witch-game__box--is-open');
-        rowData.cells.push({
-          index: cellIndex + 1,
-          result: result || null,
-          isOpen: isOpen,
-          isWin: result === 'win',
-          isLose: result === 'lose'
-        });
-      });
-
-      gameState.rows.push(rowData);
-    });
-
-    return gameState;
-  }
-
-  window.MIMICK_SPY = {
-    getData: () => ({
-      requests: MIMICK_SPY.capturedRequests,
-      responses: MIMICK_SPY.capturedResponses,
-      websockets: MIMICK_SPY.capturedWebSockets,
-      tokens: MIMICK_SPY.sessionTokens,
-      gameFlows: MIMICK_SPY.gameFlows
-    }),
-    
-    getTokens: () => ({ ...MIMICK_SPY.sessionTokens }),
-    
-    getGameState: captureGameState,
-    
-    startRecording: () => {
-      MIMICK_SPY.isRecording = true;
-      MIMICK_SPY.currentFlow = {
-        id: `flow_${Date.now()}`,
-        startTime: getTimestamp(),
-        events: [],
-        requests: [],
-        results: []
-      };
-      sendToContentScript('recording_started', { flowId: MIMICK_SPY.currentFlow.id });
-    },
-    
-    stopRecording: () => {
-      MIMICK_SPY.isRecording = false;
-      if (MIMICK_SPY.currentFlow) {
-        MIMICK_SPY.currentFlow.endTime = getTimestamp();
-        MIMICK_SPY.gameFlows.push(MIMICK_SPY.currentFlow);
-        sendToContentScript('recording_stopped', MIMICK_SPY.currentFlow);
-        MIMICK_SPY.currentFlow = null;
-      }
-    },
-    
-    clearData: () => {
-      MIMICK_SPY.capturedRequests = [];
-      MIMICK_SPY.capturedResponses = [];
-      MIMICK_SPY.capturedWebSockets = [];
-      MIMICK_SPY.gameFlows = [];
-      sendToContentScript('data_cleared', {});
-    },
-
-    scanDOM: scanDOMForTokens
-  };
-
-  setTimeout(scanDOMForTokens, 1000);
-
-  const domObserver = new MutationObserver(() => {
-    scanDOMForTokens();
-  });
-  
-  if (document.body) {
-    domObserver.observe(document.body, { 
-      childList: true, 
-      subtree: true, 
-      attributes: true,
-      attributeFilter: ['value', 'content']
-    });
-  }
-
-  sendToContentScript('injected_ready', { timestamp: getTimestamp() });
-  console.log('[Mimick Spy] Injected script initialized - v8.0');
-
-  // ========== CELL TIMING MEASUREMENT ==========
-  // MutationObserver to measure time from cell click → DOM result update
-  // This is the timing attack: safe cells may respond faster or slower than poison cells
-  (function setupTimingObserver() {
-    let pendingCellTiming = null; // { el, clickTime }
-    
-    // Override cell click tracking with more precise data
-    document.addEventListener('click', function(e) {
-      const cell = e.target.closest ? e.target.closest('[class*="witch-game__box"]') : null;
-      if (cell) {
-        pendingCellTiming = { el: cell, clickTime: Date.now(), classAtClick: cell.className };
-        console.log('%c[TIMING PROBE] Cell click recorded:', 'color: #ff88ff;', {
-          class: cell.className.substring(0, 60),
-          time: Date.now()
-        });
-      }
-    }, true);
-
-    const timingObserver = new MutationObserver(function(mutations) {
-      if (!pendingCellTiming) return;
-      
-      for (const mutation of mutations) {
-        if (mutation.type !== 'attributes' && mutation.type !== 'childList') continue;
-        
-        const target = mutation.target;
-        const classList = target.className || '';
-        
-        // Check if a cell just received a result (poison or win class added)
-        const hasResult = classList.includes('poison') || classList.includes('w-lose') || 
-                          classList.includes('wine') || classList.includes('w-win') ||
-                          classList.includes('is-open') || classList.includes('open');
-        const wasResultAttr = mutation.type === 'attributes' && 
-                              mutation.attributeName === 'data-result' && 
-                              target.getAttribute('data-result');
-        
-        if (hasResult || wasResultAttr) {
-          const elapsedMs = Date.now() - pendingCellTiming.clickTime;
-          const result = classList.includes('poison') || classList.includes('w-lose') ? 'LOSE' : 'WIN';
-          const dataResult = target.getAttribute ? target.getAttribute('data-result') : null;
-          
-          const timing = {
-            clickTime: pendingCellTiming.clickTime,
-            resolveTime: Date.now(),
-            elapsedMs: elapsedMs,
-            result: dataResult || result,
-            cellClass: classList.substring(0, 80)
-          };
-          
-          cellTimings.push(timing);
-          
-          console.log(`%c[TIMING PROBE] Cell resolved in ${elapsedMs}ms — Result: ${timing.result}`,
-            timing.result === 'WIN' || timing.result === 'win' ? 'color: #00ff00; font-weight: bold;' : 'color: #ff4444; font-weight: bold;');
-          
-          sendToContentScript('cell_timing', timing);
-          pendingCellTiming = null; // reset for next click
-        }
-      }
-    });
-
-    if (document.body) {
-      timingObserver.observe(document.body, { 
-        subtree: true, 
-        attributes: true, 
-        attributeFilter: ['class', 'data-result'],
-        childList: true
-      });
-    }
-    
-    console.log('%c[TIMING PROBE] Cell timing observer ready', 'color: #ff88ff;');
-  })();
-
-  // Expose timing data
-  window.WITCH_TIMINGS = {
-    getTimings: () => [...cellTimings],
-    clearTimings: () => { cellTimings = []; },
-    getStats: () => {
-      if (cellTimings.length === 0) return { count: 0 };
-      const wins = cellTimings.filter(t => t.result === 'WIN' || t.result === 'win');
-      const losses = cellTimings.filter(t => t.result === 'LOSE' || t.result === 'lose');
-      const avgWin = wins.length ? wins.reduce((a, b) => a + b.elapsedMs, 0) / wins.length : 0;
-      const avgLoss = losses.length ? losses.reduce((a, b) => a + b.elapsedMs, 0) / losses.length : 0;
-      return {
-        count: cellTimings.length,
-        wins: wins.length,
-        losses: losses.length,
-        avgWinMs: Math.round(avgWin),
-        avgLossMs: Math.round(avgLoss),
-        timingDeltaMs: Math.round(avgLoss - avgWin),
-        allTimings: cellTimings
-      };
-    }
-  };
-
-  // ========== SOLUTION GRID CAPTURE SYSTEM ==========
-  // Confirmed format from 1xbet Witch game:
-  //   response.body.RS[0].F  →  array of 10 rows × 5 booleans
-  //   true  = SAFE cell (click this)
-  //   false = LOSING cell (avoid this)
-  let capturedSolutionGrid = null;
-  let lastGridCaptureTime = 0;
-
-  function parseSolutionGrid(body) {
-    if (!body) return null;
-
-    // ===== STEP 1: Known 1xbet format: body.RS[0].F =====
-    try {
-      // Uppercase keys (confirmed format from screenshot)
-      if (body.RS && Array.isArray(body.RS) && body.RS.length > 0) {
-        const rs0 = body.RS[0];
-        if (rs0 && rs0.F && Array.isArray(rs0.F) && rs0.F.length >= 5) {
-          const grid = rs0.F;
-          if (grid.every(function(row) {
-            return Array.isArray(row) && row.length === 5 &&
-                   row.every(function(v) { return typeof v === 'boolean'; });
-          })) {
-            console.log('%c[WITCH GRID] ★★★ FOUND RS[0].F — 1xbet Witch grid! ★★★',
-              'color: #00ff00; font-weight: bold; font-size: 18px; background: #003300;');
-            return grid;
-          }
-        }
-      }
-      // Lowercase keys variant
-      if (body.rs && Array.isArray(body.rs) && body.rs.length > 0) {
-        const rs0 = body.rs[0];
-        if (rs0) {
-          const fField = rs0.F || rs0.f;
-          if (fField && Array.isArray(fField) && fField.length >= 5) {
-            const isGrid = fField.every(function(row) {
-              return Array.isArray(row) && row.length === 5 &&
-                     row.every(function(v) { return typeof v === 'boolean'; });
-            });
-            if (isGrid) return fField;
-          }
-        }
-      }
+      window.postMessage({ source: 'witch-injected-v11', type: type, data: data, ts: ts() }, '*');
     } catch(e) {}
-
-    // ===== STEP 2: Generic deep search (fixed — uses for loops not forEach) =====
-    function deepSearch(obj, depth) {
-      if (depth > 10 || !obj || typeof obj !== 'object') return null;
-
-      if (Array.isArray(obj)) {
-        // Check if this array IS a 5–15 row boolean grid
-        if (obj.length >= 5 && obj.length <= 15) {
-          var boolRows = [];
-          for (var i = 0; i < obj.length; i++) {
-            var row = obj[i];
-            if (Array.isArray(row) && row.length === 5) {
-              var allBool = true;
-              for (var j = 0; j < row.length; j++) {
-                if (typeof row[j] !== 'boolean') { allBool = false; break; }
-              }
-              if (allBool) boolRows.push(row);
-            }
-          }
-          if (boolRows.length >= 5) {
-            console.log('%c[WITCH GRID] Deep search found ' + boolRows.length + ' boolean rows!',
-              'color: #00ff00; font-weight: bold;');
-            return boolRows;
-          }
-        }
-        // Recurse into array items (for loop — propagates return correctly)
-        for (var i = 0; i < obj.length; i++) {
-          var result = deepSearch(obj[i], depth + 1);
-          if (result) return result;
-        }
-      } else {
-        // Recurse into object properties (for loop — propagates return correctly)
-        var keys = Object.keys(obj);
-        for (var k = 0; k < keys.length; k++) {
-          var result = deepSearch(obj[keys[k]], depth + 1);
-          if (result) return result;
-        }
-      }
-      return null;
-    }
-
-    var grid = deepSearch(body, 0);
-    if (grid) return grid;
-
-    // ===== STEP 3: Try base64 decode on any string values =====
-    if (typeof body === 'object' && !Array.isArray(body)) {
-      var vals = Object.values(body);
-      for (var vi = 0; vi < vals.length; vi++) {
-        var val = vals[vi];
-        if (typeof val === 'string' && val.length > 20 && val.length < 5000) {
-          try {
-            var decoded = atob(val);
-            var parsed = JSON.parse(decoded);
-            var g = parseSolutionGrid(parsed);
-            if (g) return g;
-          } catch(e) {}
-        }
-      }
-    }
-
-    return null;
   }
 
-  // Process any response body to extract solution grid.
-  // Runs on ALL responses (not just game-related) to ensure we don't miss the Play response.
-  function processResponseForSolutionGrid(response) {
-    // Try parsed body first
-    var bodyToCheck = response.body;
-    var rawToCheck = response.rawText;
-
-    // Also try parsing rawText if body is a plain string
-    if (bodyToCheck && typeof bodyToCheck === 'string') {
-      try { bodyToCheck = JSON.parse(bodyToCheck); } catch(e) {}
-    }
-    if (!bodyToCheck && rawToCheck) {
-      try { bodyToCheck = JSON.parse(rawToCheck); } catch(e) {}
-    }
-    if (!bodyToCheck) return;
-
-    // Also extract seeds/nonces from every response regardless of grid
-    extractSeedsFromBody(bodyToCheck, response.url || '');
-
-    var grid = parseSolutionGrid(bodyToCheck);
-    if (grid && grid.length >= 5) {
-      capturedSolutionGrid = grid;
-      lastGridCaptureTime = Date.now();
-
-      console.log('%c[WITCH GRID] ========== POST-GAME GRID CAPTURED (RS[0].F) ==========',
-        'color: #00ff00; font-weight: bold; font-size: 18px; background: #002200;');
-      console.log('%c[WITCH GRID] Source URL:', 'color: #ffff00;', response.url || 'unknown');
-
-      // Log each row's safe cells
-      for (var rowIdx = 0; rowIdx < capturedSolutionGrid.length; rowIdx++) {
-        var row = capturedSolutionGrid[rowIdx];
-        var safeCells = [];
-        for (var ci = 0; ci < row.length; ci++) {
-          if (row[ci]) safeCells.push(ci + 1);
-        }
-        console.log(
-          '%c[WITCH GRID] Row ' + (rowIdx + 1) + ': Safe cells = [' + safeCells.join(', ') + ']',
-          'color: #00ffff; font-weight: bold;'
-        );
-      }
-
-      // ===== SAVE TO PRNG HISTORY =====
-      // This grid is the post-game reveal — save it to build frequency model
-      var meta = {
-        url: response.url || '',
-        gameId: bodyToCheck.AI || null,
-        SB: bodyToCheck.SB,
-        AN: bodyToCheck.AN,
-        BS: bodyToCheck.BS
-      };
-      var history = saveGridToHistory(capturedSolutionGrid, meta);
-
-      // Build updated frequency table to send to webapp
-      var ft = buildFrequencyTable();
-
-      // Send grid + updated frequency to webapp
-      sendToContentScript('solution_grid_captured', {
-        grid: capturedSolutionGrid,
-        source: response.url || 'unknown',
-        timestamp: getTimestamp(),
-        rowCount: capturedSolutionGrid.length,
-        totalGames: history ? history.totalGames : 0,
-        frequencyTable: ft ? ft.freqTable : null
-      });
-    }
-  }
-
-  // ========== PRNG PATTERN LEARNING SYSTEM ==========
-  // Every post-game RS[0].F grid reveal is stored in localStorage.
-  // Over time we build a frequency map: which cells are safe most often per row.
-  // During live play, the statistically safest cell is clicked — no live grid needed.
-  // ----------------------------------------------------------------------------------
-
-  var GRID_HISTORY_KEY = 'witch_prng_v2';
-  var MAX_HISTORY = 500;
-
-  function loadGridHistory() {
+  // ============================================================
+  // LOCAL STORAGE — bounded, never corrupts page
+  // ============================================================
+  function loadHistory() {
     try {
       var raw = localStorage.getItem(GRID_HISTORY_KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        var h = JSON.parse(raw);
+        if (h && Array.isArray(h.grids)) return h;
+      }
     } catch(e) {}
-    return { grids: [], seeds: [], totalGames: 0 };
+    return { grids: [], totalGames: 0 };
   }
 
-  function saveGridToHistory(grid, meta) {
-    if (!grid || grid.length < 5) return null;
-    var history = loadGridHistory();
-    history.grids.push({ grid: grid, ts: Date.now(), meta: meta || {} });
-    if (history.grids.length > MAX_HISTORY) {
-      history.grids = history.grids.slice(-MAX_HISTORY);
-    }
-    history.totalGames = history.grids.length;
-    try { localStorage.setItem(GRID_HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
-    console.log('%c[WITCH PRNG] Grid saved to history. Total games: ' + history.totalGames,
-      'color: #88ff88; font-weight: bold;');
-    return history;
+  function saveHistory(h) {
+    try {
+      // Keep only last MAX_HISTORY grids
+      if (h.grids.length > MAX_HISTORY) {
+        h.grids = h.grids.slice(-MAX_HISTORY);
+      }
+      localStorage.setItem(GRID_HISTORY_KEY, JSON.stringify(h));
+    } catch(e) {}
   }
 
-  // Build frequency table from stored grids.
-  // freqTable[rowIdx][cellIdx] = { safeCount, total, rate }
+  function addGridToHistory(grid, meta) {
+    if (!grid || grid.length < 5) return;
+    var h = loadHistory();
+    h.grids.push({ grid: grid, ts: Date.now(), meta: meta || {} });
+    h.totalGames = h.grids.length;
+    saveHistory(h);
+    return h.totalGames;
+  }
+
+  // ============================================================
+  // FREQUENCY TABLE — build statistical safe-cell map
+  // ============================================================
   function buildFrequencyTable() {
-    var history = loadGridHistory();
-    if (!history.grids || history.grids.length === 0) return null;
-    var safeCounts = [], totalCounts = [];
-    for (var r = 0; r < 10; r++) {
-      safeCounts.push([0,0,0,0,0]);
-      totalCounts.push([0,0,0,0,0]);
+    var h = loadHistory();
+    if (!h.grids.length) return null;
+
+    var freq = {};
+    var numRows = 10;
+    var numCols = 5;
+
+    for (var r = 0; r < numRows; r++) {
+      freq[r] = {};
+      for (var c = 0; c < numCols; c++) {
+        freq[r][c] = { safe: 0, total: 0, pct: 0 };
+      }
     }
-    for (var g = 0; g < history.grids.length; g++) {
-      var grid = history.grids[g].grid;
-      if (!grid) continue;
-      for (var r = 0; r < grid.length && r < 10; r++) {
-        var row = grid[r];
-        if (!row || row.length < 5) continue;
-        for (var c = 0; c < 5; c++) {
-          totalCounts[r][c]++;
-          if (row[c] === true) safeCounts[r][c]++;
+
+    for (var gi = 0; gi < h.grids.length; gi++) {
+      var grid = h.grids[gi].grid;
+      for (var ri = 0; ri < grid.length && ri < numRows; ri++) {
+        var row = grid[ri];
+        if (!Array.isArray(row)) continue;
+        for (var ci = 0; ci < row.length && ci < numCols; ci++) {
+          freq[ri][ci].total++;
+          if (row[ci]) freq[ri][ci].safe++;
         }
       }
     }
-    var freqTable = [];
-    for (var r = 0; r < 10; r++) {
-      var rowFreqs = [];
-      for (var c = 0; c < 5; c++) {
-        var tot = totalCounts[r][c];
-        rowFreqs.push({
-          safeCount: safeCounts[r][c],
-          total: tot,
-          rate: tot > 0 ? safeCounts[r][c] / tot : null
-        });
+
+    for (var r2 = 0; r2 < numRows; r2++) {
+      for (var c2 = 0; c2 < numCols; c2++) {
+        var f = freq[r2][c2];
+        f.pct = f.total > 0 ? Math.round((f.safe / f.total) * 100) : 0;
       }
-      freqTable.push(rowFreqs);
     }
-    return { freqTable: freqTable, totalGames: history.grids.length };
+
+    return { freq: freq, totalGames: h.totalGames };
   }
 
-  // Returns best cell index for a row, with confidence info.
-  // Priority: (1) live grid, (2) frequency model, (3) random
-  function getRecommendedCell(rowIndex) {
-    // Priority 1: live grid
-    if (capturedSolutionGrid && rowIndex < capturedSolutionGrid.length) {
-      var liveRow = capturedSolutionGrid[rowIndex];
-      if (liveRow) {
-        for (var i = 0; i < liveRow.length; i++) {
-          if (liveRow[i] === true) return { cellIndex: i, method: 'live_grid', confidence: 1.0, totalGames: 0 };
-        }
-      }
-    }
-    // Priority 2: frequency model
+  // Build best cell per row from frequency
+  function getBestCellsFromFrequency() {
     var ft = buildFrequencyTable();
-    if (ft && ft.totalGames >= 3 && rowIndex < ft.freqTable.length) {
-      var rowFreqs = ft.freqTable[rowIndex];
-      var bestIdx = 0, bestRate = -1;
-      for (var c = 0; c < rowFreqs.length; c++) {
-        if (rowFreqs[c].rate !== null && rowFreqs[c].rate > bestRate) {
-          bestRate = rowFreqs[c].rate;
-          bestIdx = c;
+    if (!ft) return null;
+    var recs = [];
+    for (var r = 0; r < 10; r++) {
+      var best = -1, bestPct = -1;
+      for (var c = 0; c < 5; c++) {
+        var f = ft.freq[r][c];
+        if (f.total > 0 && f.pct > bestPct) {
+          bestPct = f.pct;
+          best = c;
         }
       }
-      // Expected safe rate for this row (by game rules)
-      var expectedRate = rowIndex < 4 ? 0.8 : rowIndex < 7 ? 0.6 : rowIndex < 9 ? 0.4 : 0.2;
-      var bias = bestRate - expectedRate; // positive = cell is luckier than expected
-      return {
-        cellIndex: bestIdx,
-        method: 'frequency',
-        safeRate: bestRate,
-        bias: bias,
-        confidence: Math.min(1, ft.totalGames / 50),
-        totalGames: ft.totalGames
-      };
+      if (best >= 0) {
+        recs.push({ row: r + 1, cell: best + 1, pct: bestPct, games: ft.freq[r][best].total });
+      }
     }
-    // Priority 3: random
-    return { cellIndex: Math.floor(Math.random() * 5), method: 'random', confidence: 0, totalGames: ft ? ft.totalGames : 0 };
+    return { recommendations: recs, totalGames: ft.totalGames, freq: ft.freq };
   }
 
-  // ========== SEED / NONCE EXTRACTOR ==========
-  // Scan every response body for cryptographic seeds, nonces, game IDs.
-  // These are used by the casino's PRNG — collecting them enables sequence analysis.
-  var extractedSeeds = [];
+  // ============================================================
+  // GRID PARSER — finds RS[0].F or any boolean 5-col grid
+  // ============================================================
+  function parseGrid(body) {
+    if (!body || typeof body !== 'object') return null;
 
-  function extractSeedsFromBody(body, url) {
-    if (!body || typeof body !== 'object') return;
-
-    // First: extract the full RS response metadata (confirmed fields from screenshot)
-    // SB=3, CF=0, SW=0, AN=5, BS=1, AI=17397883
-    if (body.RS && Array.isArray(body.RS)) {
-      var meta = {
-        SB: body.SB,   // possibly: stake/bet
-        CF: body.CF,   // possibly: cashout factor
-        SW: body.SW,   // possibly: sweep/win
-        AN: body.AN,   // possibly: ante/number
-        BS: body.BS,   // possibly: base stake
-        AI: body.AI,   // GAME ID — critical for PRNG sequencing
-        UC: body.RS[0] ? body.RS[0].UC : null, // unknown counters
-        url: url,
-        timestamp: Date.now()
-      };
-      if (body.AI) { // AI appears to be the unique game round ID
-        extractedSeeds.push({ type: 'game_id', key: 'AI', value: body.AI, url: url, timestamp: Date.now() });
-        sendToContentScript('seed_extracted', { type: 'game_id', key: 'AI', value: body.AI, url: url });
+    // Primary: RS[0].F (confirmed 1xbet format)
+    try {
+      var rsArr = body.RS || body.rs;
+      if (Array.isArray(rsArr) && rsArr.length > 0) {
+        var rs0 = rsArr[0];
+        var f = rs0 && (rs0.F || rs0.f);
+        if (Array.isArray(f) && f.length >= 5) {
+          if (isValidGrid(f)) return f;
+        }
       }
-      sendToContentScript('rs_metadata_extracted', meta);
-    }
+    } catch(e) {}
 
-    // Generic seed/hash field scanner
-    var seedKeywords = ['seed', 'nonce', 'hash', 'salt', 'rng', 'prng', 'random', 'token', 'secret', 'key', 'hmac', 'sha'];
-    function scanObj(obj, depth) {
-      if (depth > 6 || !obj || typeof obj !== 'object' || Array.isArray(obj)) return;
+    // Deep search fallback
+    return deepSearchGrid(body, 0);
+  }
+
+  function isValidGrid(arr) {
+    if (!Array.isArray(arr) || arr.length < 5) return false;
+    var boolRows = 0;
+    for (var i = 0; i < arr.length; i++) {
+      var row = arr[i];
+      if (!Array.isArray(row) || row.length !== 5) return false;
+      var allBool = true;
+      for (var j = 0; j < row.length; j++) {
+        if (typeof row[j] !== 'boolean') { allBool = false; break; }
+      }
+      if (allBool) boolRows++;
+    }
+    return boolRows >= 5;
+  }
+
+  function deepSearchGrid(obj, depth) {
+    if (depth > 12 || !obj || typeof obj !== 'object') return null;
+    if (Array.isArray(obj)) {
+      if (isValidGrid(obj)) return obj;
+      for (var i = 0; i < obj.length; i++) {
+        var r = deepSearchGrid(obj[i], depth + 1);
+        if (r) return r;
+      }
+    } else {
+      var keys = Object.keys(obj);
+      for (var k = 0; k < keys.length; k++) {
+        var r2 = deepSearchGrid(obj[keys[k]], depth + 1);
+        if (r2) return r2;
+      }
+    }
+    return null;
+  }
+
+  // ============================================================
+  // SEED / CRYPTO FIELD EXTRACTOR
+  // ============================================================
+  var SEED_KEYS = [
+    'seed','nonce','hash','key','salt','AN','SB','BS','AI','RN','token',
+    'random','entropy','serverSeed','clientSeed','provablyFair','iv',
+    'signature','hmac','sha','md5'
+  ];
+
+  function extractSeeds(obj, url) {
+    if (!obj || typeof obj !== 'object') return null;
+    var found = {};
+    extractSeedsDeep(obj, found, 0);
+    if (Object.keys(found).length > 0) {
+      return { fields: found, url: url, ts: ts() };
+    }
+    return null;
+  }
+
+  function extractSeedsDeep(obj, found, depth) {
+    if (depth > 8 || !obj || typeof obj !== 'object') return;
+    if (Array.isArray(obj)) {
+      for (var i = 0; i < Math.min(obj.length, 20); i++) {
+        extractSeedsDeep(obj[i], found, depth + 1);
+      }
+    } else {
       var keys = Object.keys(obj);
       for (var k = 0; k < keys.length; k++) {
         var key = keys[k];
         var val = obj[key];
-        var keyL = key.toLowerCase();
-        var isSeedKey = false;
-        for (var s = 0; s < seedKeywords.length; s++) {
-          if (keyL.includes(seedKeywords[s])) { isSeedKey = true; break; }
+        var lk = key.toLowerCase();
+        for (var si = 0; si < SEED_KEYS.length; si++) {
+          if (lk.indexOf(SEED_KEYS[si].toLowerCase()) !== -1) {
+            if (typeof val === 'string' || typeof val === 'number') {
+              found[key] = val;
+            }
+          }
         }
-        if (isSeedKey && (typeof val === 'string' || typeof val === 'number')) {
-          var entry = { type: 'seed_field', key: key, value: val, url: url, timestamp: Date.now() };
-          extractedSeeds.push(entry);
-          sendToContentScript('seed_extracted', entry);
-          console.log('%c[WITCH SEED] Extracted seed field: ' + key + ' = ' + String(val).substring(0, 32),
-            'color: #ff88ff; font-weight: bold;');
+        if (val && typeof val === 'object') {
+          extractSeedsDeep(val, found, depth + 1);
         }
-        if (typeof val === 'object') scanObj(val, depth + 1);
       }
     }
-    scanObj(body, 0);
   }
 
-  // ========== RETROACTIVE SCAN ==========
-  // If the Play response was already captured before this system initialized,
-  // scan all stored responses now to find the grid.
-  function scanAllCapturedForGrid() {
-    if (capturedSolutionGrid) return; // already have it
-    console.log('%c[WITCH GRID] Retroactive scan — checking all captured responses for RS[0].F...',
-      'color: #ffff00; font-weight: bold;');
-    var all = MIMICK_SPY.capturedResponses || [];
-    for (var i = 0; i < all.length; i++) {
-      processResponseForSolutionGrid(all[i]);
-      if (capturedSolutionGrid) break;
-    }
-    if (!capturedSolutionGrid) {
-      console.log('%c[WITCH GRID] Retroactive scan: no grid found in ' + all.length + ' responses (need to click Play)',
-        'color: #ffaa00;');
-    }
-  }
-  // Run retroactive scan after a short delay
-  setTimeout(scanAllCapturedForGrid, 500);
+  // ============================================================
+  // RESPONSE PROCESSOR — runs on EVERY response
+  // ============================================================
+  function processResponse(resp) {
+    if (!resp) return;
+    var body = resp.body;
+    if (!body) return;
 
-  // Expose manual grid access on window for debugging
-  window.WITCH_GRID = {
-    getGrid: function() { return capturedSolutionGrid; },
-    clearGrid: function() { capturedSolutionGrid = null; },
-    scan: scanAllCapturedForGrid,
-    parse: parseSolutionGrid,
-    getSafeCell: function(rowIndex) {
-      if (!capturedSolutionGrid || rowIndex >= capturedSolutionGrid.length) return null;
-      var row = capturedSolutionGrid[rowIndex];
-      for (var i = 0; i < row.length; i++) {
-        if (row[i] === true) return i;
+    // Try to parse if string
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch(e) { return; }
+    }
+
+    // 1. Try to find grid
+    var grid = parseGrid(body);
+    if (grid) {
+      capturedGrid = grid;
+      gridSource = resp.url || 'unknown';
+      var totalGames = addGridToHistory(grid, { url: resp.url, ts: ts() });
+      var ft = getBestCellsFromFrequency();
+
+      console.log('%c[WITCH v11] ★★★ GRID FOUND — RS[0].F ★★★',
+        'color:#00ff00;font-weight:bold;font-size:16px;background:#002200;');
+      for (var ri = 0; ri < grid.length; ri++) {
+        var safeCells = [];
+        for (var ci = 0; ci < grid[ri].length; ci++) {
+          if (grid[ri][ci]) safeCells.push('Cell ' + (ci + 1));
+        }
+        console.log('%c[WITCH v11] Row ' + (ri + 1) + ': ' + (safeCells.length ? safeCells.join(', ') : 'NONE SAFE'),
+          'color:#00ffff;');
       }
-      return null;
-    },
-    // PRNG pattern learning API
-    getHistory: loadGridHistory,
-    getFrequencyTable: buildFrequencyTable,
-    getRecommendedCell: getRecommendedCell,
-    clearHistory: function() {
-      localStorage.removeItem(GRID_HISTORY_KEY);
-      console.log('%c[WITCH PRNG] History cleared.', 'color: #ff8888;');
-    },
-    getSeeds: function() { return extractedSeeds; },
-    broadcastFrequency: function() {
-      var ft = buildFrequencyTable();
-      var h = loadGridHistory();
-      sendToContentScript('rs_metadata_extracted', { broadcastOnly: true, totalGames: h.totalGames });
-      if (ft) sendToContentScript('solution_grid_captured', {
-        grid: null, source: 'broadcast', timestamp: new Date().toISOString(),
-        rowCount: 0, totalGames: ft.totalGames, frequencyTable: ft.freqTable
-      });
-      return ft;
-    }
-  };
 
-  // On init, broadcast existing frequency table so the webapp shows history immediately
-  setTimeout(function() {
-    var ft = buildFrequencyTable();
-    var h = loadGridHistory();
-    if (ft && ft.totalGames > 0) {
-      console.log('%c[WITCH PRNG] Broadcasting existing history (' + ft.totalGames + ' games) to webapp...',
-        'color: #88ff88; font-weight: bold;');
-      sendToContentScript('solution_grid_captured', {
-        grid: null, source: 'init_broadcast', timestamp: new Date().toISOString(),
-        rowCount: 0, totalGames: ft.totalGames, frequencyTable: ft.freqTable
+      emit('grid_captured', {
+        grid: grid,
+        source: resp.url,
+        totalGames: totalGames,
+        frequency: ft
       });
     }
-  }, 1500);
-  console.log('%c[WITCH GRID] Grid capture system ready. window.WITCH_GRID exposed for debugging.',
-    'color: #00ff88; font-weight: bold;');
 
-  // ========== RACING ATTACK AUTO-CLICK SYSTEM ==========
-  // Based on working witch-extension-v4.3-FIXED logic
-  let racingAttackActive = false;
-  let racingAttackInterval = null;
-  let autoPlayEnabled = false;
-  let totalRowsClicked = 0;
-  let successfulRows = 0;
-  let lastCellCount = 0;
-  let lastRowClicked = -1;
-  let gameEndedMaster = false;
-  let pendingClickTimeouts = [];
+    // 2. Extract seeds/crypto
+    var seeds = extractSeeds(body, resp.url);
+    if (seeds) {
+      seedHistory.push(seeds);
+      if (seedHistory.length > 100) seedHistory = seedHistory.slice(-100);
+      emit('seeds_extracted', seeds);
 
-  function isUnrevealedCell(cell) {
-    const classList = cell.classList.toString().toLowerCase();
-    // Check for revealed cell states (poison/lose or wine/win)
-    const hasPoison = classList.includes('poison') || classList.includes('w-lose');
-    const hasWine = classList.includes('wine') || classList.includes('w-win');
-    return !hasPoison && !hasWine; // Still unrevealed if neither
-  }
-
-  function isGameLost() {
-    const pageText = document.body.innerText || '';
-    return pageText.includes('Better luck next time') || 
-           pageText.includes('GAME LOSS') || 
-           pageText.includes('game is over') ||
-           pageText.includes('You lost');
-  }
-
-  function isRowActive() {
-    const pageText = document.body.innerText || '';
-    return pageText.includes('Choose a cell');
-  }
-
-  function findAllGameCells() {
-    // Use the same selector as the working extension
-    const cells = document.querySelectorAll('[class*="witch-game__box"]');
-    return Array.from(cells);
-  }
-
-  // Find the active row on the real 1xbet game (has yellow/gold border or highlighted)
-  function findActiveRowElement() {
-    // Look for rows with active indicator (yellow border, active class, etc.)
-    const selectors = [
-      '.witch-game__row--is-active',
-      '[class*="witch-game__row"][class*="active"]',
-      '[class*="row"][class*="active"]',
-      '[class*="row"][style*="border"]',
-      '[class*="row"][style*="yellow"]',
-      '[class*="row"][style*="gold"]'
-    ];
-    
-    for (const selector of selectors) {
-      const row = document.querySelector(selector);
-      if (row) return row;
+      // Run pattern analysis
+      analyzeSeeds();
     }
-    
-    // Fallback: find row that contains clickable/unrevealed cells
-    // On 1xbet, only the active row's cells are interactable
-    const allRows = document.querySelectorAll('[class*="witch-game__row"], [class*="row"]');
-    for (const row of allRows) {
-      const cells = row.querySelectorAll('[class*="witch-game__box"]');
-      if (cells.length > 0) {
-        const hasUnrevealed = Array.from(cells).some(cell => isUnrevealedCell(cell));
-        if (hasUnrevealed) return row;
+  }
+
+  // ============================================================
+  // SEED PATTERN ANALYSIS — find RNG patterns
+  // ============================================================
+  function analyzeSeeds() {
+    if (seedHistory.length < 2) return;
+    var analysis = {
+      totalSamples: seedHistory.length,
+      fieldNames: [],
+      patterns: [],
+      rngHints: []
+    };
+
+    // Collect field names seen
+    var fieldSeen = {};
+    for (var i = 0; i < seedHistory.length; i++) {
+      var fields = seedHistory[i].fields;
+      for (var k in fields) {
+        fieldSeen[k] = true;
       }
     }
-    
+    analysis.fieldNames = Object.keys(fieldSeen);
+
+    // Check numeric sequences — look for linear PRNG (LCG)
+    for (var fk in fieldSeen) {
+      var vals = [];
+      for (var si = 0; si < seedHistory.length; si++) {
+        var v = seedHistory[si].fields[fk];
+        if (typeof v === 'number') vals.push(v);
+        else if (typeof v === 'string' && /^\d+$/.test(v)) vals.push(parseInt(v, 10));
+      }
+      if (vals.length >= 3) {
+        // Check for arithmetic sequence (LCG additive)
+        var diffs = [];
+        for (var di = 1; di < vals.length; di++) {
+          diffs.push(vals[di] - vals[di - 1]);
+        }
+        var allSameDiff = diffs.every(function(d) { return d === diffs[0]; });
+        if (allSameDiff && diffs[0] !== 0) {
+          analysis.patterns.push({
+            field: fk,
+            type: 'LINEAR_SEQUENCE',
+            increment: diffs[0],
+            values: vals.slice(-5),
+            nextPredicted: vals[vals.length - 1] + diffs[0],
+            confidence: 'HIGH'
+          });
+        }
+
+        // Check for modular pattern
+        if (vals.length >= 5) {
+          var mod = detectModulus(vals);
+          if (mod) {
+            analysis.patterns.push({
+              field: fk,
+              type: 'LCG_MODULUS',
+              modulus: mod,
+              confidence: 'MEDIUM'
+            });
+          }
+        }
+      }
+    }
+
+    // Hash analysis — check if any values look like hex hashes
+    for (var fk2 in fieldSeen) {
+      var hexVals = [];
+      for (var si2 = 0; si2 < seedHistory.length; si2++) {
+        var v2 = seedHistory[si2].fields[fk2];
+        if (typeof v2 === 'string' && /^[0-9a-f]{8,}$/i.test(v2)) {
+          hexVals.push(v2);
+        }
+      }
+      if (hexVals.length >= 2) {
+        analysis.rngHints.push({
+          field: fk2,
+          type: 'HEX_HASH',
+          length: hexVals[0].length,
+          sample: hexVals[0].substring(0, 16) + '...',
+          count: hexVals.length,
+          note: hexVals[0].length === 64 ? 'SHA-256 likely' :
+                hexVals[0].length === 32 ? 'MD5 or SHA-128 likely' :
+                hexVals[0].length === 40 ? 'SHA-1 likely' : 'Unknown hash',
+          consecutive: hexVals.slice(-3)
+        });
+      }
+    }
+
+    if (analysis.patterns.length > 0 || analysis.rngHints.length > 0) {
+      emit('rng_analysis', analysis);
+    }
+  }
+
+  function detectModulus(vals) {
+    // Try common moduli
+    var mods = [256, 512, 1024, 2048, 4096, 65536, 1000000, 2147483648];
+    for (var m = 0; m < mods.length; m++) {
+      var mod = mods[m];
+      var residuals = vals.map(function(v) { return v % mod; });
+      if (residuals.every(function(v) { return v < mod; }) &&
+          Math.max.apply(null, residuals) > mod * 0.1) {
+        return mod;
+      }
+    }
     return null;
   }
 
-  function findActiveRowCells() {
-    const activeRow = findActiveRowElement();
-    if (activeRow) {
-      const cells = activeRow.querySelectorAll('[class*="witch-game__box"]');
-      return Array.from(cells);
-    }
-    // Fallback to all cells (for real 1xbet where only active row cells are shown)
-    return findAllGameCells();
-  }
+  // ============================================================
+  // SERVER PROBING — replay requests with varied params
+  // ============================================================
+  window.__witch_probe = function(probeConfig) {
+    // Called from content.js to probe the server
+    // probeConfig: { url, method, body, headers, probeId }
+    var probeId = probeConfig.probeId || ('probe_' + Date.now());
+    var originalFetch = window.__witch_original_fetch || fetch;
 
-  function stopRacingAttack() {
-    gameEndedMaster = true;
-    
-    // Cancel ALL pending timeouts
-    pendingClickTimeouts.forEach(id => clearTimeout(id));
-    pendingClickTimeouts = [];
-    
-    if (racingAttackInterval) {
-      clearInterval(racingAttackInterval);
-      racingAttackInterval = null;
-    }
-    racingAttackActive = false;
-    console.log(`%c[WITCH AUTO] Racing attack STOPPED - Final: ${successfulRows}/${totalRowsClicked} rows`, 'color: #ff6600; font-weight: bold;');
-    sendToContentScript('auto_click_stopped', { totalRows: totalRowsClicked, successful: successfulRows });
-  }
-
-  function performRacingAttack() {
-    if (racingAttackActive) return;
-    racingAttackActive = true;
-    gameEndedMaster = false;
-    totalRowsClicked = 0;
-    successfulRows = 0;
-    lastCellCount = 0;
-    lastRowClicked = -1;
-    pendingClickTimeouts = [];
-
-    console.log('%c[WITCH AUTO] ★ STARTED — waiting up to 3s for RS[0].F grid before clicking ANY cell...',
-      'color: #ffff00; font-weight: bold; font-size: 16px; background: #220022;');
-    sendToContentScript('auto_click_started', {});
-
-    // ===== PHASE 1: WAIT FOR GRID =====
-    // Do NOT click anything yet. Wait until capturedSolutionGrid is populated
-    // (the Play HTTP response with RS[0].F arrives in ~200-800ms)
-    const gridWaitStart = Date.now();
-    const MAX_GRID_WAIT_MS = 3000; // wait up to 3 seconds
-
-    const gridWaitInterval = setInterval(function() {
-      if (gameEndedMaster) {
-        clearInterval(gridWaitInterval);
-        racingAttackActive = false;
-        return;
+    originalFetch(probeConfig.url, {
+      method: probeConfig.method || 'GET',
+      headers: probeConfig.headers || {},
+      body: probeConfig.body ? JSON.stringify(probeConfig.body) : undefined
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(text) {
+      var parsed = null;
+      try { parsed = JSON.parse(text); } catch(e) {}
+      emit('probe_result', {
+        probeId: probeId,
+        url: probeConfig.url,
+        status: 'ok',
+        rawText: text.substring(0, 3000),
+        parsed: parsed
+      });
+      if (parsed) {
+        processResponse({ url: probeConfig.url, body: parsed });
       }
+    })
+    .catch(function(err) {
+      emit('probe_result', {
+        probeId: probeId,
+        url: probeConfig.url,
+        status: 'error',
+        error: err.message
+      });
+    });
+  };
 
-      const elapsed = Date.now() - gridWaitStart;
+  // ============================================================
+  // FETCH HOOK — passive interception
+  // ============================================================
+  var originalFetch = window.fetch;
+  window.__witch_original_fetch = originalFetch;
 
-      if (capturedSolutionGrid) {
-        clearInterval(gridWaitInterval);
-        console.log(
-          '%c[WITCH AUTO] ★★★ RS[0].F GRID RECEIVED in ' + elapsed + 'ms — SMART MODE ACTIVE ★★★',
-          'color: #00ff00; font-weight: bold; font-size: 18px; background: #003300;'
-        );
-        // Log the full grid one more time for confirmation
-        for (var r = 0; r < capturedSolutionGrid.length; r++) {
-          var safeC = [];
-          for (var c = 0; c < capturedSolutionGrid[r].length; c++) {
-            if (capturedSolutionGrid[r][c]) safeC.push(c + 1);
-          }
-          console.log('%c[WITCH AUTO] Row ' + (r + 1) + ' → click cell ' + safeC[0] + ' (safe: ' + safeC.join(',') + ')',
-            'color: #00ffff;');
-        }
-        startRowLoop(); // Begin clicking rows with the known grid
-      } else if (elapsed >= MAX_GRID_WAIT_MS) {
-        clearInterval(gridWaitInterval);
-        console.log(
-          '%c[WITCH AUTO] ⚠ Grid wait TIMEOUT (' + MAX_GRID_WAIT_MS + 'ms) — no RS[0].F found. Random fallback.',
-          'color: #ff6600; font-weight: bold;'
-        );
-        sendToContentScript('auto_grid_timeout', { elapsed: elapsed });
-        startRowLoop(); // Start without grid (random mode)
-      } else {
-        // Still waiting — check 10x per second
-        if (elapsed % 500 < 105) {
-          console.log('%c[WITCH AUTO] Waiting for grid... ' + elapsed + 'ms (DO NOT CLICK YET)',
-            'color: #888888;');
-        }
+  window.fetch = function(input, init) {
+    var url = typeof input === 'string' ? input :
+              (input && input.url) ? input.url : 'unknown';
+    var method = (init && init.method) || 'GET';
+    var reqId = 'f_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+
+    var reqData = {
+      id: reqId, type: 'fetch', url: url, method: method, ts: ts(),
+      headers: (init && init.headers) ? extractHeaders(init.headers) : {},
+      body: parseBody(init && init.body)
+    };
+    allRequests.push(reqData);
+    if (allRequests.length > 500) allRequests = allRequests.slice(-500);
+    emit('request', reqData);
+
+    var result = originalFetch.apply(this, arguments);
+    result.then(function(response) {
+      var respClone = response.clone();
+      respClone.text().then(function(text) {
+        var parsed = null;
+        try { parsed = JSON.parse(text); } catch(e) {}
+        var respData = {
+          id: reqId, type: 'fetch_response', url: url,
+          status: response.status, ts: ts(),
+          body: parsed || text, rawText: text.substring(0, 5000)
+        };
+        allResponses.push(respData);
+        if (allResponses.length > 500) allResponses = allResponses.slice(-500);
+        emit('response', respData);
+        processResponse(respData);
+      }).catch(function() {});
+    }).catch(function() {});
+
+    return result;
+  };
+
+  // ============================================================
+  // XHR HOOK — passive interception
+  // ============================================================
+  var OrigXHROpen = XMLHttpRequest.prototype.open;
+  var OrigXHRSend = XMLHttpRequest.prototype.send;
+  var OrigXHRSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+
+  XMLHttpRequest.prototype.open = function(method, url) {
+    this._witch = {
+      id: 'x_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      method: method, url: url, headers: {}, ts: ts()
+    };
+    return OrigXHROpen.apply(this, arguments);
+  };
+
+  XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
+    if (this._witch) this._witch.headers[name] = value;
+    return OrigXHRSetHeader.apply(this, arguments);
+  };
+
+  XMLHttpRequest.prototype.send = function(body) {
+    if (this._witch) {
+      var spy = this._witch;
+      spy.body = parseBody(body);
+      allRequests.push({ type: 'xhr', id: spy.id, url: spy.url, method: spy.method, ts: spy.ts, body: spy.body });
+      emit('request', { type: 'xhr', id: spy.id, url: spy.url, method: spy.method });
+
+      var self = this;
+      self.addEventListener('load', function() {
+        var text = self.responseText || '';
+        var parsed = null;
+        try { parsed = JSON.parse(text); } catch(e) {}
+        var respData = {
+          id: spy.id, type: 'xhr_response', url: spy.url,
+          status: self.status, ts: ts(),
+          body: parsed || text, rawText: text.substring(0, 5000)
+        };
+        allResponses.push(respData);
+        if (allResponses.length > 500) allResponses = allResponses.slice(-500);
+        emit('response', respData);
+        processResponse(respData);
+      });
+    }
+    return OrigXHRSend.apply(this, arguments);
+  };
+
+  // ============================================================
+  // WEBSOCKET HOOK — passive interception
+  // ============================================================
+  var OrigWS = window.WebSocket;
+  window.WebSocket = function(url, protocols) {
+    var wsId = 'ws_' + Date.now();
+    var ws = protocols ? new OrigWS(url, protocols) : new OrigWS(url);
+    emit('ws_opened', { id: wsId, url: url, ts: ts() });
+
+    var origSend = ws.send.bind(ws);
+    ws.send = function(data) {
+      var decoded = decodeWsData(data);
+      wsMessages.push({ dir: 'out', id: wsId, data: decoded, ts: ts() });
+      emit('ws_message', { dir: 'out', id: wsId, url: url, data: decoded });
+      return origSend(data);
+    };
+
+    ws.addEventListener('message', function(evt) {
+      var decoded = decodeWsData(evt.data);
+      wsMessages.push({ dir: 'in', id: wsId, data: decoded, ts: ts() });
+      emit('ws_message', { dir: 'in', id: wsId, url: url, data: decoded });
+      // Scan WebSocket messages for grid data too
+      if (decoded && typeof decoded === 'object') {
+        processResponse({ url: url + '[WS]', body: decoded });
+      } else if (typeof decoded === 'string') {
+        try {
+          var parsed = JSON.parse(decoded);
+          processResponse({ url: url + '[WS]', body: parsed });
+        } catch(e) {}
       }
-    }, 100);
+    });
 
-    // ===== PHASE 2: ROW LOOP (starts only after grid is ready or timed out) =====
-    function startRowLoop() {
-      racingAttackInterval = setInterval(function() {
-        if (gameEndedMaster) return;
+    return ws;
+  };
+  window.WebSocket.prototype = OrigWS.prototype;
+  window.WebSocket.CONNECTING = OrigWS.CONNECTING;
+  window.WebSocket.OPEN = OrigWS.OPEN;
+  window.WebSocket.CLOSING = OrigWS.CLOSING;
+  window.WebSocket.CLOSED = OrigWS.CLOSED;
 
-        const freshCells = findActiveRowCells();
-        const pageText = document.body.innerText || '';
-
-        // GAME END DETECTION
-        if (isGameLost()) {
-          gameEndedMaster = true;
-          console.log('%c[WITCH AUTO] GAME ENDED', 'color: #ff0000; font-weight: bold;');
-          pendingClickTimeouts.forEach(function(id) { clearTimeout(id); });
-          pendingClickTimeouts = [];
-          clearInterval(racingAttackInterval);
-          racingAttackInterval = null;
-          racingAttackActive = false;
-          sendToContentScript('auto_click_stopped', { totalRows: totalRowsClicked, successful: successfulRows });
-          return;
-        }
-
-        // Only proceed when a row is active
-        const rowActive = pageText.includes('Choose a cell') && freshCells.length > 0;
-        if (!rowActive) return;
-
-        const unrevealed = freshCells.filter(function(cell) { return isUnrevealedCell(cell); });
-        if (unrevealed.length === 0) return;
-
-        const currentCellCount = freshCells.length;
-        const isNewRow = currentCellCount !== lastCellCount || lastRowClicked === -1;
-        if (!isNewRow) return;
-
-        // ===== NEW ROW DETECTED =====
-        totalRowsClicked++;
-        lastRowClicked = totalRowsClicked;
-        lastCellCount = currentCellCount;
-
-        const rowIndex = totalRowsClicked - 1; // 0-based grid index
-
-        // ===== USE getRecommendedCell() — covers live grid, frequency model, random =====
-        var rec = getRecommendedCell(rowIndex);
-        var targetIdx = rec.cellIndex;
-
-        var modeLabel = rec.method === 'live_grid'
-          ? '★ LIVE GRID'
-          : rec.method === 'frequency'
-            ? ('FREQ[' + rec.totalGames + ' games, ' + (rec.safeRate * 100).toFixed(0) + '% safe]')
-            : 'RANDOM';
-
-        console.log(
-          '%c[WITCH AUTO] ' + modeLabel + ' Row ' + totalRowsClicked + ': click cell ' + (targetIdx + 1),
-          'color: #00ff00; font-weight: bold; font-size: 13px; background: #002200;'
-        );
-
-        const tid = setTimeout(function() {
-          if (gameEndedMaster) return;
-          const rowCells = findActiveRowCells();
-          let target = targetIdx < rowCells.length ? rowCells[targetIdx] : (unrevealed[0] || null);
-          if (target) {
-            target.click();
-            sendToContentScript('auto_cell_clicked', {
-              row: totalRowsClicked,
-              clickNum: 1,
-              method: rec.method,
-              cellIndex: targetIdx,
-              safeRate: rec.safeRate || null,
-              totalGames: rec.totalGames,
-              timestamp: getTimestamp()
-            });
-          }
-        }, 80);
-        pendingClickTimeouts.push(tid);
-
-        // Reset row detection after 2s
-        const resetTid = setTimeout(function() {
-          if (!gameEndedMaster) lastCellCount = 0;
-        }, 2000);
-        pendingClickTimeouts.push(resetTid);
-
-      }, 250); // poll every 250ms (faster than before = less lag per row)
-
-      // Safety stop after 2 minutes
-      setTimeout(function() {
-        if (!gameEndedMaster) {
-          gameEndedMaster = true;
-          pendingClickTimeouts.forEach(function(id) { clearTimeout(id); });
-          stopRacingAttack();
-        }
-      }, 120000);
+  // ============================================================
+  // HELPERS
+  // ============================================================
+  function parseBody(body) {
+    if (!body) return null;
+    if (typeof body === 'string') {
+      try { return JSON.parse(body); } catch(e) { return body.substring(0, 500); }
     }
+    return '[Binary]';
   }
 
-  function startAutoClickIfGameActive() {
-    if (!autoPlayEnabled) return;
-    if (racingAttackActive) return;
-    
-    const cells = findAllGameCells();
-    const pageText = document.body.innerText || '';
-    
-    // Game is active when: cells exist AND page shows "Choose a cell"
-    const isGameRunning = cells.length > 0 && pageText.includes('Choose a cell');
-    
-    if (isGameRunning) {
-      console.log('%c[WITCH AUTO] Game active detected - starting racing attack!', 'color: #ffff00; font-weight: bold;');
-      performRacingAttack();
-    }
+  function extractHeaders(h) {
+    if (!h) return {};
+    var out = {};
+    try {
+      if (h instanceof Headers) {
+        h.forEach(function(v, k) { out[k] = v; });
+      } else if (typeof h === 'object') {
+        out = Object.assign({}, h);
+      }
+    } catch(e) {}
+    return out;
   }
 
-  window.addEventListener('message', function(event) {
-    if (event.source !== window) return;
-    if (!event.data || event.data.source !== 'witch-content-script') return;
-    
-    const { command, data } = event.data;
-    
-    switch (command) {
-      case 'set_auto_play':
-        autoPlayEnabled = data.enabled;
-        console.log(`%c[WITCH AUTO] Auto-play ${autoPlayEnabled ? 'ENABLED' : 'DISABLED'}`, 
-                    `color: ${autoPlayEnabled ? '#00ff00' : '#ff0000'}; font-weight: bold;`);
-        
-        if (autoPlayEnabled) {
-          gameEndedMaster = false;
-          startAutoClickIfGameActive();
-        } else {
-          stopRacingAttack();
-        }
-        break;
-        
-      case 'start_play':
-        if (autoPlayEnabled) {
-          gameEndedMaster = false;
-          console.log('%c[WITCH AUTO] Start play command received - initiating racing attack', 'color: #00ffff;');
-          setTimeout(() => performRacingAttack(), 500);
-        }
-        break;
-        
-      case 'stop_play':
-        stopRacingAttack();
-        break;
+  function decodeWsData(data) {
+    if (typeof data === 'string') {
+      try { return JSON.parse(data); } catch(e) { return data; }
+    }
+    if (data instanceof ArrayBuffer) {
+      try {
+        var text = new TextDecoder('utf-8').decode(data);
+        try { return JSON.parse(text); } catch(e) { return text; }
+      } catch(e) {}
+      return '[Binary ' + data.byteLength + ' bytes]';
+    }
+    return '[Unknown]';
+  }
+
+  // ============================================================
+  // API EXPOSED TO CONTENT.JS
+  // ============================================================
+  window.__witch_api = {
+    getGrid: function() { return capturedGrid; },
+    getGridSource: function() { return gridSource; },
+    getRequests: function() { return allRequests.slice(-50); },
+    getResponses: function() { return allResponses.slice(-50); },
+    getWsMessages: function() { return wsMessages.slice(-50); },
+    getSeedHistory: function() { return seedHistory.slice(-50); },
+    getFrequency: function() { return getBestCellsFromFrequency(); },
+    clearHistory: function() {
+      try { localStorage.removeItem(GRID_HISTORY_KEY); } catch(e) {}
+      seedHistory = [];
+      capturedGrid = null;
+      emit('history_cleared', {});
+    },
+    getStats: function() {
+      var h = loadHistory();
+      return { totalGames: h.totalGames, requestsCaptured: allRequests.length,
+               responsesCaptured: allResponses.length, wsCaptured: wsMessages.length,
+               hasLiveGrid: !!capturedGrid };
+    }
+  };
+
+  // ============================================================
+  // HANDLE COMMANDS FROM CONTENT.JS
+  // ============================================================
+  window.addEventListener('message', function(evt) {
+    if (!evt.data || evt.data.source !== 'witch-content-v11') return;
+    var cmd = evt.data.cmd;
+
+    if (cmd === 'get_state') {
+      emit('state', {
+        grid: capturedGrid,
+        gridSource: gridSource,
+        frequency: getBestCellsFromFrequency(),
+        stats: window.__witch_api.getStats(),
+        recentRequests: allRequests.slice(-20),
+        recentResponses: allResponses.slice(-10),
+        seedHistory: seedHistory.slice(-10)
+      });
+    } else if (cmd === 'probe') {
+      window.__witch_probe(evt.data.config);
+    } else if (cmd === 'clear_history') {
+      window.__witch_api.clearHistory();
+    } else if (cmd === 'replay_request') {
+      // Replay a specific captured request
+      var req = evt.data.req;
+      if (req) window.__witch_probe({ url: req.url, method: req.method, body: req.body, probeId: 'replay_' + req.id });
     }
   });
 
-  let autoStartCheckInterval = setInterval(() => {
-    if (autoPlayEnabled && !racingAttackActive) {
-      startAutoClickIfGameActive();
-    }
-  }, 1000);
+  // ============================================================
+  // INIT
+  // ============================================================
+  emit('ready', {
+    version: '11.0',
+    captureActive: true,
+    autoClickDisabled: true,
+    historyCount: (function() {
+      var h = loadHistory(); return h.totalGames;
+    })()
+  });
 
-  window.WITCH_AUTO = {
-    startAttack: performRacingAttack,
-    stopAttack: stopRacingAttack,
-    setAutoPlay: (enabled) => { 
-      autoPlayEnabled = enabled; 
-      if (enabled) startAutoClickIfGameActive();
-      else stopRacingAttack();
-    },
-    isActive: () => racingAttackActive,
-    isAutoPlayEnabled: () => autoPlayEnabled
-  };
+  // Emit initial frequency table
+  var initFt = getBestCellsFromFrequency();
+  if (initFt) {
+    emit('frequency_ready', initFt);
+  }
 
-  console.log('%c[WITCH AUTO] Racing Attack System Ready', 'color: lime; font-weight: bold;');
-  
-  // AUTO-START racing attack when game is actually active (same as working extension)
-  let racingAutoStarted = false;
-  
-  const detectGameActiveInterval = setInterval(() => {
-    if (racingAutoStarted) return;
-    if (racingAttackActive) return;
-    
-    const activeRowCells = findActiveRowCells();
-    const pageText = document.body.innerText || '';
-    
-    // Game is active when: cells exist AND page shows "Choose a cell"
-    const isGameRunning = activeRowCells.length > 0 && pageText.includes('Choose a cell');
-    
-    if (isGameRunning) {
-      racingAutoStarted = true;
-      autoPlayEnabled = true;
-      console.log('%c[WITCH AUTO] GAME RUNNING DETECTED!', 'color: #ffff00; font-weight: bold; font-size: 14px;');
-      console.log(`%c[WITCH AUTO] Found ${activeRowCells.length} cells in active row`, 'color: #00ffff;');
-      performRacingAttack();
-      clearInterval(detectGameActiveInterval);
-    }
-  }, 500);
-  
-  // ========== END RACING ATTACK SYSTEM ==========
+  console.log('%c[WITCH v11] Passive Analyzer loaded — capturing all requests (no auto-click)',
+    'color:#00ffff;font-weight:bold;font-size:14px;background:#001a2e;padding:4px 8px;');
+
 })();

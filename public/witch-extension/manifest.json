@@ -1,15 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Witch Game Analyzer Pro",
-  "version": "10.0",
-  "description": "Witch Analyzer v10 — PRNG pattern learning, frequency heatmap, seed extraction, RS[0].F post-game collector",
+  "version": "11.0",
+  "description": "v11 — Passive packet capture from page load. Shows safe cell overlay. Zero auto-clicking. Server probing tools.",
   "permissions": [
     "activeTab",
     "storage",
     "alarms",
-    "offscreen",
-    "webRequest",
-    "cookies",
     "tabs"
   ],
   "host_permissions": [
@@ -21,7 +18,6 @@
     "*://*.replit.dev/*",
     "*://*.replit.app/*",
     "*://*.repl.co/*",
-    "*://*.id.repl.co/*",
     "<all_urls>"
   ],
   "action": {
@@ -56,7 +52,12 @@
   "web_accessible_resources": [
     {
       "resources": ["injected.js"],
-      "matches": ["*://*.1xbet.com/*", "*://so.1xbet.com/*", "*://*.1x-bet.mobi/*", "*://1x-bet.mobi/*"]
+      "matches": [
+        "*://*.1xbet.com/*",
+        "*://so.1xbet.com/*",
+        "*://*.1x-bet.mobi/*",
+        "*://1x-bet.mobi/*"
+      ]
     }
   ]
 }

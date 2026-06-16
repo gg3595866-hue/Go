@@ -714,9 +714,9 @@ export default function WitchAnalyzerPage() {
   return (
     <div className="container mx-auto p-4 max-w-7xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-2">Witch Analyzer Pro</h1>
+        <h1 className="text-2xl font-bold mb-2">Witch Analyzer Pro <span className="text-sm font-normal text-green-400 ml-2">v11.0 — Passive Mode</span></h1>
         <p className="text-muted-foreground">
-          Advanced game monitoring with Mimick Spy - Full network capture and replay
+          Passive packet capture from page load · Safe cell overlay · RNG seed analysis · Server probing tools · Zero auto-clicking
         </p>
       </div>
 
@@ -829,7 +829,7 @@ export default function WitchAnalyzerPage() {
                   The game sends the full 10×5 grid only <strong>after</strong> each game ends (provably-fair reveal).
                   The extension automatically saves every post-game RS[0].F grid to localStorage.
                   After enough games, if the casino PRNG has any bias, it will show up here as cells with
-                  higher-than-expected safe rates. Auto-click uses this data to predict the safest cell per row.
+                  higher-than-expected safe rates. The overlay shows the statistically safest cell per row.
                 </div>
               </div>
             </CardContent>
@@ -919,7 +919,7 @@ export default function WitchAnalyzerPage() {
                   <div className="mt-3 pt-3 border-t flex flex-wrap gap-3 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-green-500/30"></span> Above expected (PRNG bias)</span>
                     <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-500/30"></span> Below expected</span>
-                    <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded ring-1 ring-green-500"></span> Auto-click target</span>
+                    <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded ring-1 ring-green-500"></span> Best cell (overlay recommendation)</span>
                   </div>
                 </div>
               ) : (
@@ -931,8 +931,7 @@ export default function WitchAnalyzerPage() {
                     reveal is automatically saved. Collect 10+ games to see statistical patterns.
                   </p>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Even with 0 pattern data, Auto-Click still uses random selection as fallback.
-                    As data grows, it switches to frequency-based prediction automatically.
+                    As data grows, the overlay switches to frequency-based cell recommendations automatically.
                   </p>
                 </div>
               )}
@@ -1738,17 +1737,9 @@ export default function WitchAnalyzerPage() {
                 )}
               </Button>
 
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={autoPlay}
-                  onCheckedChange={(checked) => {
-                    setAutoPlay(checked);
-                    sendToExtension({ action: "set_auto_play", enabled: checked });
-                  }}
-                  disabled={!isConnected}
-                  data-testid="switch-auto-play"
-                />
-                <span className="text-sm">Auto Play</span>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-500/10 border border-green-500/30">
+                <CheckCircle className="w-4 h-4 text-green-500" />
+                <span className="text-sm text-green-400 font-medium">Passive Mode — No Auto-Click</span>
               </div>
             </div>
           </CardContent>
@@ -1756,12 +1747,12 @@ export default function WitchAnalyzerPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Extension</CardTitle>
+            <CardTitle className="text-lg">Extension v11.0</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Download v8.0 with Play response tagging and cell timing probe.
+                Passive packet capture from page load. Overlay shows safe cells. Zero auto-clicking. Advanced server probing tools.
               </p>
               <Button
                 onClick={handleDownloadExtension}
@@ -1769,16 +1760,17 @@ export default function WitchAnalyzerPage() {
                 data-testid="button-download-extension"
               >
                 <Download className="w-4 h-4" />
-                Download Extension (v8.0)
+                Download Extension (v11.0)
               </Button>
               <div className="text-xs text-muted-foreground">
-                <p className="font-medium mb-1">New in v8.0:</p>
+                <p className="font-medium mb-1 text-green-400">New in v11.0:</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li>Play button response tagged automatically</li>
-                  <li>Cell click → result timing measurement</li>
-                  <li>Timing attack: detects safe/poison speed difference</li>
-                  <li>Full network request/response capture</li>
-                  <li>Session recording and replay</li>
+                  <li>✅ Captures ALL packets before Play button</li>
+                  <li>✅ Floating overlay with safe cell grid on game page</li>
+                  <li>✅ Statistical frequency heatmap (historical)</li>
+                  <li>✅ Server probe tool — replay/vary any request</li>
+                  <li>✅ RNG seed pattern analysis (LCG, hash detection)</li>
+                  <li>🚫 Zero auto-clicking — purely passive</li>
                 </ul>
               </div>
             </div>

@@ -1,0 +1,1 @@
+- [Witch Extension Architecture](witch-extension.md) — v11 is passive-only; no auto-click; captures from page load via injected.js; overlay in content.js shows safe cells

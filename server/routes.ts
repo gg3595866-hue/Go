@@ -2454,7 +2454,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", "attachment; filename=witch-extension-v10.0.zip");
+    res.setHeader("Content-Disposition", "attachment; filename=witch-extension-v11.0.zip");
 
     const archive = archiver("zip", { zlib: { level: 9 } });
     
@@ -2512,6 +2512,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         if (isExtension) {
+          // v11 passive extension message types
+          if (message.type === "grid_captured" && message.data) {
+            console.log("[Witch WS v11] Grid captured from extension, rows:", message.data.grid?.length);
+          }
+          if (message.type === "seeds_extracted" && message.data) {
+            console.log("[Witch WS v11] Seeds extracted:", Object.keys(message.data.fields || {}).join(', '));
+          }
+          if (message.type === "rng_analysis") {
+            console.log("[Witch WS v11] RNG analysis:", message.data?.patterns?.length, "patterns");
+          }
+          if (message.type === "hello") {
+            console.log("[Witch WS v11] Extension hello — version:", message.version, "totalGames:", message.totalGames);
+            ws.send(JSON.stringify({ type: "pong", version: "server-v11" }));
+          }
+          if (message.type === "probe_result") {
+            console.log("[Witch WS v11] Probe result from extension:", message.data?.url);
+          }
+
+          // Legacy v10 types
           if (message.type === "mimick_capture") {
             mimickSpyStorage.captures.push({
               captureType: message.captureType,
@@ -2533,6 +2552,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log("[Mimick WS] Session stored:", session.id);
           }
           
+          // Forward ALL extension messages to webapp clients
           witchClients.forEach(client => {
             if (client.readyState === WebSocket.OPEN) {
               client.send(JSON.stringify(message));

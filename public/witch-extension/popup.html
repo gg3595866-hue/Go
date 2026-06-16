@@ -2,146 +2,400 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Witch Analyzer</title>
+  <title>Witch Analyzer Pro</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      width: 320px;
-      padding: 16px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      line-height: 1.5;
-      background: #1a1a2e;
-      color: #eee;
-      margin: 0;
-    }
-    h1 {
-      font-size: 18px;
-      margin: 0 0 16px 0;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px;
-      border-radius: 8px;
-      background: #2a2a4a;
-      margin-bottom: 16px;
-    }
-    .status-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .status-dot.connected {
-      background: #4ade80;
-      box-shadow: 0 0 8px #4ade80;
-    }
-    .status-dot.disconnected {
-      background: #f87171;
-      box-shadow: 0 0 8px #f87171;
-    }
-    .status-dot.connecting {
-      background: #fbbf24;
-      box-shadow: 0 0 8px #fbbf24;
-      animation: pulse 1s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-    .status-text {
-      font-weight: 500;
-    }
-    label {
-      display: block;
+      width: 360px;
+      min-height: 400px;
+      background: #0d0d1a;
+      color: #e0e0ff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
       font-size: 12px;
-      color: #aaa;
-      margin-bottom: 4px;
     }
-    input {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid #3a3a5a;
+    .header {
+      background: linear-gradient(135deg, #1a1a3a, #0d0d2e);
+      padding: 12px 16px;
+      border-bottom: 1px solid #2a2a5a;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header h1 { font-size: 15px; color: #a78bfa; font-weight: 700; }
+    .header .version { font-size: 10px; color: #555; margin-left: auto; }
+    .no-autoclick {
+      background: #0a1a0a;
+      border: 1px solid #1a4a1a;
       border-radius: 6px;
-      background: #2a2a4a;
-      color: #fff;
-      font-size: 14px;
-      margin-bottom: 12px;
+      padding: 5px 10px;
+      font-size: 10px;
+      color: #34d399;
+      margin: 8px 12px 0;
+      text-align: center;
     }
-    input:focus {
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid #2a2a5a;
+      background: #0d0d1a;
+      margin-top: 6px;
+    }
+    .tab {
+      flex: 1;
+      padding: 7px 4px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 10px;
+      color: #666;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab.active {
+      color: #a78bfa;
+      border-bottom-color: #a78bfa;
+      background: #13132a;
+    }
+    .tab:hover:not(.active) { color: #9ca3af; background: #111; }
+    .panel { display: none; padding: 10px 12px; }
+    .panel.active { display: block; }
+    .section {
+      background: #13132a;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: bold;
+      color: #a78bfa;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .badge {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .badge-green { background: #064e3b; color: #34d399; }
+    .badge-yellow { background: #451a03; color: #fbbf24; }
+    .badge-gray { background: #1f2937; color: #9ca3af; }
+    .badge-red { background: #450a0a; color: #f87171; }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 3px 0;
+      border-bottom: 1px solid #1a1a3a;
+      font-size: 11px;
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: #888; }
+    .stat-val { color: #e0e0ff; font-weight: 500; }
+    .stat-val.good { color: #34d399; }
+    .stat-val.warn { color: #fbbf24; }
+    .grid-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    .grid-table th {
+      color: #6366f1;
+      padding: 3px;
+      text-align: center;
+      font-size: 10px;
+      border-bottom: 1px solid #2a2a5a;
+    }
+    .grid-table td {
+      padding: 2px 3px;
+      text-align: center;
+      border: 1px solid #1a1a2e;
+      border-radius: 3px;
+    }
+    .cell-safe { background: #064e3b; color: #34d399; font-weight: bold; }
+    .cell-unsafe { background: #1f0a0a; color: #3a1010; }
+    .cell-freq-high { background: #064e3b; color: #34d399; font-weight: bold; }
+    .cell-freq-mid { background: #1a2e1a; color: #6ee7b7; }
+    .cell-freq-low { background: #1f1a0a; color: #92400e; }
+    .cell-empty { background: #111; color: #333; }
+    .row-label { color: #6366f1; font-size: 10px; font-weight: bold; width: 22px; }
+    input, textarea {
+      width: 100%;
+      background: #1a1a2e;
+      border: 1px solid #3a3a5a;
+      color: #e0e0ff;
+      padding: 5px 8px;
+      border-radius: 5px;
+      font-size: 11px;
+      margin-bottom: 6px;
+      resize: vertical;
+    }
+    input:focus, textarea:focus {
       outline: none;
       border-color: #6366f1;
-      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
     }
     button {
       width: 100%;
-      padding: 10px 16px;
+      padding: 7px 10px;
       border: none;
       border-radius: 6px;
-      font-size: 14px;
+      font-size: 11px;
       font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: background 0.2s;
     }
-    button.primary {
-      background: #6366f1;
-      color: white;
+    .btn-primary { background: #4f46e5; color: white; }
+    .btn-primary:hover { background: #4338ca; }
+    .btn-secondary { background: #2a2a4a; color: #ccc; margin-top: 5px; }
+    .btn-secondary:hover { background: #3a3a5a; }
+    .btn-danger { background: #7f1d1d; color: #fca5a5; margin-top: 5px; }
+    .btn-danger:hover { background: #991b1b; }
+    .btn-success { background: #064e3b; color: #34d399; margin-top: 5px; }
+    .btn-success:hover { background: #065f46; }
+    .log-box {
+      background: #080814;
+      border: 1px solid #2a2a4a;
+      border-radius: 5px;
+      padding: 6px;
+      font-size: 10px;
+      color: #a0a0cc;
+      max-height: 140px;
+      overflow-y: auto;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
     }
-    button.primary:hover {
-      background: #5558dd;
+    .log-entry { padding: 2px 0; border-bottom: 1px solid #1a1a2e; }
+    .log-entry:last-child { border-bottom: none; }
+    .log-time { color: #555; font-size: 9px; }
+    .log-url { color: #60a5fa; }
+    .log-status { color: #34d399; }
+    .log-warn { color: #fbbf24; }
+    .log-error { color: #f87171; }
+    .rng-pattern {
+      background: #0a1a0a;
+      border: 1px solid #1a3a1a;
+      border-radius: 5px;
+      padding: 5px 7px;
+      margin-bottom: 5px;
+      font-size: 10px;
     }
-    button.secondary {
-      background: #3a3a5a;
-      color: #fff;
-      margin-top: 8px;
+    .rng-field { color: #60a5fa; }
+    .rng-value { color: #34d399; font-weight: bold; }
+    .rng-note { color: #888; }
+    .probe-result {
+      background: #080814;
+      border: 1px solid #2a2a4a;
+      border-radius: 5px;
+      padding: 6px;
+      font-size: 10px;
+      color: #a0a0cc;
+      max-height: 120px;
+      overflow-y: auto;
+      margin-top: 6px;
+      white-space: pre-wrap;
+      word-break: break-all;
     }
-    button.secondary:hover {
-      background: #4a4a6a;
+    .server-url-row { display: flex; gap: 6px; margin-bottom: 6px; }
+    .server-url-row input { flex: 1; margin: 0; }
+    .server-url-row button { width: auto; padding: 5px 10px; flex-shrink: 0; }
+    .conn-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%; flex-shrink: 0;
     }
-    .info {
-      font-size: 12px;
-      color: #888;
-      margin-top: 16px;
-      padding-top: 16px;
-      border-top: 1px solid #3a3a5a;
-    }
-    .version {
-      font-size: 11px;
-      color: #666;
+    .conn-dot.connected { background: #34d399; box-shadow: 0 0 6px #34d399; }
+    .conn-dot.disconnected { background: #f87171; }
+    .conn-dot.connecting { background: #fbbf24; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .row-gap { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .empty-state {
+      color: #444;
       text-align: center;
-      margin-top: 12px;
+      padding: 16px;
+      font-size: 11px;
     }
+    #req-count { color: #60a5fa; }
+    #grid-count { color: #34d399; }
   </style>
 </head>
 <body>
-  <h1>Witch Analyzer</h1>
-  
-  <div class="status">
-    <div id="statusDot" class="status-dot disconnected"></div>
-    <span id="statusText" class="status-text">Disconnected</span>
+  <div class="header">
+    <span>🔮</span>
+    <h1>Witch Analyzer Pro</h1>
+    <span class="version">v11.0</span>
   </div>
-  
-  <label for="serverUrl">Server URL</label>
-  <input type="text" id="serverUrl" placeholder="https://your-repl.replit.app">
-  
-  <button id="connectBtn" class="primary">Connect</button>
-  <button id="reconnectBtn" class="secondary">Reconnect</button>
-  
-  <div class="info">
-    Enter your Witch Analyzer server URL and click Connect. 
-    The extension works on so.1xbet.com and 1x-bet.mobi.
+  <div class="no-autoclick">✅ Auto-click DISABLED — Passive analysis only</div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="grid">Grid</div>
+    <div class="tab" data-tab="packets">Packets</div>
+    <div class="tab" data-tab="probe">Probe</div>
+    <div class="tab" data-tab="rng">RNG</div>
+    <div class="tab" data-tab="connect">Server</div>
   </div>
-  
-  <div class="version">v5.9</div>
-  
+
+  <!-- GRID TAB -->
+  <div class="panel active" id="tab-grid">
+    <div class="section">
+      <div class="section-title">
+        📊 Live Status
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Total games analysed</span>
+        <span class="stat-val good" id="stat-total-games">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Requests captured</span>
+        <span class="stat-val" id="stat-reqs">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Live grid</span>
+        <span class="stat-val" id="stat-live-grid">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Seeds captured</span>
+        <span class="stat-val" id="stat-seeds">0</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">
+        🎯 Cell Recommendations
+        <span id="conf-badge" class="badge badge-gray">No Data</span>
+      </div>
+      <div id="grid-display">
+        <div class="empty-state">Open the Witch game page.<br>Data captures automatically from page load.</div>
+      </div>
+      <div id="grid-source" style="font-size:9px;color:#555;margin-top:4px;"></div>
+    </div>
+
+    <button class="btn-danger" id="btn-clear-history">🗑 Clear Saved History</button>
+    <button class="btn-secondary" id="btn-refresh">↻ Refresh Data</button>
+  </div>
+
+  <!-- PACKETS TAB -->
+  <div class="panel" id="tab-packets">
+    <div class="section">
+      <div class="section-title">📡 Captured Requests (<span id="req-count">0</span>)</div>
+      <div id="req-log" class="log-box">
+        <div class="empty-state">No requests captured yet.<br>Open the Witch game page.</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">📥 Captured Responses (<span id="resp-count">0</span>)</div>
+      <div id="resp-log" class="log-box">
+        <div class="empty-state">No responses yet.</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">🔑 Captured Seeds / Crypto Fields</div>
+      <div id="seed-log" class="log-box">
+        <div class="empty-state">No seed/crypto fields found yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROBE TAB -->
+  <div class="panel" id="tab-probe">
+    <div class="section">
+      <div class="section-title">🔬 Server Probe Tool</div>
+      <div style="font-size:10px;color:#666;margin-bottom:6px;">
+        Send custom requests to the game server to probe how results are calculated.
+        Use captured request URLs from the Packets tab.
+      </div>
+      <label style="font-size:10px;color:#888;">URL</label>
+      <input type="text" id="probe-url" placeholder="https://...">
+      <label style="font-size:10px;color:#888;">Method</label>
+      <select id="probe-method" style="width:100%;background:#1a1a2e;border:1px solid #3a3a5a;color:#e0e0ff;padding:5px;border-radius:5px;font-size:11px;margin-bottom:6px;">
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+        <option value="PUT">PUT</option>
+      </select>
+      <label style="font-size:10px;color:#888;">Request Body (JSON, optional)</label>
+      <textarea id="probe-body" rows="3" placeholder='{"key": "value"}'></textarea>
+      <label style="font-size:10px;color:#888;">Extra Headers (JSON, optional)</label>
+      <textarea id="probe-headers" rows="2" placeholder='{"Authorization": "Bearer ..."}'></textarea>
+      <button class="btn-primary" id="btn-probe">🚀 Send Probe</button>
+      <button class="btn-secondary" id="btn-probe-last">↩ Replay Last Game Request</button>
+      <div id="probe-result" class="probe-result" style="display:none;"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">🔁 Rapid Probe (Seed Variance)</div>
+      <div style="font-size:10px;color:#666;margin-bottom:6px;">
+        Send the same request multiple times with slight parameter variations to detect if the server uses a predictable RNG sequence.
+      </div>
+      <input type="number" id="probe-count" value="5" min="2" max="20" placeholder="Number of probes (2-20)">
+      <button class="btn-success" id="btn-rapid-probe">⚡ Run Rapid Probe</button>
+      <div id="rapid-result" class="probe-result" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- RNG TAB -->
+  <div class="panel" id="tab-rng">
+    <div class="section">
+      <div class="section-title">🧬 RNG Pattern Analysis</div>
+      <div id="rng-display">
+        <div class="empty-state">
+          Accumulating game data...<br><br>
+          Play several rounds and the extension will analyse patterns in the server's seed/nonce values to detect if the RNG is predictable.
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">📈 Frequency Heatmap (Historical)</div>
+      <div id="freq-display">
+        <div class="empty-state">No frequency data yet.<br>Each completed game builds the heatmap.</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">🎲 Raw Seed History</div>
+      <div id="seed-detail" class="log-box">
+        <div class="empty-state">No seeds captured yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SERVER CONNECTION TAB -->
+  <div class="panel" id="tab-connect">
+    <div class="section">
+      <div class="section-title">
+        <div class="conn-dot disconnected" id="conn-dot"></div>
+        Server Connection
+      </div>
+      <div style="font-size:10px;color:#666;margin-bottom:8px;">
+        Connect to the Witch Analyzer server to sync data and see analysis in the main web app.
+      </div>
+      <label style="font-size:10px;color:#888;">Server URL</label>
+      <div class="server-url-row">
+        <input type="text" id="server-url" placeholder="https://your-repl.replit.app">
+        <button class="btn-primary" id="btn-connect" style="width:auto;">Connect</button>
+      </div>
+      <div id="conn-status" style="font-size:10px;color:#666;margin-bottom:6px;">Not connected</div>
+      <button class="btn-secondary" id="btn-disconnect">Disconnect</button>
+    </div>
+    <div class="section">
+      <div class="section-title">ℹ️ Extension Info</div>
+      <div class="stat-row">
+        <span class="stat-label">Version</span>
+        <span class="stat-val">11.0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Auto-click</span>
+        <span class="stat-val" style="color:#34d399;">DISABLED</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Capture mode</span>
+        <span class="stat-val" style="color:#60a5fa;">Passive (from page load)</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Page state</span>
+        <span class="stat-val" id="page-state">—</span>
+      </div>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>
