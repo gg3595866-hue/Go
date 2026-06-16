@@ -167,10 +167,11 @@
           });
         }
 
+        // Always try to capture solution grid from ANY response — the Play response
+        // may not have a "game related" URL but contains RS[0].F grid data
+        processResponseForSolutionGrid(capturedResponse);
         if (capturedRequest.isGameRelated || isPlayResponse) {
           extractTokensFromResponse(capturedResponse);
-          // Try to capture solution grid from game responses
-          processResponseForSolutionGrid(capturedResponse);
         }
       }).catch(() => {});
       
@@ -245,10 +246,10 @@
         MIMICK_SPY.capturedResponses.push(capturedResponse);
         sendToContentScript('network_response', capturedResponse);
 
+        // Always scan ALL responses for the RS[0].F grid — not just game-related
+        processResponseForSolutionGrid(capturedResponse);
         if (spyData.isGameRelated) {
           extractTokensFromResponse(capturedResponse);
-          // Try to capture solution grid from game responses
-          processResponseForSolutionGrid(capturedResponse);
         }
       });
 
@@ -496,6 +497,8 @@
           rawDescription = event.data.substring(0, 500);
           try {
             parsedData = JSON.parse(event.data);
+            // Scan JSON WebSocket text messages for RS[0].F grid
+            processResponseForSolutionGrid({ body: parsedData, url: url, rawText: event.data });
           } catch (e) {
             parsedData = event.data;
           }
@@ -898,120 +901,196 @@
   };
 
   // ========== SOLUTION GRID CAPTURE SYSTEM ==========
-  // Stores the captured solution grid from the Play button response
-  // Format: Array of 10 rows, each row is an array of 5 booleans (true = safe, false = poison)
+  // Confirmed format from 1xbet Witch game:
+  //   response.body.RS[0].F  →  array of 10 rows × 5 booleans
+  //   true  = SAFE cell (click this)
+  //   false = LOSING cell (avoid this)
   let capturedSolutionGrid = null;
   let lastGridCaptureTime = 0;
 
-  // Parse response body to find solution grid (10 rows x 5 booleans)
   function parseSolutionGrid(body) {
     if (!body) return null;
-    
-    const candidateGrids = [];
-    
-    // Recursively search for arrays of 5 booleans
-    function findBooleanArrays(obj, path = '') {
-      if (!obj || typeof obj !== 'object') return;
-      
+
+    // ===== STEP 1: Known 1xbet format: body.RS[0].F =====
+    try {
+      // Uppercase keys (confirmed format from screenshot)
+      if (body.RS && Array.isArray(body.RS) && body.RS.length > 0) {
+        const rs0 = body.RS[0];
+        if (rs0 && rs0.F && Array.isArray(rs0.F) && rs0.F.length >= 5) {
+          const grid = rs0.F;
+          if (grid.every(function(row) {
+            return Array.isArray(row) && row.length === 5 &&
+                   row.every(function(v) { return typeof v === 'boolean'; });
+          })) {
+            console.log('%c[WITCH GRID] ★★★ FOUND RS[0].F — 1xbet Witch grid! ★★★',
+              'color: #00ff00; font-weight: bold; font-size: 18px; background: #003300;');
+            return grid;
+          }
+        }
+      }
+      // Lowercase keys variant
+      if (body.rs && Array.isArray(body.rs) && body.rs.length > 0) {
+        const rs0 = body.rs[0];
+        if (rs0) {
+          const fField = rs0.F || rs0.f;
+          if (fField && Array.isArray(fField) && fField.length >= 5) {
+            const isGrid = fField.every(function(row) {
+              return Array.isArray(row) && row.length === 5 &&
+                     row.every(function(v) { return typeof v === 'boolean'; });
+            });
+            if (isGrid) return fField;
+          }
+        }
+      }
+    } catch(e) {}
+
+    // ===== STEP 2: Generic deep search (fixed — uses for loops not forEach) =====
+    function deepSearch(obj, depth) {
+      if (depth > 10 || !obj || typeof obj !== 'object') return null;
+
       if (Array.isArray(obj)) {
-        // Check if this is a row (array of 5 booleans)
-        if (obj.length === 5 && obj.every(v => typeof v === 'boolean')) {
-          candidateGrids.push({ path, row: [...obj] });
-          return;
-        }
-        // Check if this is a grid (array of 10 rows of 5 booleans)
-        if (obj.length === 10 && obj.every(row => 
-            Array.isArray(row) && row.length === 5 && row.every(v => typeof v === 'boolean')
-        )) {
-          console.log('%c[WITCH GRID] Found complete solution grid!', 'color: #00ff00; font-weight: bold;');
-          return obj;
-        }
-        // Check if this could be rows (array of arrays)
-        if (obj.length >= 5 && obj.length <= 10) {
-          const boolRows = obj.filter(row => 
-            Array.isArray(row) && row.length === 5 && row.every(v => typeof v === 'boolean')
-          );
+        // Check if this array IS a 5–15 row boolean grid
+        if (obj.length >= 5 && obj.length <= 15) {
+          var boolRows = [];
+          for (var i = 0; i < obj.length; i++) {
+            var row = obj[i];
+            if (Array.isArray(row) && row.length === 5) {
+              var allBool = true;
+              for (var j = 0; j < row.length; j++) {
+                if (typeof row[j] !== 'boolean') { allBool = false; break; }
+              }
+              if (allBool) boolRows.push(row);
+            }
+          }
           if (boolRows.length >= 5) {
-            console.log(`%c[WITCH GRID] Found ${boolRows.length} boolean rows!`, 'color: #00ff00; font-weight: bold;');
+            console.log('%c[WITCH GRID] Deep search found ' + boolRows.length + ' boolean rows!',
+              'color: #00ff00; font-weight: bold;');
             return boolRows;
           }
         }
-        // Search nested arrays
-        obj.forEach((item, idx) => {
-          const result = findBooleanArrays(item, `${path}[${idx}]`);
+        // Recurse into array items (for loop — propagates return correctly)
+        for (var i = 0; i < obj.length; i++) {
+          var result = deepSearch(obj[i], depth + 1);
           if (result) return result;
-        });
+        }
       } else {
-        // Search object properties
-        for (const [key, value] of Object.entries(obj)) {
-          const result = findBooleanArrays(value, `${path}.${key}`);
+        // Recurse into object properties (for loop — propagates return correctly)
+        var keys = Object.keys(obj);
+        for (var k = 0; k < keys.length; k++) {
+          var result = deepSearch(obj[keys[k]], depth + 1);
           if (result) return result;
         }
       }
       return null;
     }
-    
-    // Try to find a complete grid
-    const directGrid = findBooleanArrays(body);
-    if (directGrid && Array.isArray(directGrid) && directGrid.length >= 5) {
-      return directGrid;
-    }
-    
-    // If we found individual rows, combine them
-    if (candidateGrids.length >= 5) {
-      console.log(`%c[WITCH GRID] Combining ${candidateGrids.length} candidate rows`, 'color: #ffff00;');
-      return candidateGrids.slice(0, 10).map(c => c.row);
-    }
-    
-    // Try to decode base64 strings that might contain the grid
-    function tryDecodeBase64(str) {
-      try {
-        const decoded = atob(str);
-        const parsed = JSON.parse(decoded);
-        return parseSolutionGrid(parsed);
-      } catch (e) {
-        return null;
-      }
-    }
-    
-    // Search for base64-encoded data in strings
-    if (typeof body === 'object') {
-      for (const value of Object.values(body)) {
-        if (typeof value === 'string' && value.length > 20 && value.length < 2000) {
-          const decoded = tryDecodeBase64(value);
-          if (decoded) return decoded;
+
+    var grid = deepSearch(body, 0);
+    if (grid) return grid;
+
+    // ===== STEP 3: Try base64 decode on any string values =====
+    if (typeof body === 'object' && !Array.isArray(body)) {
+      var vals = Object.values(body);
+      for (var vi = 0; vi < vals.length; vi++) {
+        var val = vals[vi];
+        if (typeof val === 'string' && val.length > 20 && val.length < 5000) {
+          try {
+            var decoded = atob(val);
+            var parsed = JSON.parse(decoded);
+            var g = parseSolutionGrid(parsed);
+            if (g) return g;
+          } catch(e) {}
         }
       }
     }
-    
+
     return null;
   }
 
-  // Process captured response to extract solution grid
+  // Process any response body to extract solution grid.
+  // Runs on ALL responses (not just game-related) to ensure we don't miss the Play response.
   function processResponseForSolutionGrid(response) {
-    if (!response.body) return;
-    
-    const grid = parseSolutionGrid(response.body);
+    // Try parsed body first
+    var bodyToCheck = response.body;
+    var rawToCheck = response.rawText;
+
+    // Also try parsing rawText if body is a plain string
+    if (bodyToCheck && typeof bodyToCheck === 'string') {
+      try { bodyToCheck = JSON.parse(bodyToCheck); } catch(e) {}
+    }
+    if (!bodyToCheck && rawToCheck) {
+      try { bodyToCheck = JSON.parse(rawToCheck); } catch(e) {}
+    }
+    if (!bodyToCheck) return;
+
+    var grid = parseSolutionGrid(bodyToCheck);
     if (grid && grid.length >= 5) {
       capturedSolutionGrid = grid;
       lastGridCaptureTime = Date.now();
-      
-      console.log('%c[WITCH GRID] ========== SOLUTION GRID CAPTURED! ==========', 'color: #00ff00; font-weight: bold; font-size: 16px;');
-      console.log('%c[WITCH GRID] Grid:', 'color: #00ff00;', capturedSolutionGrid);
-      
-      // Find which cells are safe per row
-      capturedSolutionGrid.forEach((row, rowIdx) => {
-        const safeCells = row.map((v, i) => v ? i + 1 : null).filter(v => v !== null);
-        console.log(`%c[WITCH GRID] Row ${rowIdx + 1}: Safe cells = [${safeCells.join(', ')}]`, 'color: #00ffff;');
-      });
-      
+
+      console.log('%c[WITCH GRID] ========== SOLUTION GRID CAPTURED! ==========',
+        'color: #00ff00; font-weight: bold; font-size: 18px; background: #002200;');
+      console.log('%c[WITCH GRID] Source URL:', 'color: #ffff00;', response.url || 'unknown');
+
+      // Log each row's safe cells clearly
+      for (var rowIdx = 0; rowIdx < capturedSolutionGrid.length; rowIdx++) {
+        var row = capturedSolutionGrid[rowIdx];
+        var safeCells = [];
+        for (var ci = 0; ci < row.length; ci++) {
+          if (row[ci]) safeCells.push(ci + 1);
+        }
+        console.log(
+          '%c[WITCH GRID] Row ' + (rowIdx + 1) + ': CLICK any of cells [' + safeCells.join(', ') + ']',
+          'color: #00ffff; font-weight: bold;'
+        );
+      }
+
+      // Send to webapp via WebSocket
       sendToContentScript('solution_grid_captured', {
         grid: capturedSolutionGrid,
+        source: response.url || 'unknown',
         timestamp: getTimestamp(),
         rowCount: capturedSolutionGrid.length
       });
     }
   }
+
+  // ========== RETROACTIVE SCAN ==========
+  // If the Play response was already captured before this system initialized,
+  // scan all stored responses now to find the grid.
+  function scanAllCapturedForGrid() {
+    if (capturedSolutionGrid) return; // already have it
+    console.log('%c[WITCH GRID] Retroactive scan — checking all captured responses for RS[0].F...',
+      'color: #ffff00; font-weight: bold;');
+    var all = MIMICK_SPY.capturedResponses || [];
+    for (var i = 0; i < all.length; i++) {
+      processResponseForSolutionGrid(all[i]);
+      if (capturedSolutionGrid) break;
+    }
+    if (!capturedSolutionGrid) {
+      console.log('%c[WITCH GRID] Retroactive scan: no grid found in ' + all.length + ' responses (need to click Play)',
+        'color: #ffaa00;');
+    }
+  }
+  // Run retroactive scan after a short delay
+  setTimeout(scanAllCapturedForGrid, 500);
+
+  // Expose manual grid access on window for debugging
+  window.WITCH_GRID = {
+    getGrid: function() { return capturedSolutionGrid; },
+    clearGrid: function() { capturedSolutionGrid = null; },
+    scan: scanAllCapturedForGrid,
+    parse: parseSolutionGrid,
+    getSafeCell: function(rowIndex) {
+      if (!capturedSolutionGrid || rowIndex >= capturedSolutionGrid.length) return null;
+      var row = capturedSolutionGrid[rowIndex];
+      for (var i = 0; i < row.length; i++) {
+        if (row[i] === true) return i; // first safe cell index (0-based)
+      }
+      return null;
+    }
+  };
+  console.log('%c[WITCH GRID] Grid capture system ready. window.WITCH_GRID exposed for debugging.',
+    'color: #00ff88; font-weight: bold;');
 
   // ========== RACING ATTACK AUTO-CLICK SYSTEM ==========
   // Based on working witch-extension-v4.3-FIXED logic
@@ -1171,86 +1250,76 @@
           lastRowClicked = totalRowsClicked;
           lastCellCount = currentCellCount;
           
-          // GRADUATED ATTACK STRATEGY based on game difficulty (same as working extension)
-          let clickCount;
-          let difficulty;
-          
-          const currentRow = totalRowsClicked - 1;
-          if (currentRow <= 3) {
-            clickCount = Math.min(4, unrevealed.length);
-            difficulty = "EASY";
-          } else if (currentRow <= 6) {
-            clickCount = Math.min(5, unrevealed.length);
-            difficulty = "MEDIUM";
-          } else if (currentRow <= 8) {
-            clickCount = Math.min(5, unrevealed.length);
-            difficulty = "HARD";
-          } else {
-            clickCount = Math.min(5, unrevealed.length);
-            difficulty = "EXTREME";
-          }
-          
-          console.log(`%c[WITCH AUTO] Row ${totalRowsClicked} [${difficulty}]: Clicking ${clickCount} cells (${unrevealed.length} unrevealed)`, 'color: #ff3333; font-weight: bold;');
-          
-          // Check if we have a captured solution grid
-          const rowIndex = totalRowsClicked - 1; // 0-indexed for grid access
+          // ===== SMART CLICK vs RANDOM ATTACK =====
+          const rowIndex = totalRowsClicked - 1; // 0-indexed for grid
           let safeCellIndices = [];
           let usingSolutionGrid = false;
-          
+
           if (capturedSolutionGrid && rowIndex < capturedSolutionGrid.length) {
             const rowSolution = capturedSolutionGrid[rowIndex];
             if (rowSolution && Array.isArray(rowSolution)) {
-              // Find all safe cell indices (where value is true)
-              safeCellIndices = rowSolution.map((isSafe, idx) => isSafe ? idx : -1).filter(idx => idx !== -1);
-              usingSolutionGrid = true;
-              console.log(`%c[WITCH AUTO] *** USING SOLUTION GRID *** Row ${totalRowsClicked}: Safe cells at indices [${safeCellIndices.join(', ')}]`, 'color: #00ff00; font-weight: bold; font-size: 14px;');
+              for (let si = 0; si < rowSolution.length; si++) {
+                if (rowSolution[si] === true) safeCellIndices.push(si);
+              }
+              if (safeCellIndices.length > 0) usingSolutionGrid = true;
             }
           }
-          
-          // Click cells ULTRA-RAPID (25ms apart) - same as working extension
-          for (let i = 0; i < clickCount; i++) {
+
+          if (usingSolutionGrid) {
+            // ===== SMART MODE: Click EXACTLY ONE safe cell =====
+            console.log(`%c[WITCH AUTO] ★ SMART MODE ★ Row ${totalRowsClicked}: Safe cell indices [${safeCellIndices.join(', ')}] → clicking cell ${safeCellIndices[0] + 1}`,
+              'color: #00ff00; font-weight: bold; font-size: 14px; background: #002200;');
+
             const timeoutId = setTimeout(() => {
-              // CHECK KILL SWITCH before clicking
               if (gameEndedMaster) return;
-              
-              let targetCell;
-              
-              if (usingSolutionGrid && safeCellIndices.length > 0) {
-                // Use solution grid - click the safe cell(s)
-                // Pick from safe cell indices
-                const safeIdx = safeCellIndices[i % safeCellIndices.length];
-                // Find the cell at this index from unrevealed cells
-                // Note: unrevealed array might not match grid indices directly
-                // We need to match by position in the row
-                const allRowCells = findActiveRowCells();
-                if (safeIdx < allRowCells.length) {
-                  targetCell = allRowCells[safeIdx];
-                  console.log(`%c[WITCH AUTO] SMART CLICK #${i + 1} -> Cell ${safeIdx + 1} (SAFE)`, 'color: #00ff00; font-weight: bold;');
-                } else {
-                  // Fallback to unrevealed
-                  targetCell = unrevealed[Math.floor(Math.random() * unrevealed.length)];
-                  console.log(`%c[WITCH AUTO] FALLBACK CLICK #${i + 1}`, 'color: #ffff00;');
-                }
+              const allRowCells = findActiveRowCells();
+              // Pick the first safe cell index
+              const safeIdx = safeCellIndices[0];
+              let targetCell = null;
+              if (safeIdx < allRowCells.length) {
+                targetCell = allRowCells[safeIdx];
+                console.log(`%c[WITCH AUTO] SMART CLICK → Cell ${safeIdx + 1} (confirmed SAFE by RS[0].F grid)`,
+                  'color: #00ff00; font-weight: bold;');
               } else {
-                // No solution grid - use random selection
-                targetCell = unrevealed[Math.floor(Math.random() * unrevealed.length)];
-                console.log(`%c[WITCH AUTO] RANDOM CLICK #${i + 1}`, 'color: #00ff00;');
+                // Index mismatch fallback
+                targetCell = unrevealed[0];
+                console.log('%c[WITCH AUTO] Index mismatch — clicking first unrevealed', 'color: #ffff00;');
               }
-              
               if (targetCell) {
                 targetCell.click();
-                
                 sendToContentScript('auto_cell_clicked', {
                   row: totalRowsClicked,
-                  clickNum: i + 1,
-                  usedSolutionGrid: usingSolutionGrid,
+                  clickNum: 1,
+                  usedSolutionGrid: true,
+                  safeIdx: safeIdx,
                   timestamp: getTimestamp()
                 });
               }
-            }, i * 25);
-            
-            // Track this timeout so we can cancel it if game ends
+            }, 100);
             pendingClickTimeouts.push(timeoutId);
+
+          } else {
+            // ===== RANDOM MODE: Racing attack (no grid available yet) =====
+            const clickCount = Math.min(4, unrevealed.length);
+            console.log(`%c[WITCH AUTO] RANDOM MODE Row ${totalRowsClicked}: clicking ${clickCount} random cells (no grid yet)`,
+              'color: #ffaa00; font-weight: bold;');
+
+            for (let i = 0; i < clickCount; i++) {
+              const timeoutId = setTimeout(() => {
+                if (gameEndedMaster) return;
+                const targetCell = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+                if (targetCell) {
+                  targetCell.click();
+                  sendToContentScript('auto_cell_clicked', {
+                    row: totalRowsClicked,
+                    clickNum: i + 1,
+                    usedSolutionGrid: false,
+                    timestamp: getTimestamp()
+                  });
+                }
+              }, i * 50);
+              pendingClickTimeouts.push(timeoutId);
+            }
           }
           
           // Wait and check result

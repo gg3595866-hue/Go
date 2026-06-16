@@ -1095,15 +1095,20 @@ export default function WitchAnalyzerPage() {
               </CardHeader>
               <CardContent>
                 {playResponses.length === 0 ? (
-                  <div className="text-sm text-muted-foreground py-4">
-                    <p className="font-medium mb-1">How to use:</p>
-                    <ol className="list-decimal list-inside space-y-1 text-xs">
-                      <li>Install the extension and connect it to this server</li>
-                      <li>Go to 1xbet and open the Witch game</li>
-                      <li>Click the Play button in the game</li>
-                      <li>The extension will capture the API response and show it here</li>
-                      <li>Look at the body for any arrays with 5 elements (these could be row data)</li>
-                    </ol>
+                  <div className="text-sm text-muted-foreground py-4 space-y-3">
+                    <div className="bg-green-500/10 border border-green-500/30 rounded-md p-3">
+                      <p className="font-medium text-green-600 dark:text-green-400 mb-1">Confirmed: Grid is in RS[0].F</p>
+                      <p className="text-xs">The server sends the full 10×5 solution grid in the Play response body under <code className="bg-muted px-1 rounded">RS[0].F</code>. Each row is 5 booleans — <strong>true = safe</strong>, false = losing. The extension now auto-detects this field on every response.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium mb-1">How to use:</p>
+                      <ol className="list-decimal list-inside space-y-1 text-xs">
+                        <li>Install the v9.0 extension and connect it to this server</li>
+                        <li>Go to 1xbet and open the Witch game</li>
+                        <li>Click the Play button — the grid appears here AND in the Game Grid tab</li>
+                        <li>Enable auto-play and the extension clicks exactly one safe cell per row</li>
+                      </ol>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3">

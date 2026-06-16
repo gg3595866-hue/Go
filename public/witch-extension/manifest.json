@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Witch Game Analyzer Pro",
-  "version": "7.0",
-  "description": "Advanced Witch Analyzer with Mimick Spy - Full network capture and auto-play",
+  "version": "9.0",
+  "description": "Witch Analyzer v9 — RS[0].F grid auto-capture, smart single-cell click, retroactive scan",
   "permissions": [
     "activeTab",
     "storage",

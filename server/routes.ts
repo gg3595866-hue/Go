@@ -2232,8 +2232,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========== SESSION DEEP ANALYZER ==========
+  // Confirmed 1xbet Witch game format: body.RS[0].F = 10×5 boolean array
+  // true = SAFE cell, false = LOSING cell
   function tryFindGridInData(data: any, depth = 0): boolean[][] | null {
     if (!data || depth > 8) return null;
+
+    // ===== STEP 1: Check known 1xbet format RS[0].F first =====
+    if (depth === 0 && data && typeof data === 'object' && !Array.isArray(data)) {
+      const rs = data.RS || data.rs;
+      if (Array.isArray(rs) && rs.length > 0) {
+        const rs0 = rs[0];
+        if (rs0) {
+          const fField = rs0.F || rs0.f;
+          if (Array.isArray(fField) && fField.length >= 5) {
+            const isGrid = fField.every((row: any) =>
+              Array.isArray(row) && row.length === 5 &&
+              row.every((v: any) => typeof v === 'boolean')
+            );
+            if (isGrid) {
+              console.log(`[WITCH ANALYZER] ★ Found RS[0].F grid — confirmed 1xbet Witch format!`);
+              return fField;
+            }
+          }
+        }
+      }
+    }
 
     if (Array.isArray(data)) {
       // Direct 10x5 boolean grid
@@ -2431,7 +2454,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", "attachment; filename=witch-extension-v7.0.zip");
+    res.setHeader("Content-Disposition", "attachment; filename=witch-extension-v9.0.zip");
 
     const archive = archiver("zip", { zlib: { level: 9 } });
     
