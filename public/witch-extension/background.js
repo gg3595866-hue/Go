@@ -25,7 +25,7 @@
     rngAnalysis: null
   };
 
-  console.log('[Witch BG v11] Service worker started — passive mode');
+  console.log('[Witch BG v12] Service worker started — passive mode + Decode/Diff engines');
 
   // ============================================================
   // HANDLE MESSAGES FROM POPUP + CONTENT SCRIPTS

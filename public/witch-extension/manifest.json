@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Witch Game Analyzer Pro",
-  "version": "11.0",
-  "description": "v11 — Passive packet capture from page load. Shows safe cell overlay. Zero auto-clicking. Server probing tools.",
+  "version": "12.0",
+  "description": "v12 — Decoder Engine (Base64/Hex/XOR/Bitmask50) + Response Diff + Game Timeline + 7 analysis tabs. Passive only.",
   "permissions": [
     "activeTab",
     "storage",
