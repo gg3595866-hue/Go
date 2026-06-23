@@ -68,30 +68,11 @@ const mimickSpyStorage: {
 export async function registerRoutes(app: Express): Promise<Server> {
 
   // ============================================================
-  // AUTH — POST /api/auth/login  →  returns JWT
+  // AUTH — POST /api/auth/token  →  issue a JWT to anyone (no credentials)
   // ============================================================
-  app.post("/api/auth/login", (req, res) => {
-    const { username, password } = req.body || {};
-    if (!username || !password) {
-      return res.status(400).json({ error: "username and password required" });
-    }
-    if (username !== VALID_USERNAME || password !== VALID_PASSWORD) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-    const token = signToken(username);
-    res.json({ token, expiresIn: JWT_EXPIRY, username });
-  });
-
-  // AUTH — POST /api/auth/refresh  →  renew an existing valid token
-  app.post("/api/auth/refresh", (req, res) => {
-    const authHeader = req.headers.authorization || "";
-    const existing = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-    const payload = verifyToken(existing);
-    if (!payload) {
-      return res.status(401).json({ error: "Invalid or expired token" });
-    }
-    const token = signToken(payload.sub);
-    res.json({ token, expiresIn: JWT_EXPIRY, username: payload.sub });
+  app.post("/api/auth/token", (req, res) => {
+    const token = signToken("extension-user");
+    res.json({ token, expiresIn: JWT_EXPIRY });
   });
 
   // AUTH — GET /api/auth/verify  →  check if a token is still valid
@@ -102,7 +83,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!payload) {
       return res.status(401).json({ valid: false, error: "Invalid or expired token" });
     }
-    res.json({ valid: true, username: payload.sub });
+    res.json({ valid: true });
   });
 
   // Get fixtures for a specific date

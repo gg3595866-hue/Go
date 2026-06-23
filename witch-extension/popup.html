@@ -360,33 +360,28 @@
   <!-- SERVER CONNECTION TAB -->
   <div class="panel" id="tab-connect">
 
-    <!-- LOGIN SECTION (shown when not authenticated) -->
-    <div class="section" id="login-section">
-      <div class="section-title">🔐 Login</div>
-      <div style="font-size:10px;color:#666;margin-bottom:8px;">
-        Sign in to get a JWT bearer token, then connect to the server.
-      </div>
-      <label style="font-size:10px;color:#888;">Username</label>
-      <input type="text" id="login-username" placeholder="admin" autocomplete="username">
-      <label style="font-size:10px;color:#888;">Password</label>
-      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
-      <button class="btn-primary" id="btn-login">🔑 Get Token &amp; Login</button>
-      <div id="login-error" style="font-size:10px;color:#f87171;margin-top:5px;display:none;"></div>
-    </div>
+    <!-- TOKEN SECTION (no credentials needed) -->
+    <div class="section" id="token-section">
+      <div class="section-title">🔑 Your Bearer Token</div>
 
-    <!-- TOKEN SECTION (shown when authenticated) -->
-    <div class="section" id="token-section" style="display:none;">
-      <div class="section-title">✅ Authenticated</div>
-      <div class="stat-row">
-        <span class="stat-label">Logged in as</span>
-        <span class="stat-val good" id="token-username">—</span>
+      <!-- No token yet -->
+      <div id="no-token-view">
+        <div style="font-size:10px;color:#666;margin-bottom:10px;line-height:1.5;">
+          Press the button below to generate your personal access token.<br>
+          <span style="color:#fbbf24;">⚠ Keep it safe — anyone with it can connect to your server.</span>
+        </div>
+        <button class="btn-primary" id="btn-get-token">🔑 Get My Token</button>
+        <div id="token-error" style="font-size:10px;color:#f87171;margin-top:5px;display:none;"></div>
       </div>
-      <div class="stat-row" style="flex-direction:column;align-items:flex-start;gap:3px;">
-        <span class="stat-label">Bearer Token</span>
-        <div style="font-family:monospace;font-size:9px;color:#6366f1;word-break:break-all;margin-top:3px;background:#080814;padding:4px 6px;border-radius:4px;border:1px solid #2a2a4a;" id="token-preview"></div>
+
+      <!-- Token ready -->
+      <div id="has-token-view" style="display:none;">
+        <div style="font-size:10px;color:#34d399;margin-bottom:6px;">✅ You have a valid token — keep it safe!</div>
+        <div style="font-family:monospace;font-size:9px;color:#a78bfa;word-break:break-all;background:#080814;padding:6px 8px;border-radius:5px;border:1px solid #2a2a4a;margin-bottom:6px;cursor:pointer;" id="token-display" title="Click to copy"></div>
+        <button class="btn-secondary" id="btn-copy-token">📋 Copy Token</button>
+        <button class="btn-success" id="btn-renew-token" style="margin-top:4px;">🔄 Get New Token</button>
+        <button class="btn-danger" id="btn-clear-token" style="margin-top:4px;">🗑 Clear Token</button>
       </div>
-      <button class="btn-secondary" id="btn-copy-token" style="margin-top:6px;">📋 Copy Token</button>
-      <button class="btn-danger" id="btn-logout" style="margin-top:4px;">🚪 Logout</button>
     </div>
 
     <!-- CONNECTION SECTION -->

@@ -17,8 +17,7 @@
     lastGameRequest: null,
     isConnected: false,
     serverUrl: '',
-    authToken: null,
-    authUsername: ''
+    authToken: null
   };
 
   // ============================================================
@@ -37,17 +36,16 @@
   // ============================================================
   // LOAD SAVED SERVER URL + AUTH TOKEN
   // ============================================================
-  chrome.storage.local.get(['serverUrl', 'isConnected', 'authToken', 'authUsername'], function(result) {
+  chrome.storage.local.get(['serverUrl', 'isConnected', 'authToken'], function(result) {
     if (result.serverUrl) {
       appState.serverUrl = result.serverUrl;
       document.getElementById('server-url').value = result.serverUrl;
     }
     if (result.authToken) {
       appState.authToken = result.authToken;
-      appState.authUsername = result.authUsername || '';
-      showAuthenticatedUI(appState.authUsername, result.authToken);
+      showHasTokenUI(result.authToken);
     } else {
-      showLoginUI();
+      showNoTokenUI();
     }
     updateConnectionUI(result.isConnected || false);
   });
@@ -459,119 +457,98 @@
   }
 
   // ============================================================
-  // AUTH UI HELPERS
+  // TOKEN UI HELPERS
   // ============================================================
-  function showLoginUI() {
-    var ls = document.getElementById('login-section');
-    var ts = document.getElementById('token-section');
-    if (ls) ls.style.display = 'block';
-    if (ts) ts.style.display = 'none';
+  function showNoTokenUI() {
+    var nv = document.getElementById('no-token-view');
+    var hv = document.getElementById('has-token-view');
+    if (nv) nv.style.display = 'block';
+    if (hv) hv.style.display = 'none';
     var ai = document.getElementById('auth-status-info');
-    if (ai) { ai.textContent = 'Not logged in'; ai.style.color = '#888'; }
+    if (ai) { ai.textContent = 'No token'; ai.style.color = '#888'; }
   }
 
-  function showAuthenticatedUI(username, token) {
-    var ls = document.getElementById('login-section');
-    var ts = document.getElementById('token-section');
-    if (ls) ls.style.display = 'none';
-    if (ts) ts.style.display = 'block';
-    var el = document.getElementById('token-username');
-    if (el) el.textContent = username || 'user';
-    var tp = document.getElementById('token-preview');
-    if (tp && token) {
-      // Show: header.payload (truncated) ... signature (last 8)
-      var parts = token.split('.');
-      var preview = parts[0] + '.' + (parts[1] ? parts[1].substring(0, 20) + '...' : '') + '.' + (parts[2] ? parts[2].slice(-8) : '');
-      tp.textContent = preview;
-      tp.title = token;
+  function showHasTokenUI(token) {
+    var nv = document.getElementById('no-token-view');
+    var hv = document.getElementById('has-token-view');
+    if (nv) nv.style.display = 'none';
+    if (hv) hv.style.display = 'block';
+    var td = document.getElementById('token-display');
+    if (td && token) {
+      td.textContent = token;
     }
     var ai = document.getElementById('auth-status-info');
-    if (ai) { ai.textContent = 'Logged in as ' + (username || 'user'); ai.style.color = '#34d399'; }
+    if (ai) { ai.textContent = 'Token ready ✓'; ai.style.color = '#34d399'; }
   }
 
   // ============================================================
-  // LOGIN
+  // GET TOKEN (one-click — no credentials)
   // ============================================================
-  document.getElementById('btn-login').addEventListener('click', function() {
+  function requestToken(btnId) {
     var serverUrl = (document.getElementById('server-url').value || appState.serverUrl || '').trim();
-    var username  = (document.getElementById('login-username').value || '').trim();
-    var password  = (document.getElementById('login-password').value || '').trim();
-    var errEl     = document.getElementById('login-error');
+    var errEl = document.getElementById('token-error');
 
     if (!serverUrl) {
-      if (errEl) { errEl.textContent = 'Enter the Server URL first, then login.'; errEl.style.display = 'block'; }
-      return;
-    }
-    if (!username || !password) {
-      if (errEl) { errEl.textContent = 'Enter username and password.'; errEl.style.display = 'block'; }
+      if (errEl) { errEl.textContent = 'Enter the Server URL below first.'; errEl.style.display = 'block'; }
       return;
     }
     if (errEl) errEl.style.display = 'none';
 
-    var btn = document.getElementById('btn-login');
-    btn.disabled = true;
-    btn.textContent = '⏳ Logging in...';
+    var btn = document.getElementById(btnId);
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating...'; }
 
-    fetch(serverUrl.replace(/\/$/, '') + '/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username, password: password })
-    })
+    fetch(serverUrl.replace(/\/$/, '') + '/api/auth/token', { method: 'POST' })
     .then(function(res) { return res.json().then(function(d) { return { ok: res.ok, data: d }; }); })
     .then(function(result) {
-      btn.disabled = false;
-      btn.textContent = '🔑 Get Token & Login';
-      if (!result.ok) {
-        if (errEl) { errEl.textContent = result.data.error || 'Login failed'; errEl.style.display = 'block'; }
+      if (btn) { btn.disabled = false; btn.textContent = btnId === 'btn-get-token' ? '🔑 Get My Token' : '🔄 Get New Token'; }
+      if (!result.ok || !result.data.token) {
+        if (errEl) { errEl.textContent = 'Server error — check URL is correct.'; errEl.style.display = 'block'; }
         return;
       }
       var token = result.data.token;
-      var uname = result.data.username || username;
-      appState.authToken    = token;
-      appState.authUsername = uname;
-      appState.serverUrl    = serverUrl;
-      chrome.storage.local.set({ authToken: token, authUsername: uname, serverUrl: serverUrl });
+      appState.authToken = token;
+      appState.serverUrl = serverUrl;
+      chrome.storage.local.set({ authToken: token, serverUrl: serverUrl });
       sendToBackground('set_token', { token: token });
-      showAuthenticatedUI(uname, token);
-      document.getElementById('server-url').value = serverUrl;
+      showHasTokenUI(token);
     })
     .catch(function(err) {
-      btn.disabled = false;
-      btn.textContent = '🔑 Get Token & Login';
-      if (errEl) { errEl.textContent = 'Connection error: ' + err.message; errEl.style.display = 'block'; }
+      if (btn) { btn.disabled = false; btn.textContent = btnId === 'btn-get-token' ? '🔑 Get My Token' : '🔄 Get New Token'; }
+      if (errEl) { errEl.textContent = 'Could not reach server: ' + err.message; errEl.style.display = 'block'; }
     });
-  });
+  }
 
-  // ============================================================
-  // LOGOUT
-  // ============================================================
-  document.getElementById('btn-logout').addEventListener('click', function() {
-    appState.authToken = null;
-    appState.authUsername = '';
-    chrome.storage.local.remove(['authToken', 'authUsername']);
-    sendToBackground('set_token', { token: null });
-    sendToBackground('disconnect').then(function() {
-      updateConnectionUI(false);
-      chrome.storage.local.set({ isConnected: false });
-    });
-    showLoginUI();
-  });
+  document.getElementById('btn-get-token').addEventListener('click', function() { requestToken('btn-get-token'); });
+  document.getElementById('btn-renew-token').addEventListener('click', function() { requestToken('btn-renew-token'); });
 
   // ============================================================
   // COPY TOKEN
   // ============================================================
-  document.getElementById('btn-copy-token').addEventListener('click', function() {
+  function copyToken() {
     if (!appState.authToken) return;
     navigator.clipboard.writeText(appState.authToken).then(function() {
       var btn = document.getElementById('btn-copy-token');
       var orig = btn.textContent;
       btn.textContent = '✅ Copied!';
       setTimeout(function() { btn.textContent = orig; }, 2000);
-    }).catch(function() {
-      // Fallback for environments without clipboard API
-      var btn = document.getElementById('btn-copy-token');
-      btn.textContent = '📋 Token: see title tooltip on preview above';
+    }).catch(function() {});
+  }
+  document.getElementById('btn-copy-token').addEventListener('click', copyToken);
+  var td = document.getElementById('token-display');
+  if (td) td.addEventListener('click', copyToken);
+
+  // ============================================================
+  // CLEAR TOKEN
+  // ============================================================
+  document.getElementById('btn-clear-token').addEventListener('click', function() {
+    appState.authToken = null;
+    chrome.storage.local.remove(['authToken']);
+    sendToBackground('set_token', { token: null });
+    sendToBackground('disconnect').then(function() {
+      updateConnectionUI(false);
+      chrome.storage.local.set({ isConnected: false });
     });
+    showNoTokenUI();
   });
 
   // ============================================================
@@ -603,13 +580,13 @@
     });
   });
 
-  // Handle auth_required broadcast from background
+  // Handle auth_required broadcast from background (token expired/missing)
   chrome.runtime.onMessage.addListener(function(msg) {
     if (msg && msg.type === 'auth_required') {
       updateConnectionUI(false);
-      showLoginUI();
-      var errEl = document.getElementById('login-error');
-      if (errEl) { errEl.textContent = 'Session expired. Please login again.'; errEl.style.display = 'block'; }
+      showNoTokenUI();
+      var errEl = document.getElementById('token-error');
+      if (errEl) { errEl.textContent = 'Token expired. Get a new one.'; errEl.style.display = 'block'; }
     }
   });
 
