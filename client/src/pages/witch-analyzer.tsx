@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +30,10 @@ import {
   ChevronDown,
   ChevronRight,
   AlertTriangle,
-  Timer
+  Timer,
+  Copy,
+  Send,
+  RefreshCw
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -70,6 +74,399 @@ interface CapturedToken {
   key: string;
   value: any;
   timestamp: string;
+}
+
+// ============================================================
+// Parses a JS fetch() call string into { url, method, headers, body }
+// ============================================================
+function parseFetchCall(raw: string): { url: string; method: string; headers: Record<string, string>; body: string | null } | null {
+  try {
+    // Extract first string argument (URL)
+    const urlMatch = raw.match(/fetch\s*\(\s*["'`]([^"'`]+)["'`]/);
+    if (!urlMatch) return null;
+    const url = urlMatch[1];
+
+    // Extract the options object literal as text
+    const optionsMatch = raw.match(/fetch\s*\([^,]+,\s*(\{[\s\S]*\})\s*\)\s*;?\s*$/);
+    if (!optionsMatch) return { url, method: "GET", headers: {}, body: null };
+
+    const optText = optionsMatch[1];
+
+    // method
+    const methodMatch = optText.match(/"method"\s*:\s*"([A-Z]+)"/);
+    const method = methodMatch ? methodMatch[1] : "GET";
+
+    // body
+    const bodyMatch = optText.match(/"body"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    let body: string | null = null;
+    if (bodyMatch) {
+      body = bodyMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+    }
+
+    // headers — extract the "headers" block
+    const headersMatch = optText.match(/"headers"\s*:\s*\{([\s\S]*?)\},/);
+    const headers: Record<string, string> = {};
+    if (headersMatch) {
+      const hBlock = headersMatch[1];
+      const pairs = hBlock.matchAll(/"([^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g);
+      for (const [, k, v] of pairs) {
+        headers[k] = v.replace(/\\"/g, '"');
+      }
+    }
+
+    return { url, method, headers, body };
+  } catch {
+    return null;
+  }
+}
+
+function toYaml(obj: any, indent = 0): string {
+  if (obj === null) return "null";
+  if (typeof obj === "boolean" || typeof obj === "number") return String(obj);
+  if (typeof obj === "string") return obj.includes("\n") ? `|\n${obj.split("\n").map(l => "  ".repeat(indent + 1) + l).join("\n")}` : obj;
+  if (Array.isArray(obj)) {
+    return obj.map(v => "  ".repeat(indent) + "- " + toYaml(v, indent + 1)).join("\n");
+  }
+  return Object.entries(obj)
+    .map(([k, v]) => {
+      const valStr = typeof v === "object" && v !== null
+        ? "\n" + toYaml(v, indent + 1)
+        : " " + toYaml(v, indent + 1);
+      return "  ".repeat(indent) + k + ":" + valStr;
+    })
+    .join("\n");
+}
+
+function toHex(str: string): string {
+  return Array.from(str.slice(0, 512))
+    .map(c => c.charCodeAt(0).toString(16).padStart(2, "0"))
+    .join(" ");
+}
+
+function toBase64(str: string): string {
+  try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str.slice(0, 1000)); }
+}
+
+function flattenObject(obj: any, prefix = ""): Array<{ key: string; value: string; type: string }> {
+  const rows: Array<{ key: string; value: string; type: string }> = [];
+  for (const [k, v] of Object.entries(obj ?? {})) {
+    const fullKey = prefix ? `${prefix}.${k}` : k;
+    if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+      rows.push(...flattenObject(v, fullKey));
+    } else {
+      rows.push({ key: fullKey, value: Array.isArray(v) ? JSON.stringify(v) : String(v ?? ""), type: typeof v });
+    }
+  }
+  return rows;
+}
+
+function ApiProxyTab() {
+  const [fetchText, setFetchText] = useState("");
+  const [parsed, setParsed] = useState<{ url: string; method: string; headers: Record<string, string>; body: string | null } | null>(null);
+  const [parseError, setParseError] = useState("");
+  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [viewFormat, setViewFormat] = useState("pretty");
+  const [copied, setCopied] = useState("");
+
+  const handleParse = () => {
+    setParseError("");
+    const p = parseFetchCall(fetchText.trim());
+    if (!p) { setParseError("Could not parse this fetch() call. Make sure you pasted the full JS snippet."); return; }
+    setParsed(p);
+  };
+
+  const handleGo = async () => {
+    if (!parsed) return;
+    setLoading(true);
+    setError("");
+    setResult(null);
+    try {
+      const resp = await fetch("/api/witch/proxy", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: parsed.url,
+          method: parsed.method,
+          headers: parsed.headers,
+          body: parsed.body,
+        }),
+      });
+      const data = await resp.json();
+      setResult(data);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(key);
+      setTimeout(() => setCopied(""), 1500);
+    });
+  };
+
+  const formats = useMemo(() => {
+    if (!result) return [];
+    const p = result.parsed;
+    const raw = result.rawText || "";
+    const flatRows = p ? flattenObject(p) : [];
+    const statusLine = `HTTP ${result.status} ${result.statusText} — ${result.elapsed}ms`;
+
+    return [
+      {
+        id: "pretty",
+        label: "Pretty JSON",
+        content: p ? JSON.stringify(p, null, 2) : raw,
+      },
+      {
+        id: "raw",
+        label: "Raw Text",
+        content: raw,
+      },
+      {
+        id: "minified",
+        label: "Minified",
+        content: p ? JSON.stringify(p) : raw,
+      },
+      {
+        id: "yaml",
+        label: "YAML",
+        content: p ? toYaml(p) : raw,
+      },
+      {
+        id: "table",
+        label: "Table",
+        content: flatRows,
+        isTable: true,
+      },
+      {
+        id: "headers",
+        label: "Resp Headers",
+        content: result.headers ? JSON.stringify(result.headers, null, 2) : "{}",
+      },
+      {
+        id: "base64",
+        label: "Base64",
+        content: toBase64(raw),
+      },
+      {
+        id: "hex",
+        label: "Hex",
+        content: toHex(raw),
+      },
+      {
+        id: "summary",
+        label: "Summary",
+        content: [
+          statusLine,
+          `URL: ${parsed?.url}`,
+          `Method: ${parsed?.method}`,
+          `Response size: ${raw.length} chars`,
+          `Keys (top-level): ${p && typeof p === "object" ? Object.keys(p).join(", ") : "N/A"}`,
+          `Flat fields: ${flatRows.length}`,
+          "",
+          "Top-level values:",
+          ...(p && typeof p === "object"
+            ? Object.entries(p).slice(0, 20).map(([k, v]) => `  ${k}: ${JSON.stringify(v).slice(0, 80)}`)
+            : [raw.slice(0, 200)]),
+        ].join("\n"),
+      },
+      {
+        id: "curl",
+        label: "cURL",
+        content: [
+          `curl -X ${parsed?.method || "GET"} \\`,
+          `  '${parsed?.url}' \\`,
+          ...Object.entries(parsed?.headers || {}).map(([k, v]) => `  -H '${k}: ${v}' \\`),
+          parsed?.body ? `  -d '${parsed.body}'` : "",
+        ].filter(Boolean).join("\n"),
+      },
+    ];
+  }, [result, parsed]);
+
+  const activeFormat = formats.find(f => f.id === viewFormat) || formats[0];
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Send className="w-5 h-5 text-primary" />
+            API Proxy — Paste &amp; Send
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Paste a complete <code className="bg-muted px-1 rounded text-xs">fetch()</code> call (copied from DevTools → Network tab → Copy as fetch). The server will forward it and return the response in multiple formats.
+          </p>
+          <Textarea
+            className="font-mono text-xs h-44 resize-none"
+            placeholder={`fetch("https://1x-bet.mobi/games-frame/service-api/...", {\n  "headers": { "x-auth": "Bearer ..." },\n  "body": "...",\n  "method": "POST",\n  ...\n});`}
+            value={fetchText}
+            onChange={e => { setFetchText(e.target.value); setParsed(null); setParseError(""); }}
+            data-testid="input-fetch-text"
+          />
+          {parseError && (
+            <p className="text-xs text-red-500 flex items-center gap-1">
+              <XCircle className="w-3 h-3" />{parseError}
+            </p>
+          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleParse}
+              disabled={!fetchText.trim()}
+              data-testid="button-parse-fetch"
+            >
+              <Search className="w-4 h-4 mr-1" />
+              Parse
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleGo}
+              disabled={!parsed || loading}
+              data-testid="button-send-request"
+            >
+              {loading ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" /> : <Send className="w-4 h-4 mr-1" />}
+              {loading ? "Sending…" : "Go"}
+            </Button>
+            {parsed && (
+              <span className="text-xs text-green-400 font-mono">
+                ✓ {parsed.method} {parsed.url.slice(0, 60)}{parsed.url.length > 60 ? "…" : ""}
+              </span>
+            )}
+          </div>
+
+          {parsed && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+              <div className="rounded border border-border p-2">
+                <p className="text-muted-foreground mb-1 font-medium">Method &amp; URL</p>
+                <p className="font-mono"><span className="text-primary font-bold">{parsed.method}</span> {parsed.url.slice(0, 80)}</p>
+              </div>
+              <div className="rounded border border-border p-2">
+                <p className="text-muted-foreground mb-1 font-medium">Headers ({Object.keys(parsed.headers).length})</p>
+                {Object.entries(parsed.headers).slice(0, 4).map(([k, v]) => (
+                  <p key={k} className="font-mono truncate"><span className="text-cyan-400">{k}:</span> {String(v).slice(0, 30)}</p>
+                ))}
+                {Object.keys(parsed.headers).length > 4 && <p className="text-muted-foreground">+{Object.keys(parsed.headers).length - 4} more</p>}
+              </div>
+              <div className="rounded border border-border p-2">
+                <p className="text-muted-foreground mb-1 font-medium">Body</p>
+                <p className="font-mono truncate text-yellow-400">{parsed.body ? parsed.body.slice(0, 80) : "(none)"}</p>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="rounded border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-400">
+              <XCircle className="w-4 h-4 inline mr-1" />
+              {error}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {result && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                {result.ok
+                  ? <CheckCircle className="w-5 h-5 text-green-500" />
+                  : <XCircle className="w-5 h-5 text-red-500" />}
+                Response
+                <Badge variant={result.status < 300 ? "default" : "destructive"}>
+                  HTTP {result.status} {result.statusText}
+                </Badge>
+                <span className="text-xs text-muted-foreground font-normal">{result.elapsed}ms</span>
+              </CardTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setResult(null)}
+                data-testid="button-clear-result"
+              >
+                <Trash2 className="w-4 h-4 mr-1" />Clear
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Format selector — 10 tabs */}
+            <div className="flex flex-wrap gap-1">
+              {formats.map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setViewFormat(f.id)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium border transition-colors ${
+                    viewFormat === f.id
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-muted/40 border-border text-muted-foreground hover:text-foreground hover:border-primary/50"
+                  }`}
+                  data-testid={`button-format-${f.id}`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Format content */}
+            {activeFormat && (
+              <div className="relative">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="absolute top-2 right-2 z-10 h-7 px-2 text-xs"
+                  onClick={() => copy(
+                    (activeFormat as any).isTable
+                      ? (activeFormat.content as any[]).map((r: any) => `${r.key}\t${r.value}`).join("\n")
+                      : String(activeFormat.content),
+                    activeFormat.id
+                  )}
+                  data-testid={`button-copy-${activeFormat.id}`}
+                >
+                  {copied === activeFormat.id ? <CheckCircle className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                </Button>
+
+                {(activeFormat as any).isTable ? (
+                  <div className="border border-border rounded-md overflow-hidden">
+                    <table className="w-full text-xs font-mono">
+                      <thead>
+                        <tr className="bg-muted/60 border-b border-border">
+                          <th className="text-left p-2 font-medium text-muted-foreground">Key</th>
+                          <th className="text-left p-2 font-medium text-muted-foreground">Type</th>
+                          <th className="text-left p-2 font-medium text-muted-foreground">Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(activeFormat.content as any[]).map((row: any, i: number) => (
+                          <tr key={i} className={i % 2 === 0 ? "bg-background" : "bg-muted/20"}>
+                            <td className="p-2 text-cyan-400 font-medium">{row.key}</td>
+                            <td className="p-2 text-muted-foreground">{row.type}</td>
+                            <td className="p-2 break-all">{String(row.value).slice(0, 200)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[480px] w-full rounded-md border border-border bg-muted/30 p-3">
+                    <pre className="text-xs font-mono whitespace-pre-wrap break-all">
+                      {String(activeFormat.content)}
+                    </pre>
+                  </ScrollArea>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
 }
 
 export default function WitchAnalyzerPage() {
@@ -783,13 +1180,14 @@ export default function WitchAnalyzerPage() {
       </div>
 
       <Tabs defaultValue="patterns" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="patterns" data-testid="tab-patterns">Patterns</TabsTrigger>
           <TabsTrigger value="grid" data-testid="tab-grid">Game Grid</TabsTrigger>
           <TabsTrigger value="sessions" data-testid="tab-sessions">Sessions</TabsTrigger>
           <TabsTrigger value="inspector" data-testid="tab-inspector">Inspector</TabsTrigger>
           <TabsTrigger value="network" data-testid="tab-network">Network</TabsTrigger>
           <TabsTrigger value="tokens" data-testid="tab-tokens">Seeds</TabsTrigger>
+          <TabsTrigger value="proxy" data-testid="tab-proxy">API Proxy</TabsTrigger>
         </TabsList>
 
         {/* ===== PATTERNS TAB — PRNG Frequency Heatmap ===== */}
@@ -1687,6 +2085,11 @@ export default function WitchAnalyzerPage() {
               </ScrollArea>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ===== API PROXY TAB ===== */}
+        <TabsContent value="proxy">
+          <ApiProxyTab />
         </TabsContent>
       </Tabs>
 

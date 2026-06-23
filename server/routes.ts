@@ -2488,6 +2488,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ responses: allResponses.slice(0, 200), total: allResponses.length });
   });
 
+  // API Proxy — forward any fetch() request through the server to bypass CORS
+  app.post("/api/witch/proxy", async (req, res) => {
+    const { url, method = "GET", headers = {}, body } = req.body || {};
+    if (!url) return res.status(400).json({ error: "url is required" });
+
+    try {
+      const axios = (await import("axios")).default;
+      const startTime = Date.now();
+
+      const response = await axios({
+        url,
+        method: method.toUpperCase(),
+        headers: {
+          ...headers,
+          // Remove headers that cause issues when proxied
+          host: undefined,
+          "content-length": undefined,
+        },
+        data: body || undefined,
+        responseType: "text",
+        timeout: 15000,
+        validateStatus: () => true,
+      });
+
+      const elapsed = Date.now() - startTime;
+      const rawText: string = response.data as string;
+
+      let parsed: any = null;
+      try { parsed = JSON.parse(rawText); } catch {}
+
+      res.json({
+        ok: true,
+        status: response.status,
+        statusText: response.statusText,
+        elapsed,
+        headers: response.headers,
+        rawText,
+        parsed,
+      });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
   // Extension download route
   app.get("/api/witch/extension/download", (req, res) => {
     const extensionDir = path.join(process.cwd(), "public", "witch-extension");
