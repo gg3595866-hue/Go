@@ -155,6 +155,17 @@
       case 'ws_message':
         notifyBackground('ws_message', data);
         break;
+
+      case 'session_token':
+        // ★ Fresh x-auth token captured — relay to background/popup
+        state.sessionToken = data.token;
+        notifyBackground('session_token', data);
+        break;
+
+      case 'session_expired':
+        // ★ Got 401 — relay to popup so user sees a warning
+        notifyBackground('session_expired', data);
+        break;
     }
   });
 

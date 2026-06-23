@@ -25,6 +25,27 @@
   var diffResults = [];       // field diffs between consecutive games
   var gameCount = 0;
 
+  // ★ Live session token tracking — always the freshest x-auth/access_token seen
+  var liveSessionToken = null;
+  var liveSessionHeaders = {};  // full headers from the last successful game request
+
+  function updateLiveToken(headers) {
+    var xauth = headers['x-auth'] || headers['X-Auth'] || headers['authorization'] || headers['Authorization'];
+    if (xauth) {
+      var raw = xauth.replace(/^Bearer\s+/i, '');
+      if (raw && raw !== liveSessionToken) {
+        liveSessionToken = raw;
+        emit('session_token', { token: raw, ts: ts() });
+      }
+    }
+  }
+
+  function extractTokenFromUrl(url) {
+    if (!url || typeof url !== 'string') return null;
+    var m = url.match(/[?&]access_token=([^&]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+
   function ts() { return new Date().toISOString(); }
 
   function emit(type, data) {
@@ -871,9 +892,26 @@
     var probeId = probeConfig.probeId || ('probe_' + Date.now());
     var originalFetch = window.__witch_original_fetch || fetch;
 
+    // ★ Auto-build headers: start with live session headers, then overlay user-supplied ones
+    var baseHeaders = {};
+
+    // Inject the live session token automatically
+    if (liveSessionToken) {
+      baseHeaders['x-auth'] = 'Bearer ' + liveSessionToken;
+    }
+
+    // If we have full headers from the last game request, use them as base
+    if (probeConfig.useSessionHeaders && Object.keys(liveSessionHeaders).length > 0) {
+      Object.assign(baseHeaders, liveSessionHeaders);
+    }
+
+    // User-supplied headers override everything
+    var userHeaders = probeConfig.headers || {};
+    var finalHeaders = Object.assign({}, baseHeaders, userHeaders);
+
     originalFetch(probeConfig.url, {
       method: probeConfig.method || 'GET',
-      headers: probeConfig.headers || {},
+      headers: finalHeaders,
       body: probeConfig.body ? JSON.stringify(probeConfig.body) : undefined,
       credentials: probeConfig.credentials || 'include'
     })
@@ -902,11 +940,22 @@
     var url = typeof input === 'string' ? input : (input && input.url) ? input.url : 'unknown';
     var method = (init && init.method) || 'GET';
     var reqId = 'f_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    var capturedHeaders = (init && init.headers) ? extractHeaders(init.headers) : {};
     var reqData = {
       id: reqId, type: 'fetch', url: url, method: method, ts: ts(),
-      headers: (init && init.headers) ? extractHeaders(init.headers) : {},
+      headers: capturedHeaders,
       body: parseBody(init && init.body)
     };
+
+    // ★ Track live session token from outgoing game requests
+    if (isGameUrl(url)) {
+      updateLiveToken(capturedHeaders);
+      // Keep full headers from most recent game request for probe replay
+      if (Object.keys(capturedHeaders).length > 0) {
+        liveSessionHeaders = capturedHeaders;
+      }
+    }
+
     allRequests.push(reqData);
     if (allRequests.length > 500) allRequests = allRequests.slice(-500);
     emit('request', reqData);
@@ -925,6 +974,12 @@
         allResponses.push(respData);
         if (allResponses.length > 500) allResponses = allResponses.slice(-500);
         emit('response', respData);
+
+        // ★ If the request succeeded, confirm this token is still live
+        if (response.status === 401 && isGameUrl(url)) {
+          emit('session_expired', { url: url, ts: ts() });
+        }
+
         processResponse(respData, reqData);
       }).catch(function() {});
     }).catch(function() {});
@@ -981,6 +1036,14 @@
   window.WebSocket = function(url, protocols) {
     var wsId = 'ws_' + Date.now();
     var ws = protocols ? new OrigWS(url, protocols) : new OrigWS(url);
+
+    // ★ Extract access_token from WebSocket URL — this is the primary session token
+    var wsToken = extractTokenFromUrl(url);
+    if (wsToken && wsToken !== liveSessionToken) {
+      liveSessionToken = wsToken;
+      emit('session_token', { token: wsToken, source: 'websocket_url', ts: ts() });
+    }
+
     emit('ws_opened', { id: wsId, url: url, ts: ts() });
 
     var origSend = ws.send.bind(ws);
@@ -1062,6 +1125,9 @@
     getDecodeFindings: function() { return decodeFindings.slice(-20); },
     getDiffResults: function() { return diffResults; },
     getTimeline: function() { return gameTimeline.slice(-50); },
+    // ★ Session token access
+    getSessionToken: function() { return liveSessionToken; },
+    getSessionHeaders: function() { return liveSessionHeaders; },
     clearHistory: function() {
       try { localStorage.removeItem(GRID_HISTORY_KEY); } catch(e) {}
       seedHistory = []; capturedGrid = null; decodeFindings = [];
@@ -1074,7 +1140,8 @@
         totalGames: h.totalGames, requestsCaptured: allRequests.length,
         responsesCaptured: allResponses.length, wsCaptured: wsMessages.length,
         hasLiveGrid: !!capturedGrid, decodeFindings: decodeFindings.length,
-        timelineEvents: gameTimeline.length, version: VERSION
+        timelineEvents: gameTimeline.length, version: VERSION,
+        hasLiveToken: !!liveSessionToken
       };
     }
   };
@@ -1096,7 +1163,9 @@
         seedHistory: seedHistory.slice(-10),
         decodeFindings: decodeFindings.slice(-10),
         diffResults: diffResults,
-        timeline: gameTimeline.slice(-20)
+        timeline: gameTimeline.slice(-20),
+        sessionToken: liveSessionToken,
+        sessionHeaders: liveSessionHeaders
       });
     } else if (cmd === 'probe') {
       window.__witch_probe(evt.data.config);
@@ -1104,7 +1173,12 @@
       window.__witch_api.clearHistory();
     } else if (cmd === 'replay_request') {
       var req = evt.data.req;
-      if (req) window.__witch_probe({ url: req.url, method: req.method, body: req.body, probeId: 'replay_' + req.id });
+      if (req) window.__witch_probe({
+        url: req.url, method: req.method, body: req.body,
+        headers: req.headers || {},   // ★ carry original headers
+        useSessionHeaders: true,       // ★ also inject live session headers
+        probeId: 'replay_' + req.id
+      });
     } else if (cmd === 'decode_value') {
       // Manually decode a value sent from UI
       var findings = decodeAttempts(evt.data.key || 'manual', evt.data.value);

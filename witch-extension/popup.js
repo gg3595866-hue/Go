@@ -17,7 +17,8 @@
     lastGameRequest: null,
     isConnected: false,
     serverUrl: '',
-    authToken: null
+    authToken: null,
+    sessionToken: null
   };
 
   // ============================================================
@@ -74,6 +75,17 @@
   chrome.runtime.onMessage.addListener(function(msg) {
     if (!msg) return;
     switch (msg.type) {
+      case 'session_token':
+        // ★ Fresh x-auth token captured from the live game session
+        appState.sessionToken = msg.data.token;
+        showSessionTokenStatus(true, msg.data.token);
+        break;
+
+      case 'session_expired':
+        // ★ 401 received — game session token is no longer valid
+        showSessionTokenStatus(false, null);
+        break;
+
       case 'grid_captured':
         appState.grid = msg.data.grid;
         appState.gridSource = msg.data.source;
@@ -404,7 +416,11 @@
     if (req.body && typeof req.body === 'object') {
       document.getElementById('probe-body').value = JSON.stringify(req.body, null, 2);
     }
-    showProbeResult('Loaded last game request URL. Click Send Probe to replay it.', true);
+    // ★ Also populate original headers (including x-auth)
+    if (req.headers && Object.keys(req.headers).length > 0) {
+      document.getElementById('probe-headers').value = JSON.stringify(req.headers, null, 2);
+    }
+    showProbeResult('✅ Loaded with original headers (x-auth included). Click Send Probe.', true);
   });
 
   document.getElementById('btn-rapid-probe').addEventListener('click', function() {
@@ -454,6 +470,50 @@
       }
       box.textContent = out;
     }
+  }
+
+  // ============================================================
+  // GAME SESSION TOKEN STATUS (x-auth from live game page)
+  // ============================================================
+  function showSessionTokenStatus(active, token) {
+    var dot   = document.getElementById('session-dot');
+    var label = document.getElementById('session-label');
+    var btn   = document.getElementById('btn-copy-session-token');
+    if (!dot) return;
+    if (active && token) {
+      dot.style.background = '#34d399';
+      dot.style.boxShadow  = '0 0 5px #34d399';
+      if (label) label.style.color = '#34d399';
+      if (label) label.textContent = '✅ Live x-auth token captured — probes auto-authenticated';
+      if (btn) btn.style.display = 'block';
+      appState.sessionToken = token;
+    } else if (active === false) {
+      dot.style.background = '#f87171';
+      dot.style.boxShadow  = 'none';
+      if (label) label.style.color = '#f87171';
+      if (label) label.textContent = '⚠ Session expired (401) — refresh the game page';
+      if (btn) btn.style.display = 'none';
+      appState.sessionToken = null;
+    } else {
+      dot.style.background = '#555';
+      dot.style.boxShadow  = 'none';
+      if (label) label.style.color = '#666';
+      if (label) label.textContent = 'Game session: waiting for page...';
+      if (btn) btn.style.display = 'none';
+    }
+  }
+
+  // Wire up copy-session-token button
+  var copySessionBtn = document.getElementById('btn-copy-session-token');
+  if (copySessionBtn) {
+    copySessionBtn.addEventListener('click', function() {
+      if (!appState.sessionToken) return;
+      navigator.clipboard.writeText('Bearer ' + appState.sessionToken).then(function() {
+        var orig = copySessionBtn.textContent;
+        copySessionBtn.textContent = '✅ Copied!';
+        setTimeout(function() { copySessionBtn.textContent = orig; }, 2000);
+      }).catch(function() {});
+    });
   }
 
   // ============================================================

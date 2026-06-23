@@ -276,6 +276,12 @@
 
   <!-- PACKETS TAB -->
   <div class="panel" id="tab-packets">
+    <!-- Session token status bar -->
+    <div id="session-status-bar" style="background:#1a1a2e;border:1px solid #2a2a4a;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:10px;display:flex;align-items:center;gap:7px;">
+      <div id="session-dot" style="width:8px;height:8px;border-radius:50%;background:#555;flex-shrink:0;"></div>
+      <span id="session-label" style="color:#666;">Game session: waiting for page...</span>
+      <button id="btn-copy-session-token" style="margin-left:auto;padding:2px 7px;background:#2a2a4a;border:none;border-radius:4px;color:#a78bfa;font-size:9px;cursor:pointer;display:none;">Copy x-auth</button>
+    </div>
     <div class="section">
       <div class="section-title">📡 Captured Requests (<span id="req-count">0</span>)</div>
       <div id="req-log" class="log-box">
