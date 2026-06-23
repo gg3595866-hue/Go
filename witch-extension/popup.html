@@ -305,12 +305,15 @@
 
   <!-- API PROXY TAB -->
   <div class="panel" id="tab-api">
+    <!-- Server URL row — inline, no need to switch tab -->
+    <div style="display:flex;align-items:center;gap:5px;background:#0d0d1a;border:1px solid #2a2a4a;border-radius:6px;padding:5px 8px;margin-bottom:8px;">
+      <div id="api-srv-dot" style="width:8px;height:8px;border-radius:50%;background:#555;flex-shrink:0;"></div>
+      <input type="text" id="api-server-url" placeholder="https://your-repl.replit.app" style="flex:1;margin:0;font-size:10px;padding:3px 6px;background:#1a1a2e;border:1px solid #3a3a5a;color:#e0e0ff;border-radius:4px;">
+      <button id="btn-api-save-url" style="padding:3px 8px;background:#4f46e5;color:white;border:none;border-radius:4px;font-size:10px;cursor:pointer;white-space:nowrap;">Save URL</button>
+    </div>
+
     <div class="section">
       <div class="section-title">🔌 API Proxy — Paste &amp; Send</div>
-      <div style="font-size:10px;color:#666;margin-bottom:6px;line-height:1.5;">
-        Paste a full <code style="background:#1a1a2e;padding:1px 4px;border-radius:3px;color:#a78bfa;">fetch()</code> call from DevTools → Network → Copy as fetch.<br>
-        The server forwards it and returns the response in 10 formats.
-      </div>
       <label style="font-size:10px;color:#888;">fetch() call</label>
       <textarea id="api-fetch-input" rows="5" placeholder='fetch("https://1x-bet.mobi/...", {&#10;  "headers": { "x-auth": "Bearer ..." },&#10;  "body": "...",&#10;  "method": "POST"&#10;});'></textarea>
       <div style="display:flex;gap:5px;margin-bottom:6px;">

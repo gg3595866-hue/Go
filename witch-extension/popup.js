@@ -875,14 +875,55 @@
     document.getElementById('btn-api-go').disabled = false;
   });
 
+  // ── Server URL row in API tab ──────────────────────────────
+  function apiUpdateSrvDot(hasUrl) {
+    var dot = document.getElementById('api-srv-dot');
+    if (!dot) return;
+    dot.style.background = hasUrl ? '#34d399' : '#f87171';
+    dot.style.boxShadow  = hasUrl ? '0 0 5px #34d399' : 'none';
+  }
+
+  // Pre-fill with already-saved URL
+  chrome.storage.local.get(['serverUrl'], function(r) {
+    if (r.serverUrl) {
+      var inp = document.getElementById('api-server-url');
+      if (inp) inp.value = r.serverUrl;
+      apiUpdateSrvDot(true);
+    }
+  });
+
+  document.getElementById('btn-api-save-url').addEventListener('click', function() {
+    var url = (document.getElementById('api-server-url').value || '').trim().replace(/\/$/, '');
+    if (!url) return;
+    appState.serverUrl = url;
+    chrome.storage.local.set({ serverUrl: url });
+    // Also sync the Server-tab input so both stay in sync
+    var serverTabInput = document.getElementById('server-url');
+    if (serverTabInput) serverTabInput.value = url;
+    apiUpdateSrvDot(true);
+    var btn = document.getElementById('btn-api-save-url');
+    var orig = btn.textContent;
+    btn.textContent = '✅ Saved!';
+    btn.style.background = '#065f46';
+    setTimeout(function() { btn.textContent = orig; btn.style.background = '#4f46e5'; }, 2000);
+  });
+
   document.getElementById('btn-api-go').addEventListener('click', function() {
     if (!apiParsed) return;
-    var serverUrl = (appState.serverUrl || '').replace(/\/$/, '');
+    // Prefer the inline URL input, fall back to appState
+    var inlineUrl = (document.getElementById('api-server-url').value || '').trim().replace(/\/$/, '');
+    var serverUrl = (inlineUrl || appState.serverUrl || '').replace(/\/$/, '');
     if (!serverUrl) {
       var errEl = document.getElementById('api-parse-error');
-      errEl.textContent = '⚠ Set your Server URL in the Server tab first.';
+      errEl.textContent = '⚠ Enter your server URL above and click Save URL first.';
       errEl.style.display = 'block';
       return;
+    }
+    // Auto-save if inline URL is new
+    if (inlineUrl && inlineUrl !== appState.serverUrl) {
+      appState.serverUrl = inlineUrl;
+      chrome.storage.local.set({ serverUrl: inlineUrl });
+      apiUpdateSrvDot(true);
     }
     var btn = document.getElementById('btn-api-go');
     btn.disabled = true;
