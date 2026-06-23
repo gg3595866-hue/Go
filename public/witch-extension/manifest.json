@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Witch Game Analyzer Pro",
-  "version": "12.0",
-  "description": "v12 — Decoder Engine (Base64/Hex/XOR/Bitmask50) + Response Diff + Game Timeline + 7 analysis tabs. Passive only.",
+  "version": "13.0",
+  "description": "v13 — API Proxy tab: paste any fetch() call and view the response in 10 formats. Decoder Engine + Response Diff + Game Timeline. Passive only.",
   "permissions": [
     "activeTab",
     "storage",

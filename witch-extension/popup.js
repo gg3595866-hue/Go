@@ -706,6 +706,258 @@
   }
 
   // ============================================================
+  // API PROXY TAB
+  // ============================================================
+  var apiParsed = null;
+  var apiResult = null;
+  var apiCurrentFormat = 'pretty';
+
+  var API_FORMATS = [
+    { id: 'pretty',  label: 'Pretty JSON' },
+    { id: 'raw',     label: 'Raw' },
+    { id: 'minified',label: 'Minified' },
+    { id: 'yaml',    label: 'YAML' },
+    { id: 'table',   label: 'Table' },
+    { id: 'headers', label: 'Resp Headers' },
+    { id: 'base64',  label: 'Base64' },
+    { id: 'hex',     label: 'Hex' },
+    { id: 'summary', label: 'Summary' },
+    { id: 'curl',    label: 'cURL' },
+  ];
+
+  function parseFetchCallExt(raw) {
+    try {
+      var urlMatch = raw.match(/fetch\s*\(\s*["'`]([^"'`]+)["'`]/);
+      if (!urlMatch) return null;
+      var url = urlMatch[1];
+      var optionsMatch = raw.match(/fetch\s*\([^,]+,\s*(\{[\s\S]*\})\s*\)\s*;?\s*$/);
+      if (!optionsMatch) return { url: url, method: 'GET', headers: {}, body: null };
+      var optText = optionsMatch[1];
+      var methodMatch = optText.match(/"method"\s*:\s*"([A-Z]+)"/);
+      var method = methodMatch ? methodMatch[1] : 'GET';
+      var bodyMatch = optText.match(/"body"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      var body = null;
+      if (bodyMatch) body = bodyMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      var headersMatch = optText.match(/"headers"\s*:\s*\{([\s\S]*?)\},/);
+      var headers = {};
+      if (headersMatch) {
+        var hBlock = headersMatch[1];
+        var pairs = hBlock.matchAll(/"([^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g);
+        for (var pair of pairs) {
+          headers[pair[1]] = pair[2].replace(/\\"/g, '"');
+        }
+      }
+      return { url: url, method: method, headers: headers, body: body };
+    } catch(e) { return null; }
+  }
+
+  function apiToYaml(obj, indent) {
+    indent = indent || 0;
+    if (obj === null) return 'null';
+    if (typeof obj === 'boolean' || typeof obj === 'number') return String(obj);
+    if (typeof obj === 'string') return obj.length > 60 ? '"' + obj.substring(0, 60) + '..."' : obj;
+    if (Array.isArray(obj)) return obj.slice(0, 10).map(function(v) { return '  '.repeat(indent) + '- ' + apiToYaml(v, indent + 1); }).join('\n');
+    return Object.entries(obj).slice(0, 30).map(function(kv) {
+      var val = typeof kv[1] === 'object' && kv[1] !== null ? '\n' + apiToYaml(kv[1], indent + 1) : ' ' + apiToYaml(kv[1], indent);
+      return '  '.repeat(indent) + kv[0] + ':' + val;
+    }).join('\n');
+  }
+
+  function apiToHex(str) {
+    return Array.from((str || '').substring(0, 256)).map(function(c) { return c.charCodeAt(0).toString(16).padStart(2, '0'); }).join(' ');
+  }
+
+  function apiToBase64(str) {
+    try { return btoa(unescape(encodeURIComponent((str || '').substring(0, 2000)))); } catch(e) { return btoa((str || '').substring(0, 500)); }
+  }
+
+  function apiFlattenObj(obj, prefix) {
+    var rows = [];
+    prefix = prefix || '';
+    Object.entries(obj || {}).forEach(function(kv) {
+      var fullKey = prefix ? prefix + '.' + kv[0] : kv[0];
+      if (kv[1] !== null && typeof kv[1] === 'object' && !Array.isArray(kv[1])) {
+        rows = rows.concat(apiFlattenObj(kv[1], fullKey));
+      } else {
+        rows.push({ key: fullKey, value: Array.isArray(kv[1]) ? JSON.stringify(kv[1]) : String(kv[1] !== null && kv[1] !== undefined ? kv[1] : ''), type: typeof kv[1] });
+      }
+    });
+    return rows;
+  }
+
+  function apiGetFormatContent(formatId) {
+    if (!apiResult) return '';
+    var p = apiResult.parsed;
+    var raw = apiResult.rawText || '';
+    var flat = p ? apiFlattenObj(p) : [];
+    switch (formatId) {
+      case 'pretty':   return p ? JSON.stringify(p, null, 2) : raw;
+      case 'raw':      return raw;
+      case 'minified': return p ? JSON.stringify(p) : raw;
+      case 'yaml':     return p ? apiToYaml(p) : raw;
+      case 'table':
+        if (!flat.length) return raw;
+        return flat.map(function(r) { return r.key + '\t' + r.type + '\t' + r.value.substring(0, 100); }).join('\n');
+      case 'headers':  return JSON.stringify(apiResult.headers || {}, null, 2);
+      case 'base64':   return apiToBase64(raw);
+      case 'hex':      return apiToHex(raw);
+      case 'summary':
+        var lines = [
+          'HTTP ' + apiResult.status + ' ' + apiResult.statusText + ' — ' + apiResult.elapsed + 'ms',
+          'URL: ' + (apiParsed ? apiParsed.url : ''),
+          'Method: ' + (apiParsed ? apiParsed.method : ''),
+          'Response size: ' + raw.length + ' chars',
+          'Flat fields: ' + flat.length,
+          'Top-level keys: ' + (p && typeof p === 'object' ? Object.keys(p).join(', ') : 'N/A'),
+          '',
+          'Values:'
+        ];
+        if (p && typeof p === 'object') {
+          Object.entries(p).slice(0, 20).forEach(function(kv) {
+            lines.push('  ' + kv[0] + ': ' + JSON.stringify(kv[1]).substring(0, 80));
+          });
+        } else { lines.push(raw.substring(0, 300)); }
+        return lines.join('\n');
+      case 'curl':
+        var curlLines = ['curl -X ' + (apiParsed ? apiParsed.method : 'GET') + ' \\', "  '" + (apiParsed ? apiParsed.url : '') + "' \\"];
+        Object.entries(apiParsed ? apiParsed.headers : {}).forEach(function(kv) { curlLines.push("  -H '" + kv[0] + ': ' + kv[1] + "' \\"); });
+        if (apiParsed && apiParsed.body) curlLines.push("  -d '" + apiParsed.body + "'");
+        return curlLines.join('\n');
+      default: return raw;
+    }
+  }
+
+  function apiRenderFormatBtns() {
+    var container = document.getElementById('api-format-btns');
+    if (!container) return;
+    container.innerHTML = '';
+    API_FORMATS.forEach(function(f) {
+      var btn = document.createElement('button');
+      btn.textContent = f.label;
+      btn.style.cssText = 'padding:2px 7px;border:1px solid ' + (f.id === apiCurrentFormat ? '#a78bfa' : '#2a2a4a') + ';border-radius:4px;background:' + (f.id === apiCurrentFormat ? '#2a1a5a' : '#1a1a2e') + ';color:' + (f.id === apiCurrentFormat ? '#a78bfa' : '#888') + ';font-size:9px;cursor:pointer;margin:0;width:auto;transition:all 0.1s;';
+      btn.addEventListener('click', function() {
+        apiCurrentFormat = f.id;
+        apiRenderResult();
+        apiRenderFormatBtns();
+      });
+      container.appendChild(btn);
+    });
+  }
+
+  function apiRenderResult() {
+    var box = document.getElementById('api-result-box');
+    var section = document.getElementById('api-result-section');
+    var badge = document.getElementById('api-status-badge');
+    if (!box || !apiResult) return;
+    section.style.display = 'block';
+    var statusOk = apiResult.status < 300;
+    badge.textContent = 'HTTP ' + apiResult.status + ' · ' + apiResult.elapsed + 'ms';
+    badge.className = 'badge ' + (statusOk ? 'badge-green' : 'badge-red');
+    var content = apiGetFormatContent(apiCurrentFormat);
+    box.textContent = content.substring(0, 3000) + (content.length > 3000 ? '\n...(truncated)' : '');
+    apiRenderFormatBtns();
+  }
+
+  document.getElementById('btn-api-parse').addEventListener('click', function() {
+    var raw = (document.getElementById('api-fetch-input').value || '').trim();
+    var errEl = document.getElementById('api-parse-error');
+    var infoEl = document.getElementById('api-parsed-info');
+    errEl.style.display = 'none';
+    infoEl.style.display = 'none';
+    if (!raw) { errEl.textContent = 'Paste a fetch() call first.'; errEl.style.display = 'block'; return; }
+    var p = parseFetchCallExt(raw);
+    if (!p) { errEl.textContent = 'Could not parse — paste the full fetch() JS snippet from DevTools.'; errEl.style.display = 'block'; return; }
+    apiParsed = p;
+    var hCount = Object.keys(p.headers).length;
+    infoEl.textContent = '✓ ' + p.method + ' ' + p.url.substring(0, 70) + (p.url.length > 70 ? '…' : '') + ' | ' + hCount + ' headers' + (p.body ? ' | body: ' + p.body.substring(0, 30) : '');
+    infoEl.style.color = '#34d399';
+    infoEl.style.display = 'block';
+    document.getElementById('btn-api-go').disabled = false;
+  });
+
+  document.getElementById('btn-api-go').addEventListener('click', function() {
+    if (!apiParsed) return;
+    var serverUrl = (appState.serverUrl || '').replace(/\/$/, '');
+    if (!serverUrl) {
+      var errEl = document.getElementById('api-parse-error');
+      errEl.textContent = '⚠ Set your Server URL in the Server tab first.';
+      errEl.style.display = 'block';
+      return;
+    }
+    var btn = document.getElementById('btn-api-go');
+    btn.disabled = true;
+    btn.textContent = '⏳ Sending…';
+    var errEl = document.getElementById('api-parse-error');
+    errEl.style.display = 'none';
+
+    fetch(serverUrl + '/api/witch/proxy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: apiParsed.url, method: apiParsed.method, headers: apiParsed.headers, body: apiParsed.body })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      btn.disabled = false;
+      btn.textContent = '🚀 Go';
+      apiResult = data;
+      apiCurrentFormat = 'pretty';
+      apiRenderResult();
+    })
+    .catch(function(err) {
+      btn.disabled = false;
+      btn.textContent = '🚀 Go';
+      errEl.textContent = 'Error: ' + err.message + '. Check Server URL in the Server tab.';
+      errEl.style.display = 'block';
+    });
+  });
+
+  document.getElementById('btn-api-autofill').addEventListener('click', function() {
+    var token = appState.sessionToken;
+    var lastReq = appState.lastGameRequest;
+    var input = document.getElementById('api-fetch-input');
+    var errEl = document.getElementById('api-parse-error');
+    errEl.style.display = 'none';
+    if (!token && !lastReq) {
+      errEl.textContent = '⚠ No session token captured yet. Open the Witch game page first.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if (lastReq && lastReq.url) {
+      var headers = Object.assign({}, lastReq.headers || {});
+      if (token) headers['x-auth'] = 'Bearer ' + token;
+      var snippet = 'fetch("' + lastReq.url + '", {\n' +
+        '  "headers": ' + JSON.stringify(headers, null, 4) + ',\n' +
+        '  "body": ' + (lastReq.body ? JSON.stringify(JSON.stringify(lastReq.body)) : 'null') + ',\n' +
+        '  "method": "' + (lastReq.method || 'POST') + '"\n' +
+        '});';
+      input.value = snippet;
+    } else if (token) {
+      var infoEl = document.getElementById('api-parsed-info');
+      infoEl.textContent = '✓ Token captured: Bearer ' + token.substring(0, 30) + '… — paste your fetch() URL above and it will be injected automatically.';
+      infoEl.style.color = '#fbbf24';
+      infoEl.style.display = 'block';
+    }
+  });
+
+  document.getElementById('btn-api-copy').addEventListener('click', function() {
+    var content = apiGetFormatContent(apiCurrentFormat);
+    navigator.clipboard.writeText(content).then(function() {
+      var btn = document.getElementById('btn-api-copy');
+      var orig = btn.textContent;
+      btn.textContent = '✅ Copied!';
+      setTimeout(function() { btn.textContent = orig; }, 1800);
+    }).catch(function() {});
+  });
+
+  document.getElementById('btn-api-clear').addEventListener('click', function() {
+    apiResult = null; apiParsed = null;
+    document.getElementById('api-result-section').style.display = 'none';
+    document.getElementById('api-parsed-info').style.display = 'none';
+    document.getElementById('api-fetch-input').value = '';
+    document.getElementById('btn-api-go').disabled = true;
+  });
+
+  // ============================================================
   // INIT
   // ============================================================
   loadState();

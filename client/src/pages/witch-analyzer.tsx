@@ -2150,7 +2150,7 @@ export default function WitchAnalyzerPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Extension v12.0</CardTitle>
+            <CardTitle className="text-lg">Extension v13.0</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -2163,16 +2163,17 @@ export default function WitchAnalyzerPage() {
                 data-testid="button-download-extension"
               >
                 <Download className="w-4 h-4" />
-                Download Extension (v12.0)
+                Download Extension (v13.0)
               </Button>
               <div className="text-xs text-muted-foreground">
-                <p className="font-medium mb-1 text-green-400">New in v12.0:</p>
+                <p className="font-medium mb-1 text-green-400">New in v13.0:</p>
                 <ul className="list-disc list-inside space-y-1">
+                  <li>✅ <strong>API Proxy tab</strong> — paste any fetch() call, hit Go, view response in 10 formats</li>
+                  <li>✅ ⚡ Auto-fill — injects last captured x-auth token automatically</li>
+                  <li>✅ 10 output formats: Pretty · Raw · Minified · YAML · Table · Headers · Base64 · Hex · Summary · cURL</li>
                   <li>✅ Decoder Engine — Base64 · Hex→ASCII · XOR · URL · Double-JSON · Reverse</li>
                   <li>✅ Bitmask50 — tests any integer as 10×5 grid (LSB + MSB)</li>
                   <li>✅ Response Diff — field-by-field comparison between games</li>
-                  <li>✅ Game Event Timeline — GAME_START vs ROW_CLICK classifier</li>
-                  <li>✅ 7 analysis tabs: Grid · Decode · Diff · Packets · RNG · Probe · Server</li>
                   <li>🚫 Zero auto-clicking — purely passive</li>
                 </ul>
               </div>

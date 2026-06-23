@@ -223,13 +223,14 @@
   <div class="header">
     <span>🔮</span>
     <h1>Witch Analyzer Pro</h1>
-    <span class="version">v11.0</span>
+    <span class="version">v13.0</span>
   </div>
   <div class="no-autoclick">✅ Auto-click DISABLED — Passive analysis only</div>
 
   <div class="tabs">
     <div class="tab active" data-tab="grid">Grid</div>
     <div class="tab" data-tab="packets">Packets</div>
+    <div class="tab" data-tab="api">API Proxy</div>
     <div class="tab" data-tab="probe">Probe</div>
     <div class="tab" data-tab="rng">RNG</div>
     <div class="tab" data-tab="connect">Server</div>
@@ -298,6 +299,43 @@
       <div class="section-title">🔑 Captured Seeds / Crypto Fields</div>
       <div id="seed-log" class="log-box">
         <div class="empty-state">No seed/crypto fields found yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- API PROXY TAB -->
+  <div class="panel" id="tab-api">
+    <div class="section">
+      <div class="section-title">🔌 API Proxy — Paste &amp; Send</div>
+      <div style="font-size:10px;color:#666;margin-bottom:6px;line-height:1.5;">
+        Paste a full <code style="background:#1a1a2e;padding:1px 4px;border-radius:3px;color:#a78bfa;">fetch()</code> call from DevTools → Network → Copy as fetch.<br>
+        The server forwards it and returns the response in 10 formats.
+      </div>
+      <label style="font-size:10px;color:#888;">fetch() call</label>
+      <textarea id="api-fetch-input" rows="5" placeholder='fetch("https://1x-bet.mobi/...", {&#10;  "headers": { "x-auth": "Bearer ..." },&#10;  "body": "...",&#10;  "method": "POST"&#10;});'></textarea>
+      <div style="display:flex;gap:5px;margin-bottom:6px;">
+        <button class="btn-secondary" id="btn-api-parse" style="flex:1;margin:0;">🔍 Parse</button>
+        <button class="btn-primary" id="btn-api-go" style="flex:1;margin:0;" disabled>🚀 Go</button>
+        <button class="btn-secondary" id="btn-api-autofill" style="flex:1;margin:0;" title="Fill with last captured x-auth token">⚡ Auto</button>
+      </div>
+      <div id="api-parsed-info" style="display:none;font-size:9px;background:#080814;border:1px solid #2a2a4a;border-radius:4px;padding:5px 7px;margin-bottom:6px;word-break:break-all;"></div>
+      <div id="api-parse-error" style="display:none;font-size:10px;color:#f87171;margin-bottom:4px;"></div>
+    </div>
+
+    <div class="section" id="api-result-section" style="display:none;">
+      <div class="section-title">
+        📥 Response
+        <span id="api-status-badge" class="badge badge-gray" style="margin-left:auto;"></span>
+      </div>
+
+      <!-- 10 Format buttons -->
+      <div id="api-format-btns" style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:6px;"></div>
+
+      <!-- Result display -->
+      <div id="api-result-box" class="log-box" style="max-height:200px;white-space:pre-wrap;word-break:break-all;"></div>
+      <div style="display:flex;gap:5px;margin-top:5px;">
+        <button class="btn-secondary" id="btn-api-copy" style="margin:0;flex:1;">📋 Copy</button>
+        <button class="btn-danger" id="btn-api-clear" style="margin:0;flex:1;">🗑 Clear</button>
       </div>
     </div>
   </div>

@@ -2541,7 +2541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", "attachment; filename=witch-extension-v12.0.zip");
+    res.setHeader("Content-Disposition", "attachment; filename=witch-extension-v13.0.zip");
 
     const archive = archiver("zip", { zlib: { level: 9 } });
     

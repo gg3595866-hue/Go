@@ -16,7 +16,9 @@
     rngAnalysis: null,
     lastGameRequest: null,
     isConnected: false,
-    serverUrl: ''
+    serverUrl: '',
+    authToken: null,
+    sessionToken: null
   };
 
   // ============================================================
@@ -33,12 +35,18 @@
   });
 
   // ============================================================
-  // LOAD SAVED SERVER URL
+  // LOAD SAVED SERVER URL + AUTH TOKEN
   // ============================================================
-  chrome.storage.local.get(['serverUrl', 'isConnected'], function(result) {
+  chrome.storage.local.get(['serverUrl', 'isConnected', 'authToken'], function(result) {
     if (result.serverUrl) {
       appState.serverUrl = result.serverUrl;
       document.getElementById('server-url').value = result.serverUrl;
+    }
+    if (result.authToken) {
+      appState.authToken = result.authToken;
+      showHasTokenUI(result.authToken);
+    } else {
+      showNoTokenUI();
     }
     updateConnectionUI(result.isConnected || false);
   });
@@ -67,6 +75,17 @@
   chrome.runtime.onMessage.addListener(function(msg) {
     if (!msg) return;
     switch (msg.type) {
+      case 'session_token':
+        // ★ Fresh x-auth token captured from the live game session
+        appState.sessionToken = msg.data.token;
+        showSessionTokenStatus(true, msg.data.token);
+        break;
+
+      case 'session_expired':
+        // ★ 401 received — game session token is no longer valid
+        showSessionTokenStatus(false, null);
+        break;
+
       case 'grid_captured':
         appState.grid = msg.data.grid;
         appState.gridSource = msg.data.source;
@@ -397,7 +416,11 @@
     if (req.body && typeof req.body === 'object') {
       document.getElementById('probe-body').value = JSON.stringify(req.body, null, 2);
     }
-    showProbeResult('Loaded last game request URL. Click Send Probe to replay it.', true);
+    // ★ Also populate original headers (including x-auth)
+    if (req.headers && Object.keys(req.headers).length > 0) {
+      document.getElementById('probe-headers').value = JSON.stringify(req.headers, null, 2);
+    }
+    showProbeResult('✅ Loaded with original headers (x-auth included). Click Send Probe.', true);
   });
 
   document.getElementById('btn-rapid-probe').addEventListener('click', function() {
@@ -450,15 +473,161 @@
   }
 
   // ============================================================
+  // GAME SESSION TOKEN STATUS (x-auth from live game page)
+  // ============================================================
+  function showSessionTokenStatus(active, token) {
+    var dot   = document.getElementById('session-dot');
+    var label = document.getElementById('session-label');
+    var btn   = document.getElementById('btn-copy-session-token');
+    if (!dot) return;
+    if (active && token) {
+      dot.style.background = '#34d399';
+      dot.style.boxShadow  = '0 0 5px #34d399';
+      if (label) label.style.color = '#34d399';
+      if (label) label.textContent = '✅ Live x-auth token captured — probes auto-authenticated';
+      if (btn) btn.style.display = 'block';
+      appState.sessionToken = token;
+    } else if (active === false) {
+      dot.style.background = '#f87171';
+      dot.style.boxShadow  = 'none';
+      if (label) label.style.color = '#f87171';
+      if (label) label.textContent = '⚠ Session expired (401) — refresh the game page';
+      if (btn) btn.style.display = 'none';
+      appState.sessionToken = null;
+    } else {
+      dot.style.background = '#555';
+      dot.style.boxShadow  = 'none';
+      if (label) label.style.color = '#666';
+      if (label) label.textContent = 'Game session: waiting for page...';
+      if (btn) btn.style.display = 'none';
+    }
+  }
+
+  // Wire up copy-session-token button
+  var copySessionBtn = document.getElementById('btn-copy-session-token');
+  if (copySessionBtn) {
+    copySessionBtn.addEventListener('click', function() {
+      if (!appState.sessionToken) return;
+      navigator.clipboard.writeText('Bearer ' + appState.sessionToken).then(function() {
+        var orig = copySessionBtn.textContent;
+        copySessionBtn.textContent = '✅ Copied!';
+        setTimeout(function() { copySessionBtn.textContent = orig; }, 2000);
+      }).catch(function() {});
+    });
+  }
+
+  // ============================================================
+  // TOKEN UI HELPERS
+  // ============================================================
+  function showNoTokenUI() {
+    var nv = document.getElementById('no-token-view');
+    var hv = document.getElementById('has-token-view');
+    if (nv) nv.style.display = 'block';
+    if (hv) hv.style.display = 'none';
+    var ai = document.getElementById('auth-status-info');
+    if (ai) { ai.textContent = 'No token'; ai.style.color = '#888'; }
+  }
+
+  function showHasTokenUI(token) {
+    var nv = document.getElementById('no-token-view');
+    var hv = document.getElementById('has-token-view');
+    if (nv) nv.style.display = 'none';
+    if (hv) hv.style.display = 'block';
+    var td = document.getElementById('token-display');
+    if (td && token) {
+      td.textContent = token;
+    }
+    var ai = document.getElementById('auth-status-info');
+    if (ai) { ai.textContent = 'Token ready ✓'; ai.style.color = '#34d399'; }
+  }
+
+  // ============================================================
+  // GET TOKEN (one-click — no credentials)
+  // ============================================================
+  function requestToken(btnId) {
+    var serverUrl = (document.getElementById('server-url').value || appState.serverUrl || '').trim();
+    var errEl = document.getElementById('token-error');
+
+    if (!serverUrl) {
+      if (errEl) { errEl.textContent = 'Enter the Server URL below first.'; errEl.style.display = 'block'; }
+      return;
+    }
+    if (errEl) errEl.style.display = 'none';
+
+    var btn = document.getElementById(btnId);
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating...'; }
+
+    fetch(serverUrl.replace(/\/$/, '') + '/api/auth/token', { method: 'POST' })
+    .then(function(res) { return res.json().then(function(d) { return { ok: res.ok, data: d }; }); })
+    .then(function(result) {
+      if (btn) { btn.disabled = false; btn.textContent = btnId === 'btn-get-token' ? '🔑 Get My Token' : '🔄 Get New Token'; }
+      if (!result.ok || !result.data.token) {
+        if (errEl) { errEl.textContent = 'Server error — check URL is correct.'; errEl.style.display = 'block'; }
+        return;
+      }
+      var token = result.data.token;
+      appState.authToken = token;
+      appState.serverUrl = serverUrl;
+      chrome.storage.local.set({ authToken: token, serverUrl: serverUrl });
+      sendToBackground('set_token', { token: token });
+      showHasTokenUI(token);
+    })
+    .catch(function(err) {
+      if (btn) { btn.disabled = false; btn.textContent = btnId === 'btn-get-token' ? '🔑 Get My Token' : '🔄 Get New Token'; }
+      if (errEl) { errEl.textContent = 'Could not reach server: ' + err.message; errEl.style.display = 'block'; }
+    });
+  }
+
+  document.getElementById('btn-get-token').addEventListener('click', function() { requestToken('btn-get-token'); });
+  document.getElementById('btn-renew-token').addEventListener('click', function() { requestToken('btn-renew-token'); });
+
+  // ============================================================
+  // COPY TOKEN
+  // ============================================================
+  function copyToken() {
+    if (!appState.authToken) return;
+    navigator.clipboard.writeText(appState.authToken).then(function() {
+      var btn = document.getElementById('btn-copy-token');
+      var orig = btn.textContent;
+      btn.textContent = '✅ Copied!';
+      setTimeout(function() { btn.textContent = orig; }, 2000);
+    }).catch(function() {});
+  }
+  document.getElementById('btn-copy-token').addEventListener('click', copyToken);
+  var td = document.getElementById('token-display');
+  if (td) td.addEventListener('click', copyToken);
+
+  // ============================================================
+  // CLEAR TOKEN
+  // ============================================================
+  document.getElementById('btn-clear-token').addEventListener('click', function() {
+    appState.authToken = null;
+    chrome.storage.local.remove(['authToken']);
+    sendToBackground('set_token', { token: null });
+    sendToBackground('disconnect').then(function() {
+      updateConnectionUI(false);
+      chrome.storage.local.set({ isConnected: false });
+    });
+    showNoTokenUI();
+  });
+
+  // ============================================================
   // SERVER CONNECTION TAB
   // ============================================================
   document.getElementById('btn-connect').addEventListener('click', function() {
     var url = (document.getElementById('server-url').value || '').trim();
     if (!url) return;
+    if (!appState.authToken) {
+      var errEl = document.getElementById('login-error');
+      if (errEl) { errEl.textContent = 'Login first to get a token before connecting.'; errEl.style.display = 'block'; }
+      var ls = document.getElementById('login-section');
+      if (ls) ls.style.display = 'block';
+      return;
+    }
     appState.serverUrl = url;
     chrome.storage.local.set({ serverUrl: url });
     updateConnectionUI('connecting');
-    sendToBackground('connect', { url: url }).then(function(resp) {
+    sendToBackground('connect', { url: url, token: appState.authToken }).then(function(resp) {
       updateConnectionUI(resp && resp.success ? true : false);
       chrome.storage.local.set({ isConnected: !!(resp && resp.success) });
     });
@@ -469,6 +638,16 @@
       updateConnectionUI(false);
       chrome.storage.local.set({ isConnected: false });
     });
+  });
+
+  // Handle auth_required broadcast from background (token expired/missing)
+  chrome.runtime.onMessage.addListener(function(msg) {
+    if (msg && msg.type === 'auth_required') {
+      updateConnectionUI(false);
+      showNoTokenUI();
+      var errEl = document.getElementById('token-error');
+      if (errEl) { errEl.textContent = 'Token expired. Get a new one.'; errEl.style.display = 'block'; }
+    }
   });
 
   function updateConnectionUI(status) {
@@ -525,6 +704,258 @@
       return p + q;
     } catch(e) { return url.substring(0, 45); }
   }
+
+  // ============================================================
+  // API PROXY TAB
+  // ============================================================
+  var apiParsed = null;
+  var apiResult = null;
+  var apiCurrentFormat = 'pretty';
+
+  var API_FORMATS = [
+    { id: 'pretty',  label: 'Pretty JSON' },
+    { id: 'raw',     label: 'Raw' },
+    { id: 'minified',label: 'Minified' },
+    { id: 'yaml',    label: 'YAML' },
+    { id: 'table',   label: 'Table' },
+    { id: 'headers', label: 'Resp Headers' },
+    { id: 'base64',  label: 'Base64' },
+    { id: 'hex',     label: 'Hex' },
+    { id: 'summary', label: 'Summary' },
+    { id: 'curl',    label: 'cURL' },
+  ];
+
+  function parseFetchCallExt(raw) {
+    try {
+      var urlMatch = raw.match(/fetch\s*\(\s*["'`]([^"'`]+)["'`]/);
+      if (!urlMatch) return null;
+      var url = urlMatch[1];
+      var optionsMatch = raw.match(/fetch\s*\([^,]+,\s*(\{[\s\S]*\})\s*\)\s*;?\s*$/);
+      if (!optionsMatch) return { url: url, method: 'GET', headers: {}, body: null };
+      var optText = optionsMatch[1];
+      var methodMatch = optText.match(/"method"\s*:\s*"([A-Z]+)"/);
+      var method = methodMatch ? methodMatch[1] : 'GET';
+      var bodyMatch = optText.match(/"body"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      var body = null;
+      if (bodyMatch) body = bodyMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      var headersMatch = optText.match(/"headers"\s*:\s*\{([\s\S]*?)\},/);
+      var headers = {};
+      if (headersMatch) {
+        var hBlock = headersMatch[1];
+        var pairs = hBlock.matchAll(/"([^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g);
+        for (var pair of pairs) {
+          headers[pair[1]] = pair[2].replace(/\\"/g, '"');
+        }
+      }
+      return { url: url, method: method, headers: headers, body: body };
+    } catch(e) { return null; }
+  }
+
+  function apiToYaml(obj, indent) {
+    indent = indent || 0;
+    if (obj === null) return 'null';
+    if (typeof obj === 'boolean' || typeof obj === 'number') return String(obj);
+    if (typeof obj === 'string') return obj.length > 60 ? '"' + obj.substring(0, 60) + '..."' : obj;
+    if (Array.isArray(obj)) return obj.slice(0, 10).map(function(v) { return '  '.repeat(indent) + '- ' + apiToYaml(v, indent + 1); }).join('\n');
+    return Object.entries(obj).slice(0, 30).map(function(kv) {
+      var val = typeof kv[1] === 'object' && kv[1] !== null ? '\n' + apiToYaml(kv[1], indent + 1) : ' ' + apiToYaml(kv[1], indent);
+      return '  '.repeat(indent) + kv[0] + ':' + val;
+    }).join('\n');
+  }
+
+  function apiToHex(str) {
+    return Array.from((str || '').substring(0, 256)).map(function(c) { return c.charCodeAt(0).toString(16).padStart(2, '0'); }).join(' ');
+  }
+
+  function apiToBase64(str) {
+    try { return btoa(unescape(encodeURIComponent((str || '').substring(0, 2000)))); } catch(e) { return btoa((str || '').substring(0, 500)); }
+  }
+
+  function apiFlattenObj(obj, prefix) {
+    var rows = [];
+    prefix = prefix || '';
+    Object.entries(obj || {}).forEach(function(kv) {
+      var fullKey = prefix ? prefix + '.' + kv[0] : kv[0];
+      if (kv[1] !== null && typeof kv[1] === 'object' && !Array.isArray(kv[1])) {
+        rows = rows.concat(apiFlattenObj(kv[1], fullKey));
+      } else {
+        rows.push({ key: fullKey, value: Array.isArray(kv[1]) ? JSON.stringify(kv[1]) : String(kv[1] !== null && kv[1] !== undefined ? kv[1] : ''), type: typeof kv[1] });
+      }
+    });
+    return rows;
+  }
+
+  function apiGetFormatContent(formatId) {
+    if (!apiResult) return '';
+    var p = apiResult.parsed;
+    var raw = apiResult.rawText || '';
+    var flat = p ? apiFlattenObj(p) : [];
+    switch (formatId) {
+      case 'pretty':   return p ? JSON.stringify(p, null, 2) : raw;
+      case 'raw':      return raw;
+      case 'minified': return p ? JSON.stringify(p) : raw;
+      case 'yaml':     return p ? apiToYaml(p) : raw;
+      case 'table':
+        if (!flat.length) return raw;
+        return flat.map(function(r) { return r.key + '\t' + r.type + '\t' + r.value.substring(0, 100); }).join('\n');
+      case 'headers':  return JSON.stringify(apiResult.headers || {}, null, 2);
+      case 'base64':   return apiToBase64(raw);
+      case 'hex':      return apiToHex(raw);
+      case 'summary':
+        var lines = [
+          'HTTP ' + apiResult.status + ' ' + apiResult.statusText + ' — ' + apiResult.elapsed + 'ms',
+          'URL: ' + (apiParsed ? apiParsed.url : ''),
+          'Method: ' + (apiParsed ? apiParsed.method : ''),
+          'Response size: ' + raw.length + ' chars',
+          'Flat fields: ' + flat.length,
+          'Top-level keys: ' + (p && typeof p === 'object' ? Object.keys(p).join(', ') : 'N/A'),
+          '',
+          'Values:'
+        ];
+        if (p && typeof p === 'object') {
+          Object.entries(p).slice(0, 20).forEach(function(kv) {
+            lines.push('  ' + kv[0] + ': ' + JSON.stringify(kv[1]).substring(0, 80));
+          });
+        } else { lines.push(raw.substring(0, 300)); }
+        return lines.join('\n');
+      case 'curl':
+        var curlLines = ['curl -X ' + (apiParsed ? apiParsed.method : 'GET') + ' \\', "  '" + (apiParsed ? apiParsed.url : '') + "' \\"];
+        Object.entries(apiParsed ? apiParsed.headers : {}).forEach(function(kv) { curlLines.push("  -H '" + kv[0] + ': ' + kv[1] + "' \\"); });
+        if (apiParsed && apiParsed.body) curlLines.push("  -d '" + apiParsed.body + "'");
+        return curlLines.join('\n');
+      default: return raw;
+    }
+  }
+
+  function apiRenderFormatBtns() {
+    var container = document.getElementById('api-format-btns');
+    if (!container) return;
+    container.innerHTML = '';
+    API_FORMATS.forEach(function(f) {
+      var btn = document.createElement('button');
+      btn.textContent = f.label;
+      btn.style.cssText = 'padding:2px 7px;border:1px solid ' + (f.id === apiCurrentFormat ? '#a78bfa' : '#2a2a4a') + ';border-radius:4px;background:' + (f.id === apiCurrentFormat ? '#2a1a5a' : '#1a1a2e') + ';color:' + (f.id === apiCurrentFormat ? '#a78bfa' : '#888') + ';font-size:9px;cursor:pointer;margin:0;width:auto;transition:all 0.1s;';
+      btn.addEventListener('click', function() {
+        apiCurrentFormat = f.id;
+        apiRenderResult();
+        apiRenderFormatBtns();
+      });
+      container.appendChild(btn);
+    });
+  }
+
+  function apiRenderResult() {
+    var box = document.getElementById('api-result-box');
+    var section = document.getElementById('api-result-section');
+    var badge = document.getElementById('api-status-badge');
+    if (!box || !apiResult) return;
+    section.style.display = 'block';
+    var statusOk = apiResult.status < 300;
+    badge.textContent = 'HTTP ' + apiResult.status + ' · ' + apiResult.elapsed + 'ms';
+    badge.className = 'badge ' + (statusOk ? 'badge-green' : 'badge-red');
+    var content = apiGetFormatContent(apiCurrentFormat);
+    box.textContent = content.substring(0, 3000) + (content.length > 3000 ? '\n...(truncated)' : '');
+    apiRenderFormatBtns();
+  }
+
+  document.getElementById('btn-api-parse').addEventListener('click', function() {
+    var raw = (document.getElementById('api-fetch-input').value || '').trim();
+    var errEl = document.getElementById('api-parse-error');
+    var infoEl = document.getElementById('api-parsed-info');
+    errEl.style.display = 'none';
+    infoEl.style.display = 'none';
+    if (!raw) { errEl.textContent = 'Paste a fetch() call first.'; errEl.style.display = 'block'; return; }
+    var p = parseFetchCallExt(raw);
+    if (!p) { errEl.textContent = 'Could not parse — paste the full fetch() JS snippet from DevTools.'; errEl.style.display = 'block'; return; }
+    apiParsed = p;
+    var hCount = Object.keys(p.headers).length;
+    infoEl.textContent = '✓ ' + p.method + ' ' + p.url.substring(0, 70) + (p.url.length > 70 ? '…' : '') + ' | ' + hCount + ' headers' + (p.body ? ' | body: ' + p.body.substring(0, 30) : '');
+    infoEl.style.color = '#34d399';
+    infoEl.style.display = 'block';
+    document.getElementById('btn-api-go').disabled = false;
+  });
+
+  document.getElementById('btn-api-go').addEventListener('click', function() {
+    if (!apiParsed) return;
+    var serverUrl = (appState.serverUrl || '').replace(/\/$/, '');
+    if (!serverUrl) {
+      var errEl = document.getElementById('api-parse-error');
+      errEl.textContent = '⚠ Set your Server URL in the Server tab first.';
+      errEl.style.display = 'block';
+      return;
+    }
+    var btn = document.getElementById('btn-api-go');
+    btn.disabled = true;
+    btn.textContent = '⏳ Sending…';
+    var errEl = document.getElementById('api-parse-error');
+    errEl.style.display = 'none';
+
+    fetch(serverUrl + '/api/witch/proxy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: apiParsed.url, method: apiParsed.method, headers: apiParsed.headers, body: apiParsed.body })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      btn.disabled = false;
+      btn.textContent = '🚀 Go';
+      apiResult = data;
+      apiCurrentFormat = 'pretty';
+      apiRenderResult();
+    })
+    .catch(function(err) {
+      btn.disabled = false;
+      btn.textContent = '🚀 Go';
+      errEl.textContent = 'Error: ' + err.message + '. Check Server URL in the Server tab.';
+      errEl.style.display = 'block';
+    });
+  });
+
+  document.getElementById('btn-api-autofill').addEventListener('click', function() {
+    var token = appState.sessionToken;
+    var lastReq = appState.lastGameRequest;
+    var input = document.getElementById('api-fetch-input');
+    var errEl = document.getElementById('api-parse-error');
+    errEl.style.display = 'none';
+    if (!token && !lastReq) {
+      errEl.textContent = '⚠ No session token captured yet. Open the Witch game page first.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if (lastReq && lastReq.url) {
+      var headers = Object.assign({}, lastReq.headers || {});
+      if (token) headers['x-auth'] = 'Bearer ' + token;
+      var snippet = 'fetch("' + lastReq.url + '", {\n' +
+        '  "headers": ' + JSON.stringify(headers, null, 4) + ',\n' +
+        '  "body": ' + (lastReq.body ? JSON.stringify(JSON.stringify(lastReq.body)) : 'null') + ',\n' +
+        '  "method": "' + (lastReq.method || 'POST') + '"\n' +
+        '});';
+      input.value = snippet;
+    } else if (token) {
+      var infoEl = document.getElementById('api-parsed-info');
+      infoEl.textContent = '✓ Token captured: Bearer ' + token.substring(0, 30) + '… — paste your fetch() URL above and it will be injected automatically.';
+      infoEl.style.color = '#fbbf24';
+      infoEl.style.display = 'block';
+    }
+  });
+
+  document.getElementById('btn-api-copy').addEventListener('click', function() {
+    var content = apiGetFormatContent(apiCurrentFormat);
+    navigator.clipboard.writeText(content).then(function() {
+      var btn = document.getElementById('btn-api-copy');
+      var orig = btn.textContent;
+      btn.textContent = '✅ Copied!';
+      setTimeout(function() { btn.textContent = orig; }, 1800);
+    }).catch(function() {});
+  });
+
+  document.getElementById('btn-api-clear').addEventListener('click', function() {
+    apiResult = null; apiParsed = null;
+    document.getElementById('api-result-section').style.display = 'none';
+    document.getElementById('api-parsed-info').style.display = 'none';
+    document.getElementById('api-fetch-input').value = '';
+    document.getElementById('btn-api-go').disabled = true;
+  });
 
   // ============================================================
   // INIT
