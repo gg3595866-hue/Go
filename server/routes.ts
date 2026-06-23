@@ -11,6 +11,29 @@ import {
 import archiver from "archiver";
 import path from "path";
 import fs from "fs";
+import jwt from "jsonwebtoken";
+
+// ============================================================
+// JWT AUTH CONFIG
+// ============================================================
+const JWT_SECRET = process.env.WITCH_JWT_SECRET || "witch-analyzer-secret-change-in-production";
+const JWT_EXPIRY = "7d";
+
+// Default credentials — override via env vars in production
+const VALID_USERNAME = process.env.WITCH_USERNAME || "admin";
+const VALID_PASSWORD = process.env.WITCH_PASSWORD || "witch2024";
+
+function signToken(username: string): string {
+  return jwt.sign({ sub: username, role: "extension" }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+}
+
+function verifyToken(token: string): { sub: string; role: string } | null {
+  try {
+    return jwt.verify(token, JWT_SECRET) as { sub: string; role: string };
+  } catch {
+    return null;
+  }
+}
 
 interface MimickSession {
   id: string;
@@ -43,6 +66,45 @@ const mimickSpyStorage: {
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
+
+  // ============================================================
+  // AUTH — POST /api/auth/login  →  returns JWT
+  // ============================================================
+  app.post("/api/auth/login", (req, res) => {
+    const { username, password } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ error: "username and password required" });
+    }
+    if (username !== VALID_USERNAME || password !== VALID_PASSWORD) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+    const token = signToken(username);
+    res.json({ token, expiresIn: JWT_EXPIRY, username });
+  });
+
+  // AUTH — POST /api/auth/refresh  →  renew an existing valid token
+  app.post("/api/auth/refresh", (req, res) => {
+    const authHeader = req.headers.authorization || "";
+    const existing = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const payload = verifyToken(existing);
+    if (!payload) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    const token = signToken(payload.sub);
+    res.json({ token, expiresIn: JWT_EXPIRY, username: payload.sub });
+  });
+
+  // AUTH — GET /api/auth/verify  →  check if a token is still valid
+  app.get("/api/auth/verify", (req, res) => {
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const payload = verifyToken(token);
+    if (!payload) {
+      return res.status(401).json({ valid: false, error: "Invalid or expired token" });
+    }
+    res.json({ valid: true, username: payload.sub });
+  });
+
   // Get fixtures for a specific date
   app.get("/api/fixtures/:date", async (req, res) => {
     try {
@@ -2617,9 +2679,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Handle upgrade requests for WebSocket
   httpServer.on("upgrade", (request, socket, head) => {
-    const pathname = request.url?.split("?")[0] || "";
+    const rawUrl = request.url || "";
+    const pathname = rawUrl.split("?")[0];
     
     if (pathname === "/ws/witch") {
+      // Extract token from query string: /ws/witch?token=xxx&source=extension
+      const qs = new URLSearchParams(rawUrl.includes("?") ? rawUrl.slice(rawUrl.indexOf("?") + 1) : "");
+      const token = qs.get("token") || "";
+
+      if (!token) {
+        console.log("[Witch WS] Rejected — no token provided");
+        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+
+      const payload = verifyToken(token);
+      if (!payload) {
+        console.log("[Witch WS] Rejected — invalid or expired token");
+        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+
+      console.log(`[Witch WS] Authenticated as: ${payload.sub}`);
       witchWss.handleUpgrade(request, socket, head, (ws) => {
         witchWss.emit("connection", ws, request);
       });

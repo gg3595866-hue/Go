@@ -6,3 +6,9 @@ id = "G1M07pWTAz_9U90AwXXz1"
 uri = "file://witch-analyzer-v12.zip"
 type = "unspecified"
 title = "Witch Analyzer v12 — Fixed RNG + URL Filter"
+
+[[outputs]]
+id = "IPG3HMuX6SvpWVbRl1pfO"
+uri = "file://witch-analyzer-v13.zip"
+type = "unspecified"
+title = "Witch Analyzer v13 — JWT Auth Extension"
